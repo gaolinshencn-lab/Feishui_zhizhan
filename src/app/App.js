@@ -15,7 +15,8 @@ import { MarkersLayer } from '../world/Markers.js';
 import { Declutter } from '../world/Declutter.js';
 import { PropsLayer } from '../world/Props.js';
 import { EffectsLayer } from '../fx/Effects.js';
-import { TACTICAL_FX, STRATEGIC_FX, TACTICAL_PROPS } from '../data/effects.js';
+import { TACTICAL_FX, STRATEGIC_FX, TACTICAL_PROPS, SOUNDSCAPE } from '../data/effects.js';
+import { Sound } from '../audio/Sound.js';
 import { shouyangHolder } from '../data/events.js';
 import { territoryTexture, FRONTIER_383, FRONTIER_385 } from '../world/Territory.js';
 import { T as TT } from '../data/episodes.js';
@@ -43,6 +44,7 @@ export class App {
     this.elapsed = 0;
     this.ready = false;
     this.declutter = new Declutter();
+    this.sound = new Sound();
     this.layerState = { places: true, modern: true, arrows: true, markers: true, unitLabels: true, contours: true, grid: false };
   }
 
@@ -166,6 +168,10 @@ export class App {
       this._lastIdx = idx;
       this.stage.setLight(ep.light);
       this.ui?.setEpisode(idx);
+      if (this.ready && !snap && !this.scrubbing) {
+        this.ui?.showCaption(idx);
+        this.sound.phrase(idx);
+      }
     }
     if (snap) this.stage.snapLight();
     this.ui?.setTime(this.T);
@@ -177,6 +183,7 @@ export class App {
       this.table = this.tables[name];
       this.rig.setProjection(this.table.proj);
       this.ui?.setMap(name);
+      this.ui?.renderPlaces(name === 'tactical' ? TACTICAL_PLACES : STRATEGIC_PLACES);
     };
     this.activeMap = name;
     if (!animated) {
@@ -200,6 +207,10 @@ export class App {
 
   play() {
     if (this.T >= N - 0.01) this.setTime(0, { snap: true });
+    if (this.T - this.episodeIndex < 0.02) {
+      this.ui.showCaption(this.episodeIndex);
+      this.sound.phrase(this.episodeIndex);
+    }
     this.playing = true;
     this.ui.setPlaying(true);
   }
@@ -229,7 +240,34 @@ export class App {
 
   scrubTo(T) {
     this.userTouched = true;
+    this.scrubbing = true;
     this.setTime(T);
+    this.scrubbing = false;
+  }
+
+  flyToPlace(id) {
+    const t = this.table;
+    const p = t.resolver.places[id];
+    if (!p) return;
+    const [x, z] = t.resolver.point(id);
+    const y = Math.max(t.proj.groundY(x, z), 0);
+    this.rig.flyToPoint(x, y, z, t.name === 'tactical' ? 12 : 38);
+    const el = t.layers.labels?.items.find((it) => it.p.id === id)?.el;
+    if (el) setTimeout(() => this.ui.showTooltip(p, el), 1900);
+    setTimeout(() => this.ui.showTooltip(null), 7000);
+  }
+
+  soundLevels() {
+    const env = (list) => {
+      let v = 0;
+      for (const [a, b, lvl] of list) {
+        if (this.T < a || this.T > b) continue;
+        const e = Math.min(1, (this.T - a) / 0.05, (b - this.T) / 0.05);
+        v = Math.max(v, lvl * e);
+      }
+      return v;
+    };
+    return { drums: this.playing ? env(SOUNDSCAPE.drums) : 0, wind: env(SOUNDSCAPE.wind) };
   }
 
   showMap(name) {
@@ -346,6 +384,7 @@ export class App {
       this.declutter.run(items, st.camera, w, h);
       this.ui.updateHud(st.camera, st.controls, t.proj);
     }
+    if (this.sound.enabled) this.sound.update(dt, this.soundLevels());
     st.render(this.elapsed);
     requestAnimationFrame(() => this.loop());
   }

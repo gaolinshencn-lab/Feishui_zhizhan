@@ -11,6 +11,8 @@ const SVG = {
   info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 10.5v6M12 7.3v.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
   legend: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h3M5 12h3M5 17h3M11 7h8M11 12h8M11 17h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
   close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  sound: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path class="wave" d="M15.5 9.2a4 4 0 010 5.6M18 7a7.2 7.2 0 010 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-6.2-6.5-11.2a6.5 6.5 0 0113 0C18.5 14.8 12 21 12 21z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="9.8" r="2.3" fill="currentColor"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
@@ -56,6 +58,8 @@ export class UI {
     <button class="scale-switch__btn" data-map="tactical" role="tab" id="tab-tactical">淝水战场</button>
   </div>
   <button class="icon-btn" id="btn-camera" aria-pressed="true" title="自动镜头：跟随剧情推移视角">${SVG.camera}<span>自动镜头</span></button>
+  <button class="icon-btn" id="btn-places" aria-expanded="false" title="地名索引：古今对照，点击飞往">${SVG.pin}<span>地名</span></button>
+  <button class="icon-btn" id="btn-sound" aria-pressed="false" title="声音：琴声、战鼓与风声">${SVG.sound}<span>声音</span></button>
   <button class="icon-btn" id="btn-layers" aria-expanded="false" title="图层与显示">${SVG.layers}<span>图层</span></button>
   <button class="icon-btn" id="btn-full" title="全屏">${SVG.full}<span>全屏</span></button>
   <button class="icon-btn" id="btn-about" title="史料与说明">${SVG.info}<span>说明</span></button>
@@ -75,6 +79,14 @@ export class UI {
     <select id="lay-quality"><option value="high">高</option><option value="medium" selected>标准</option><option value="low">省电</option></select>
   </label>
 </section>
+
+<section class="places-pop" id="places-pop" hidden aria-label="地名索引">
+  <h2 class="pop-title">地名索引</h2>
+  <p class="pop-note">古名 · 今地，点击即飞往该处</p>
+  <div class="places-list" id="places-list"></div>
+</section>
+
+<div class="caption" id="caption" aria-hidden="true"><div class="caption__no" id="cap-no"></div><div class="caption__title" id="cap-title"></div><div class="caption__date" id="cap-date"></div></div>
 
 <aside class="episode" id="episode" aria-live="polite">
   <button class="episode__toggle" id="episode-toggle" aria-expanded="true" aria-controls="episode-body">${SVG.chevron}<span class="sr">展开或收起</span></button>
@@ -234,6 +246,32 @@ export class UI {
         this.$('btn-layers').setAttribute('aria-expanded', 'false');
       }
     });
+    const places = this.$('places-pop');
+    this.$('btn-places').addEventListener('click', (e) => {
+      e.stopPropagation();
+      places.hidden = !places.hidden;
+      this.$('btn-places').setAttribute('aria-expanded', String(!places.hidden));
+      if (!places.hidden) {
+        pop.hidden = true;
+        this.$('btn-layers').setAttribute('aria-expanded', 'false');
+      }
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!places.hidden && !places.contains(e.target) && !e.target.closest('#btn-places')) {
+        places.hidden = true;
+        this.$('btn-places').setAttribute('aria-expanded', 'false');
+      }
+    });
+    this.$('places-list').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-place]');
+      if (b) app.flyToPlace(b.dataset.place);
+    });
+    this.$('btn-sound').addEventListener('click', async () => {
+      const on = this.$('btn-sound').getAttribute('aria-pressed') !== 'true';
+      const ok = await app.sound.setEnabled(on);
+      this.$('btn-sound').setAttribute('aria-pressed', String(on && ok));
+      if (on && ok) app.sound.phrase(app.episodeIndex);
+    });
     const about = this.$('about');
     this.$('btn-about').addEventListener('click', () => (about.showModal ? about.showModal() : about.setAttribute('open', '')));
     this.$('about-close').addEventListener('click', () => (about.close ? about.close() : about.removeAttribute('open')));
@@ -302,6 +340,37 @@ export class UI {
     b.innerHTML = p ? SVG.pause : SVG.play;
     b.classList.toggle('is-playing', p);
     b.setAttribute('aria-label', p ? '暂停' : '播放');
+  }
+
+  renderPlaces(places) {
+    const groups = [
+      { label: '城邑营垒', kinds: ['capital', 'city', 'fort', 'camp'] },
+      { label: '津渡关隘', kinds: ['ford', 'site', 'pass'] },
+      { label: '山川', kinds: ['mountain'] },
+    ];
+    this.$('places-list').innerHTML = groups
+      .map((g) => {
+        const items = places.filter((p) => g.kinds.includes(p.kind));
+        if (!items.length) return '';
+        return `<div class="places-group"><div class="places-group__label">${g.label}</div>${items
+          .map(
+            (p) =>
+              `<button class="place-item" data-place="${p.id}"><span class="place-item__name">${p.name}${p.approx ? '<i>（约）</i>' : ''}</span><span class="place-item__modern">${p.modern || ''}</span></button>`
+          )
+          .join('')}</div>`;
+      })
+      .join('');
+  }
+
+  showCaption(i) {
+    const ep = EPISODES[i];
+    const el = this.$('caption');
+    this.$('cap-no').textContent = `第${ep.no}节`;
+    this.$('cap-title').textContent = ep.title;
+    this.$('cap-date').textContent = ep.date;
+    el.classList.remove('is-on');
+    void el.offsetWidth;
+    el.classList.add('is-on');
   }
 
   setMap(name) {

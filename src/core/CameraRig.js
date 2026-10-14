@@ -29,6 +29,7 @@ export class CameraRig {
     this.listeners = new Set();
     this.controls.addEventListener('start', () => {
       if (this._programmatic) return;
+      this.manual = null;
       this.setAuto(false);
     });
   }
@@ -38,6 +39,7 @@ export class CameraRig {
   }
 
   setAuto(v) {
+    if (v) this.manual = null;
     if (this.auto === v) return;
     this.auto = v;
     if (v) this.beginFly();
@@ -124,8 +126,25 @@ export class CameraRig {
     this.flyT = 1;
   }
 
+  /** Fly (with auto camera off) to look at a world point, e.g. from the place index. */
+  flyToPoint(x, y, z, dist) {
+    this.setAuto(false);
+    const from = this.currentPose();
+    const to = { target: new THREE.Vector3(x, y, z), dist, yaw: from.yaw, pitch: Math.max(38, Math.min(60, from.pitch)) };
+    this.manual = { from, to, t: 0, dur: 1.8 };
+  }
+
   update(dt, episode, progress) {
     if (!this.proj) return;
+    if (this.manual) {
+      const m = this.manual;
+      m.t = Math.min(1, m.t + dt / m.dur);
+      this._programmatic = true;
+      this.apply(this.lerpPose(m.from, m.to, easeInOut(m.t)));
+      this._programmatic = false;
+      if (m.t >= 1) this.manual = null;
+      return;
+    }
     if (!this.auto || !episode) {
       this.controls.update();
       return;

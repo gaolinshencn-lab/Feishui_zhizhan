@@ -44,3 +44,20 @@ export const TACTICAL_PROPS = {
   qincamp_s: [T('shouyang', 0.9), T('rout', 0.3)],
   palisade: [T('blockade', 0.55), T('raid', 0.8)],
 };
+
+/** Sound beds: [t0, t1, level] windows for war drums and wind. */
+export const SOUNDSCAPE = {
+  drums: [
+    [T('prologue', 0.45), T('prologue', 0.72), 0.35],
+    [T('shouyang', 0.48), T('shouyang', 0.76), 0.6],
+    [T('raid', 0.32), T('raid', 0.78), 0.85],
+    [T('advance', 0.48), T('advance', 0.72), 0.45],
+    [T('battle', 0.22), T('battle', 0.96), 1.0],
+    [T('rout', 0.0), T('rout', 0.35), 0.55],
+  ],
+  wind: [
+    [T('advance', 0.6), T('standoff', 0.05), 0.45],
+    [T('rout', 0.08), T('rout', 0.92), 1.0],
+    [T('epilogue', 0.0), T('epilogue', 1.0), 0.25],
+  ],
+};
