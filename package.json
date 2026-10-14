@@ -1,0 +1,21 @@
+{
+  "name": "feishui-zhizhan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "淝水之战三维战场态势沙盘 — 3D sand-table model of the Battle of Fei River (AD 383)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node tools/postbuild.mjs",
+    "preview": "vite preview --outDir docs",
+    "fonts": "python3 tools/subset_fonts.py",
+    "geodata": "python3 tools/geodata.py"
+  },
+  "dependencies": {
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "vite": "^7.3.0",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}
