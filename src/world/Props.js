@@ -5,7 +5,7 @@ import { makeFlagTexture } from '../army/flags.js';
 
 const EARTH = '#a48d69';
 const EARTH_DARK = '#7d6a4f';
-const TILE = '#3f444c';
+const TILE = '#5f646a';
 const TIMBER = '#5b3f27';
 
 function colored(geo, color) {
@@ -72,7 +72,7 @@ export function walledCity({ w, d, wallH, wallT, detail = 1 }) {
     parts.push(colored(at(hipRoof(w * 0.19, d * 0.13, wallH * 0.55), 0, wallH * 0.75 + wallH * 0.27, -d * 0.08), TILE));
     // streets of houses
     const rnd = mulberry(7);
-    const n = Math.round(46 * detail);
+    const n = Math.round(34 * detail);
     for (let i = 0; i < n; i++) {
       const x = (rnd() - 0.5) * w * 0.82;
       const z = (rnd() - 0.5) * d * 0.82;

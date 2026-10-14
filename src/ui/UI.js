@@ -41,6 +41,7 @@ export class UI {
     r.insertAdjacentHTML(
       'beforeend',
       `
+<div class="topshade" aria-hidden="true"></div>
 <header class="masthead">
   <div class="seal-mark" aria-hidden="true"><span>淝</span><span>水</span></div>
   <div class="masthead__text">
@@ -151,6 +152,12 @@ export class UI {
     );
 
     this.$ = (id) => r.querySelector(`#${id}`);
+    if (window.innerWidth <= 900) {
+      // phones start with the story card folded so the battlefield stays visible
+      this.$('episode').classList.add('is-collapsed');
+      this.$('episode-toggle').setAttribute('aria-expanded', 'false');
+      this.$('legend').classList.add('is-collapsed');
+    }
     this.buildTimeline();
     this.bind();
   }
@@ -245,7 +252,10 @@ export class UI {
     for (const [id, fn] of Object.entries(toggles)) this.$(id).addEventListener('change', (e) => fn(e.target.checked));
     this.$('lay-exag').addEventListener('change', (e) => app.setExaggeration(Number(e.target.value)));
     this.$('lay-exag').addEventListener('input', (e) => (this.$('exag-out').textContent = `×${e.target.value}`));
-    this.$('lay-quality').addEventListener('change', (e) => app.setQuality(e.target.value));
+    this.$('lay-quality').addEventListener('change', (e) => {
+      app.qualityLocked = true;
+      app.setQuality(e.target.value);
+    });
 
     this.$('episode-toggle').addEventListener('click', () => {
       const ep = this.$('episode');

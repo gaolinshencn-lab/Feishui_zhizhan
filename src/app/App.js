@@ -60,7 +60,7 @@ export class App {
     this.loader.querySelector('.loader__bar i').style.width = `${Math.round(frac * 100)}%`;
   }
 
-  async start() {
+  async start(resume = {}) {
     this.root.innerHTML = `
       <div class="viewport" id="viewport"></div>
       <div class="loader" id="loader">
@@ -117,17 +117,22 @@ export class App {
     this.setStatus('就绪', 1);
 
     this.setQuality('medium');
-    this.setTime(0, { snap: true });
-    // opening: descend onto the strategic table
-    this.rig.from = { target: new THREE.Vector3(0, 0, 0), dist: 230, yaw: 0, pitch: 72 };
-    this.rig.flyT = 0;
-    this.rig.flyDur = 3.6;
+    const resumeT = Number.isFinite(resume.T) ? resume.T : null;
+    this.setTime(resumeT ?? 0, { snap: true });
+    if (resumeT === null) {
+      // opening: descend onto the strategic table, then start the story
+      this.rig.from = { target: new THREE.Vector3(0, 0, 0), dist: 230, yaw: 0, pitch: 72 };
+      this.rig.flyT = 0;
+      this.rig.flyDur = 3.6;
+      setTimeout(() => {
+        if (!this.userTouched) this.play();
+      }, 2600);
+    } else {
+      this.userTouched = true;
+    }
     this.ready = true;
     this.loop();
     setTimeout(() => this.loader.classList.add('is-done'), 250);
-    setTimeout(() => {
-      if (!this.userTouched) this.play();
-    }, 2600);
     this.stage.renderer.domElement.addEventListener('pointerdown', () => (this.userTouched = true), { once: true });
   }
 
@@ -279,11 +284,27 @@ export class App {
   }
 
   // ---------------------------------------------------------------------------
+  /** Drop to the light preset once if the machine cannot keep ~24 fps. */
+  watchPerformance(rawDt) {
+    if (this.qualityLocked || document.hidden) return;
+    this.frameEMA = this.frameEMA === undefined ? rawDt : this.frameEMA * 0.95 + rawDt * 0.05;
+    this.perfFrames = (this.perfFrames || 0) + 1;
+    if (this.perfFrames > 150 && this.frameEMA > 1 / 24 && this.quality !== 'low') {
+      this.setQuality(this.quality === 'high' ? 'medium' : 'low');
+      const sel = this.root.querySelector('#lay-quality');
+      if (sel) sel.value = this.quality;
+      this.perfFrames = 0;
+      this.frameEMA = undefined;
+    }
+  }
+
   loop() {
     const now = performance.now();
-    const dt = Math.min((now - this.lastFrame) / 1000, 0.1);
+    const rawDt = (now - this.lastFrame) / 1000;
+    const dt = Math.min(rawDt, 0.1);
     this.lastFrame = now;
     this.elapsed += dt;
+    this.watchPerformance(rawDt);
     if (this.playing) {
       const ep = this.episode;
       const next = this.T + (dt * this.speed) / ep.duration;

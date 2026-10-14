@@ -48,11 +48,18 @@ export class CameraRig {
     this.proj = proj;
   }
 
+  /** Narrow (portrait) screens see less sideways, so scripted shots pull back. */
+  get distScale() {
+    const el = this.stage.container;
+    const aspect = el.clientWidth / Math.max(1, el.clientHeight);
+    return aspect >= 1.6 ? 1 : Math.min(2.2, Math.sqrt(1.6 / aspect));
+  }
+
   /** Converts an episode camera spec into a pose on the current table. */
   poseFrom(spec) {
     const [x, z] = this.proj.geoToWorld(spec.target[0], spec.target[1]);
     const y = Math.max(this.proj.groundY(x, z), 0);
-    return { target: new THREE.Vector3(x, y, z), dist: spec.dist, yaw: spec.yaw, pitch: spec.pitch };
+    return { target: new THREE.Vector3(x, y, z), dist: spec.dist * this.distScale, yaw: spec.yaw, pitch: spec.pitch };
   }
 
   currentPose() {

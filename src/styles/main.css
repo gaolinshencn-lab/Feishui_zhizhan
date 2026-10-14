@@ -100,6 +100,13 @@ button {
 }
 
 /* ------------------------------------------------------------------ masthead */
+.topshade {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: calc(130px + env(safe-area-inset-top, 0px));
+  background: linear-gradient(180deg, rgba(11, 9, 8, 0.78) 0%, rgba(11, 9, 8, 0.4) 55%, rgba(11, 9, 8, 0) 100%);
+  pointer-events: none;
+}
 .masthead {
   position: absolute;
   top: calc(18px + env(safe-area-inset-top, 0px));
@@ -1578,6 +1585,11 @@ body.labels-off .unit-label {
 }
 
 /* ------------------------------------------------------------------ responsive */
+@media (max-width: 1440px) {
+  .tl-node__date {
+    display: none;
+  }
+}
 @media (max-width: 1180px) {
   .episode {
     width: 340px;
@@ -1585,8 +1597,8 @@ body.labels-off .unit-label {
   .hud {
     right: calc(max(22px, env(safe-area-inset-right, 0px)) + 340px + 16px);
   }
-  .tl-node__date {
-    display: none;
+  .tl-node__title {
+    font-size: 14px;
   }
 }
 @media (max-width: 900px) {
