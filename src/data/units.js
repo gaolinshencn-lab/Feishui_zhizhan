@@ -16,7 +16,7 @@ export const TACTICAL_UNITS = [
   // ===================== 前秦 =====================
   {
     id: 'q_rong', side: 'qin', name: '苻融', label: '苻融 · 前锋主力', strength: '前锋诸军', banner: '苻融',
-    kind: 'mixed', figures: 380, cav: 0.25,
+    kind: 'mixed', figures: 380, cav: 0.25, fallsAt: { t: T('battle', 0.47), at: [116.774, 32.584], yaw: 3.5 },
     track: [
       { t: T('shouyang', 0.0), at: [116.497, 32.527], form: 'block', face: 125 },
       { t: T('shouyang', 0.1), at: [116.497, 32.527], form: 'block', face: 125 },
@@ -85,7 +85,7 @@ export const TACTICAL_UNITS = [
   },
   {
     id: 'q_liang', side: 'qin', name: '梁成', label: '梁成 · 屯洛涧', strength: '众五万', banner: '梁成',
-    kind: 'mixed', figures: 320, cav: 0.22,
+    kind: 'mixed', figures: 320, cav: 0.22, fallsAt: { t: T('raid', 0.52), at: [117.115, 32.7335] },
     track: [
       { t: T('blockade', 0.0), at: [116.815, 32.575], form: 'hidden' },
       { t: T('blockade', 0.06), at: [116.815, 32.575], form: 'block', face: 70 },

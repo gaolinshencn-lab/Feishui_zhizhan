@@ -107,8 +107,8 @@ export class App {
     S.add('props', new PropsLayer(S.resolver, STRATEGIC_PLACES, { scale: 'strategic' }));
     Tt.add('units', new UnitsLayer(Tt.resolver, TACTICAL_UNITS, { figScale: 0.068, spacing: 0.092, bannerScale: 0.62, boatScale: 2.4 }));
     S.add('units', new UnitsLayer(S.resolver, STRATEGIC_UNITS, { figScale: 0.46, spacing: 0.62, bannerScale: 3.4, boatScale: 2.0, shadows: false }));
-    Tt.add('arrows', new ArrowsLayer(Tt.resolver, TACTICAL_ROUTES, Tt.layers.units, { width: 0.24, offset: 0.025, step: 0.05 }));
-    S.add('arrows', new ArrowsLayer(S.resolver, STRATEGIC_ROUTES, S.layers.units, { width: 1.0, offset: 0.12, step: 0.3 }));
+    Tt.add('arrows', new ArrowsLayer(Tt.resolver, TACTICAL_ROUTES, Tt.layers.units, { width: 0.24, offset: 0.025, step: 0.05, nearFade: [3.5, 11] }));
+    S.add('arrows', new ArrowsLayer(S.resolver, STRATEGIC_ROUTES, S.layers.units, { width: 1.0, offset: 0.12, step: 0.3, nearFade: [14, 45] }));
     Tt.add('labels', new LabelsLayer(Tt.resolver, TACTICAL_PLACES, { rivers: Tt.meta.rivers, scale: 'tactical', onHover: hover }));
     S.add('labels', new LabelsLayer(S.resolver, STRATEGIC_PLACES, { rivers: S.meta.rivers, scale: 'strategic', onHover: hover }));
     Tt.add('markers', new MarkersLayer(Tt.resolver, TACTICAL_EVENTS, Tt.layers.units, { ringScale: 1 }));
@@ -371,7 +371,7 @@ export class App {
       }
       t.layers.props?.update(this.T);
       t.layers.units?.update(this.T, this.elapsed);
-      t.layers.arrows?.update(this.T, this.elapsed);
+      t.layers.arrows?.update(this.T, this.elapsed, dist);
       t.layers.markers?.update(this.T, this.elapsed);
       const w = st.container.clientWidth;
       const h = st.container.clientHeight;
@@ -381,7 +381,7 @@ export class App {
       t.layers.arrows?.collect(items);
       t.layers.labels?.collect(items, st.camera, dist, w, h);
       t.layers.units?.collect(items);
-      this.declutter.run(items, st.camera, w, h);
+      this.declutter.run(items, st.camera, w, h, this.ui.chrome);
       this.ui.updateHud(st.camera, st.controls, t.proj);
     }
     if (this.sound.enabled) this.sound.update(dt, this.soundLevels());

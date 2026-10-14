@@ -616,7 +616,22 @@ transformed.y -= k * k * uAmp * 0.6;`
         u.center.set(cx / cnt, 0, cz / cnt);
         u.center.y = proj.groundY(u.center.x, u.center.z);
       }
-      if (u.banner) {
+      if (u.banner && u.def.fallsAt && T >= u.def.fallsAt.t) {
+        // the commander has fallen: his banner topples where he died and stays there
+        const fa = u.def.fallsAt;
+        if (!u.fallPos) {
+          const [fx, fz] = this.R.point(fa.at);
+          u.fallPos = new THREE.Vector3(fx, proj.groundY(fx, fz), fz);
+        }
+        const k = Math.min(1, (T - fa.t) / 0.012);
+        u.banner.visible = this.group.visible;
+        u.banner.position.copy(u.fallPos);
+        u.banner.scale.setScalar(1);
+        u.banner.rotation.set(0, fa.yaw ?? 0.4, -1.42 * k * k);
+        u.flagWave.uTime.value = time * 0.15;
+        if (u.label) u.label.visible = false;
+      } else if (u.banner) {
+        u.banner.rotation.z = 0;
         const show = !hidden && cnt > 0;
         u.banner.visible = show;
         if (show) {

@@ -240,7 +240,10 @@ export class ArrowsLayer {
     }
   }
 
-  update(T, time) {
+  update(T, time, camDist = 100) {
+    // arrows are a map device: thin them out when the camera is down among the figures
+    const near = this.opts.nearFade ? Math.min(1, Math.max(0, (camDist - this.opts.nearFade[0]) / (this.opts.nearFade[1] - this.opts.nearFade[0]))) : 1;
+    const closeFactor = 0.32 + 0.68 * near * near * (3 - 2 * near);
     for (const a of this.arrows) {
       let progress = 0;
       let opacity = 0;
@@ -255,7 +258,7 @@ export class ArrowsLayer {
       if (a.label) a.label.visible = visible && this.group.visible && progress > (a.def.labelAt ?? 0.55);
       if (!visible) continue;
       if (Math.abs(progress - a.built) > 0.002) this.build(a, progress);
-      a.uniforms.uOpacity.value = opacity * (a.def.opacity ?? 0.92);
+      a.uniforms.uOpacity.value = opacity * (a.def.opacity ?? 0.92) * closeFactor;
       a.uniforms.uTime.value = time;
     }
   }

@@ -26,6 +26,9 @@ page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
 await page.goto(url, { waitUntil: 'load', timeout: 120000 });
 await page.waitForFunction(() => window.__feishui && window.__feishui.ready, null, { timeout: 180000 }).catch(() => {});
+// Under software GL the CSS clock barely advances between frames, so transitions would leave the
+// previous time node's styling in the capture.
+await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; }' });
 for (const t of times.split(',')) {
   const T = Number(t);
   await page.evaluate(

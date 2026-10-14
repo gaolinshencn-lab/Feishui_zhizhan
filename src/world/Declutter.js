@@ -3,6 +3,7 @@ import * as THREE from 'three';
 /**
  * One screen-space collision pass over every HTML label on the active table.
  * Lower `prio` wins; `sticky` items (event markers) always show but still claim space.
+ * A label whose middle falls under one of the `blocked` boxes (the UI panels) is hidden too.
  */
 export class Declutter {
   constructor() {
@@ -10,7 +11,7 @@ export class Declutter {
     this.frame = 0;
   }
 
-  run(items, camera, w, h) {
+  run(items, camera, w, h, blocked = []) {
     this.frame++;
     if (this.frame % 2 !== 0 && this.frame > 12) return;
     const placed = [];
@@ -38,6 +39,16 @@ export class Declutter {
       const pad = it.pad ?? 2;
       let hit = false;
       if (!it.sticky) {
+        const mx = (box[0] + box[2]) / 2;
+        const my = (box[1] + box[3]) / 2;
+        for (const b of blocked) {
+          if (mx > b[0] && mx < b[2] && my > b[1] && my < b[3]) {
+            hit = true;
+            break;
+          }
+        }
+      }
+      if (!it.sticky && !hit) {
         for (const b of placed) {
           if (box[0] - pad < b[2] && box[2] + pad > b[0] && box[1] - pad < b[3] && box[3] + pad > b[1]) {
             hit = true;

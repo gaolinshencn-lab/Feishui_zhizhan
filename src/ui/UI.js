@@ -302,7 +302,10 @@ export class UI {
       this.updateInsets();
     });
     window.addEventListener('resize', () => this.updateInsets());
-    if (window.ResizeObserver) new ResizeObserver(() => this.updateInsets()).observe(this.$('episode'));
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(() => this.updateInsets());
+      for (const el of this.root.querySelectorAll('.masthead, .toolbar, #episode, #legend, #timeline')) ro.observe(el);
+    }
     this.updateInsets();
     this.$('legend-toggle').addEventListener('click', () => {
       const lg = this.$('legend');
@@ -324,6 +327,7 @@ export class UI {
   updateInsets() {
     const panel = this.$('episode');
     if (!panel) return;
+    this.measureChrome();
     const r = panel.getBoundingClientRect();
     const W = window.innerWidth;
     const H = window.innerHeight;
@@ -333,6 +337,16 @@ export class UI {
       const covered = Math.max(0, H - r.top - 0) - 0;
       this.app.stage.setInsets({ right: 0, bottom: Math.min(covered * 0.75, H * 0.45) });
     }
+  }
+
+  /** Screen boxes of the overlay panels; map labels give way to them instead of showing through. */
+  measureChrome() {
+    const boxes = [];
+    for (const el of this.root.querySelectorAll('.masthead, .toolbar, #episode, #legend, #timeline, .compass')) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) boxes.push([r.left, r.top, r.right, r.bottom]);
+    }
+    this.chrome = boxes;
   }
 
   setPlaying(p) {
