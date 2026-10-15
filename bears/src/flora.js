@@ -25,13 +25,16 @@ export const at = (g, x, y, z, rx = 0, ry = 0, rz = 0, s = 1) => {
 };
 
 function pineGeo() {
-  const trunk = at(new THREE.CylinderGeometry(0.22, 0.34, 1.8, 6), 0, 0.9, 0);
-  const crown = merge([
-    at(new THREE.ConeGeometry(1.9, 2.8, 7), 0, 2.7, 0),
-    at(new THREE.ConeGeometry(1.45, 2.4, 7), 0, 4.1, 0, 0, 0.4),
-    at(new THREE.ConeGeometry(0.95, 2.0, 7), 0, 5.4, 0, 0, 0.8),
-  ]);
-  return { trunk: merge([trunk]), crown, center: new THREE.Vector3(0, 3.8, 0) };
+  // tall spruce like the show's forest: reddish trunk, five drooping tiers
+  const trunk = at(new THREE.CylinderGeometry(0.2, 0.42, 3.2, 7), 0, 1.6, 0);
+  const tiers = [];
+  for (let i = 0; i < 5; i++) {
+    const r = 2.1 - i * 0.36, h = 2.4 - i * 0.18;
+    tiers.push(at(new THREE.ConeGeometry(r, h, 8), 0, 2.6 + i * 1.25, 0, 0, i * 0.37));
+  }
+  tiers.push(at(new THREE.ConeGeometry(0.5, 1.4, 6), 0, 8.4, 0));
+  const crown = merge(tiers);
+  return { trunk: merge([trunk]), crown, center: new THREE.Vector3(0, 5, 0) };
 }
 
 function broadGeo() {
@@ -86,7 +89,7 @@ export function buildFlora(hf, palette) {
   const group = new THREE.Group();
   const R = rng(7);
   const half = BOARD / 2 - 2;
-  const spots = { pine: [], broad: [], birch: [], bush: [], rock: [], flower: [] };
+  const spots = { pine: [], larch: [], broad: [], birch: [], bush: [], rock: [], flower: [] };
 
   const blocked = (x, z, pad = 0) => {
     for (const c of CLEARINGS) if (Math.hypot(x - c.x, z - c.z) < c.r + pad) return true;
@@ -109,7 +112,8 @@ export function buildFlora(hf, palette) {
       const birchZone = smooth(25, 5, Math.hypot(px + 82, pz - 22)) + smooth(14, 3, hf.waterDist(px, pz)) * 0.35;
       const r = R();
       let kind;
-      if (r < 0.15 + north * 0.75 + smooth(18, 30, y) * 0.5) kind = 'pine';
+      if (r < 0.5 + north * 0.45 + smooth(18, 30, y) * 0.5) kind = 'pine';
+      else if (r < 0.66) kind = 'larch';
       else if (R() < birchZone) kind = 'birch';
       else kind = 'broad';
       spots[kind].push({ x: px, y, z: pz, s: 0.75 + R() * 0.6, ry: R() * Math.PI * 2, v: R() });
@@ -174,7 +178,8 @@ export function buildFlora(hf, palette) {
     return set;
   };
 
-  mkSet('pine', spots.pine, pineGeo(), '#6b4a2f', { color: (p) => p.pine, sway: 0.008, snowLo: 0.3, snowHi: 0.75 });
+  mkSet('pine', spots.pine, pineGeo(), '#7a4430', { color: (p) => p.pine, sway: 0.008, snowLo: 0.3, snowHi: 0.75 });
+  mkSet('larch', spots.larch, pineGeo(), '#7a4a30', { color: (p) => p.larch, shrink: true, leafKey: 'leafScale', sway: 0.008 });
   mkSet('broad', spots.broad, broadGeo(), '#6e4c33', { color: (p, v) => p.leaf[v < 0.45 ? 0 : v < 0.8 ? 1 : 2], shrink: true, leafKey: 'leafScale' });
   mkSet('birch', spots.birch, birchGeo(), '#ece8de', { color: (p) => p.birch, shrink: true, leafKey: 'leafScale' });
   mkSet('bush', spots.bush, bushGeo(), null, { color: (p, v) => p.leaf[v < 0.6 ? 0 : 1].clone().multiplyScalar(0.8), shrink: true, leafKey: 'bush', sway: 0.02 });

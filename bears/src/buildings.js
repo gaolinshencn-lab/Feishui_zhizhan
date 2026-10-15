@@ -4,6 +4,7 @@ import { merge, at } from './flora.js';
 import { snowify, stdMat, U } from './shared.js';
 import { rng } from './util.js';
 import { LAKE, CLEARINGS } from './places.js';
+import { HOMES } from './characters.js';
 
 const M = (c, o) => snowify(stdMat(c, o), { key: 'b' });
 const MAT = {
@@ -14,6 +15,13 @@ const MAT = {
   green: M('#4f8a35'), red: M('#d8352b'), snow: stdMat('#f7fbff'), coal: stdMat('#222222'), carrot: stdMat('#f07a22'),
   ice: stdMat('#d9f1ff', { transparent: true, opacity: 0.85, roughness: 0.1 }), cloth: M('#3f78c8'), cloth2: M('#e85a5a'),
   lily: M('#4f9c3c'), lotus: stdMat('#ff9ec4'),
+  // Vick's house: dark-red timber walls, blue-grey slab roof, green lattice door and windows
+  house: M('#7e2c22'), houseDark: M('#5b1d17'), slateA: M('#5d7089'), slateB: M('#6c8098'), slateC: M('#4e5e74'),
+  lattice: M('#3f6d4e'), chili: stdMat('#d6261c', { roughness: 0.45 }),
+  // Vick's blue pickup
+  blue: M('#2f63b9', { roughness: 0.45 }), chrome: stdMat('#d5dbe0', { metalness: 0.8, roughness: 0.25 }), seat: stdMat('#d9742c'),
+  plate: stdMat('#f2c521'), tail: stdMat('#d8261e', { emissive: '#600000' }), rim: stdMat('#b9c0c6', { metalness: 0.6, roughness: 0.35 }),
+  rock: M('#8b847a'), rockDark: M('#6f685f'), cone: M('#8a5228'), bark: M('#6b3f28'),
 };
 const win = () => new THREE.MeshStandardMaterial({ color: '#ffe2a0', emissive: '#ffb84a', emissiveIntensity: 0.15, roughness: 0.4 });
 
@@ -34,62 +42,108 @@ const ball = (r, mat, d = 1) => mesh(new THREE.IcosahedronGeometry(r, d), mat);
 // ------------------------------------------------------------------------------------------
 
 function cabin(windows) {
+  // Logger Vick's house as seen in the show: crooked dark-red plank walls, uneven blue-grey slab
+  // roof with a front dormer, green lattice door and windows, strings of red chili peppers.
   const g = new THREE.Group();
-  const W = 8, D = 6, H = 3.4;
-  // log walls: stacked horizontal logs
-  const logs = [];
-  for (let i = 0; i < 8; i++) {
-    const y = 0.22 + i * 0.42;
-    logs.push(at(new THREE.CylinderGeometry(0.24, 0.24, W + 0.6, 7), 0, y, D / 2, 0, 0, Math.PI / 2));
-    logs.push(at(new THREE.CylinderGeometry(0.24, 0.24, W + 0.6, 7), 0, y, -D / 2, 0, 0, Math.PI / 2));
-    logs.push(at(new THREE.CylinderGeometry(0.24, 0.24, D + 0.6, 7), W / 2, y + 0.21, 0, Math.PI / 2));
-    logs.push(at(new THREE.CylinderGeometry(0.24, 0.24, D + 0.6, 7), -W / 2, y + 0.21, 0, Math.PI / 2));
+  const W = 9, D = 6.5, H = 3.4;
+  const R = rng(5);
+  g.add(box(W + 0.4, 0.5, D + 0.4, MAT.stone, 0, 0.25, 0));
+  const walls = new THREE.Group();
+  walls.rotation.z = 0.015;
+  walls.add(box(W, H, D, MAT.house, 0, 0.5 + H / 2, 0));
+  const planks = [];
+  for (let i = 0; i <= 18; i++) {
+    const x = -W / 2 + (i / 18) * W;
+    planks.push(at(new THREE.BoxGeometry(0.07, H, 0.06), x, 0.5 + H / 2, D / 2 + 0.03), at(new THREE.BoxGeometry(0.07, H, 0.06), x, 0.5 + H / 2, -D / 2 - 0.03));
   }
-  g.add(mesh(merge(logs), MAT.log));
-  g.add(box(W - 0.2, H, D - 0.2, MAT.logDark, 0, H / 2, 0));
-  // gables and roof
-  const gable = new THREE.Shape([new THREE.Vector2(-D / 2, 0), new THREE.Vector2(D / 2, 0), new THREE.Vector2(0, 2.2)]);
+  for (const [x, z] of [[-W / 2, D / 2], [W / 2, D / 2], [-W / 2, -D / 2], [W / 2, -D / 2]]) planks.push(at(new THREE.BoxGeometry(0.35, H + 0.2, 0.35), x, 0.5 + H / 2, z));
+  planks.push(at(new THREE.BoxGeometry(W + 0.3, 0.25, 0.3), 0, 0.5 + H, D / 2 + 0.05), at(new THREE.BoxGeometry(W + 0.3, 0.25, 0.3), 0, 0.5 + H, -D / 2 - 0.05));
+  walls.add(mesh(merge(planks), MAT.houseDark));
+  g.add(walls);
+  const top = 0.5 + H;
+  // gables
+  const gable = new THREE.Shape([new THREE.Vector2(-D / 2, 0), new THREE.Vector2(D / 2, 0), new THREE.Vector2(0, 2.4)]);
   for (const sx of [-1, 1]) {
-    const gm = mesh(new THREE.ExtrudeGeometry(gable, { depth: 0.3, bevelEnabled: false }), MAT.log);
+    const gm = mesh(new THREE.ExtrudeGeometry(gable, { depth: 0.25, bevelEnabled: false }), MAT.house);
     gm.rotation.y = Math.PI / 2;
-    gm.position.set(sx * (W / 2) - 0.15, H, 0);
+    gm.position.set(sx * (W / 2) - 0.12, top, 0);
     g.add(gm);
   }
-  const slope = Math.atan2(2.2, D / 2);
-  const len = Math.hypot(2.2, D / 2) + 0.7;
-  for (const s of [-1, 1]) {
-    const r = box(W + 1.4, 0.28, len, s > 0 ? MAT.roof : MAT.roofDark);
-    r.rotation.x = s * slope;
-    r.position.set(0, H + 1.1 + 0.18, s * (D / 4 + 0.15));
-    g.add(r);
+  // roof of uneven stone slabs, three shades
+  const slope = Math.atan2(2.4, D / 2);
+  const len = Math.hypot(2.4, D / 2) + 0.8;
+  const slabs = [[], [], []];
+  for (const side of [-1, 1]) {
+    const rows = 6, cols = 9;
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++) {
+        const u = (r + 0.5) / rows; // 0 ridge .. 1 eave
+        const x = -W / 2 - 0.6 + ((c + 0.5 + (r % 2) * 0.5) / cols) * (W + 1.2);
+        const dz = u * len * Math.cos(slope), dy = -u * len * Math.sin(slope);
+        const geo = new THREE.BoxGeometry((W + 1.2) / cols + 0.12, 0.16, len / rows + 0.25);
+        geo.rotateX(side * slope + (R() - 0.5) * 0.08);
+        geo.rotateY((R() - 0.5) * 0.06);
+        geo.translate(x, top + 2.4 + 0.15 + dy + (R() - 0.5) * 0.05, side * (dz - 0.0));
+        slabs[Math.floor(R() * 3)].push(geo);
+      }
   }
+  [MAT.slateA, MAT.slateB, MAT.slateC].forEach((m, i) => slabs[i].length && g.add(mesh(merge(slabs[i]), m)));
+  g.add(box(W + 1.4, 0.3, 0.4, MAT.slateC, 0, top + 2.6, 0)); // ridge
+  // front dormer
+  const dorm = new THREE.Group();
+  dorm.add(box(1.8, 1.3, 1.6, MAT.house, 0, 0.65, 0));
+  const dw = win();
+  windows.push(dw);
+  dorm.add(box(0.9, 0.7, 0.06, dw, 0, 0.7, 0.81));
+  const dg = new THREE.Shape([new THREE.Vector2(-1.1, 0), new THREE.Vector2(1.1, 0), new THREE.Vector2(0, 0.9)]);
+  const dr = mesh(new THREE.ExtrudeGeometry(dg, { depth: 2.0, bevelEnabled: false }), MAT.slateB);
+  dr.position.set(0, 1.3, -1.0);
+  dorm.add(dr);
+  dorm.position.set(-1.5, top + 0.9, D / 4 + 0.5);
+  g.add(dorm);
   // chimney
-  const ch = box(0.9, 3, 0.9, MAT.stone, 2.4, H + 1.6, -1.2);
-  g.add(ch);
-  g.userData.chimney = new THREE.Vector3(2.4, H + 3.2, -1.2);
-  // door & windows on the front (+z)
-  g.add(box(1.2, 2.1, 0.12, MAT.door, -1.6, 1.05, D / 2 + 0.25));
-  for (const x of [0.8, 2.8]) {
-    const wm = win();
-    windows.push(wm);
-    g.add(box(1.0, 0.9, 0.1, wm, x, 1.9, D / 2 + 0.26));
-    g.add(box(1.2, 0.12, 0.2, MAT.plank, x, 1.4, D / 2 + 0.3));
-  }
-  const sw = win();
-  windows.push(sw);
-  g.add(box(0.1, 0.9, 1.0, sw, W / 2 + 0.28, 1.9, 0));
-  // porch
-  g.add(box(W + 0.4, 0.25, 1.8, MAT.plank, 0, 0.12, D / 2 + 1.1));
-  for (const x of [-W / 2, W / 2]) g.add(box(0.2, 2.6, 0.2, MAT.log, x, 1.4, D / 2 + 1.9));
-  const awning = box(W + 0.8, 0.15, 2.2, MAT.roofDark, 0, 2.75, D / 2 + 1.1);
-  awning.rotation.x = 0.18;
-  g.add(awning);
-  // icicles under the eaves (winter)
+  g.add(box(0.9, 2.6, 0.9, MAT.stone, 2.6, top + 2.2, -1.2));
+  g.userData.chimney = new THREE.Vector3(2.6, top + 3.6, -1.2);
+  // green lattice door and windows
+  const latt = (w, h, x, y, z, light) => {
+    const grp = new THREE.Group();
+    if (light) {
+      const lm = win();
+      windows.push(lm);
+      grp.add(box(w, h, 0.05, lm, 0, 0, -0.02));
+    } else grp.add(box(w, h, 0.05, MAT.lattice, 0, 0, -0.02));
+    const bars = [];
+    for (let i = 1; i < 4; i++) bars.push(at(new THREE.BoxGeometry(0.05, h, 0.05), -w / 2 + (i * w) / 4, 0, 0.03));
+    for (let i = 1; i < 5; i++) bars.push(at(new THREE.BoxGeometry(w, 0.05, 0.05), 0, -h / 2 + (i * h) / 5, 0.03));
+    bars.push(at(new THREE.BoxGeometry(w + 0.2, 0.14, 0.12), 0, h / 2 + 0.05, 0.03), at(new THREE.BoxGeometry(w + 0.2, 0.14, 0.12), 0, -h / 2 - 0.05, 0.03));
+    bars.push(at(new THREE.BoxGeometry(0.14, h + 0.2, 0.12), -w / 2 - 0.05, 0, 0.03), at(new THREE.BoxGeometry(0.14, h + 0.2, 0.12), w / 2 + 0.05, 0, 0.03));
+    grp.add(mesh(merge(bars), MAT.lattice));
+    grp.position.set(x, y, z);
+    return grp;
+  };
+  g.add(latt(1.4, 2.3, -0.6, 0.5 + 1.15, D / 2 + 0.08, false));
+  g.add(latt(1.3, 1.1, -3.0, 2.3, D / 2 + 0.08, true));
+  g.add(latt(1.3, 1.1, 2.3, 2.3, D / 2 + 0.08, true));
+  const side = latt(1.2, 1.0, 0, 2.3, 0, true);
+  side.rotation.y = Math.PI / 2;
+  side.position.set(W / 2 + 0.08, 2.3, 0);
+  g.add(side);
+  // strings of red chili peppers either side of the door
+  const chilis = [];
+  for (const x of [-1.7, 0.5])
+    for (let i = 0; i < 9; i++) chilis.push(at(new THREE.ConeGeometry(0.09, 0.32, 5), x + Math.sin(i * 1.7) * 0.06, 3.3 - i * 0.22, D / 2 + 0.25, Math.PI + Math.sin(i) * 0.3));
+  g.add(mesh(merge(chilis), MAT.chili));
+  // porch step and eave
+  g.add(box(2.4, 0.3, 1.2, MAT.plank, -0.6, 0.15, D / 2 + 0.7));
+  const eave = box(W + 0.6, 0.14, 1.4, MAT.slateA, 0, top - 0.25, D / 2 + 0.55);
+  eave.rotation.x = 0.25;
+  g.add(eave);
+  // icicles under the eave (winter)
   const ic = [];
-  for (let i = 0; i < 26; i++) {
-    const x = -W / 2 - 0.4 + (i / 25) * (W + 0.8);
+  for (let i = 0; i < 28; i++) {
+    const x = -W / 2 - 0.2 + (i / 27) * (W + 0.4);
     const l = 0.3 + ((i * 7) % 5) * 0.12;
-    ic.push(at(new THREE.ConeGeometry(0.07, l, 4), x, 2.55 - l / 2, D / 2 + 2.15, Math.PI));
+    ic.push(at(new THREE.ConeGeometry(0.07, l, 4), x, top - 0.45 - l / 2, D / 2 + 1.2, Math.PI));
   }
   const icicles = mesh(merge(ic), MAT.ice, false);
   g.add(icicles);
@@ -98,24 +152,53 @@ function cabin(windows) {
 }
 
 function truck() {
+  // Vick's blue 4x4 pickup: high stance, big off-road tyres, chrome bull bar, orange seats.
   const g = new THREE.Group();
-  g.add(box(2.4, 1.0, 5.6, MAT.truckDark, 0, 1.0, 0));
-  g.add(box(2.4, 1.6, 1.9, MAT.truck, 0, 2.2, 1.7));
-  g.add(box(2.42, 0.7, 0.05, MAT.glass, 0, 2.5, 2.66));
-  g.add(box(2.4, 0.9, 1.0, MAT.truck, 0, 1.6, 2.9));
-  g.add(box(0.15, 1.6, 3.6, MAT.truck, 1.15, 2.1, -1.0));
-  g.add(box(0.15, 1.6, 3.6, MAT.truck, -1.15, 2.1, -1.0));
-  for (const [x, z] of [[1.25, 2.1], [-1.25, 2.1], [1.25, -1.8], [-1.25, -1.8]]) {
-    const w = cyl(0.55, 0.55, 0.4, MAT.tire, 12);
-    w.rotation.z = Math.PI / 2;
-    w.position.set(x, 0.55, z);
-    g.add(w);
+  g.add(box(2.1, 0.4, 5.4, MAT.truckDark, 0, 1.05, 0));
+  g.add(box(2.5, 0.75, 1.9, MAT.blue, 0, 1.55, 2.0)); // bonnet
+  g.add(box(2.5, 1.35, 1.9, MAT.blue, 0, 1.85, 0.4)); // cab
+  g.add(box(2.52, 0.62, 1.5, MAT.glass, 0, 2.2, 0.45));
+  const ws = box(2.3, 0.75, 0.06, MAT.glass, 0, 2.2, 1.38);
+  ws.rotation.x = -0.35;
+  g.add(ws);
+  g.add(box(2.0, 0.5, 0.6, MAT.seat, 0, 1.95, 0.2));
+  g.add(box(2.5, 0.25, 2.4, MAT.blue, 0, 1.3, -1.85)); // bed floor
+  for (const sx of [-1, 1]) g.add(box(0.12, 0.7, 2.4, MAT.blue, sx * 1.2, 1.6, -1.85));
+  g.add(box(2.5, 0.7, 0.12, MAT.blue, 0, 1.6, -3.0));
+  for (const sx of [-1, 1]) {
+    g.add(box(0.25, 0.25, 0.08, MAT.tail, sx * 1.05, 1.75, -3.07));
+    g.add(box(0.4, 0.2, 0.06, MAT.glass, sx * 0.8, 1.7, 2.96)); // headlights
   }
-  // logs on the bed
-  for (let i = 0; i < 5; i++) {
-    const l = cyl(0.36, 0.36, 3.6, MAT.wood, 8);
+  g.add(box(0.7, 0.25, 0.04, MAT.plate, 0, 1.35, -3.08));
+  g.add(box(0.7, 0.25, 0.04, MAT.plate, 0, 1.2, 3.12));
+  // chrome grille and bull bar
+  g.add(box(1.6, 0.5, 0.06, MAT.chrome, 0, 1.6, 2.97));
+  const bar = [];
+  bar.push(at(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 8), 0, 1.0, 3.2, 0, 0, Math.PI / 2));
+  bar.push(at(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 8), 0, 1.55, 3.25, 0, 0, Math.PI / 2));
+  for (const x of [-0.7, 0.7]) bar.push(at(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), x, 1.27, 3.22));
+  g.add(mesh(merge(bar), MAT.chrome));
+  // big tyres with silver rims and blue arches
+  for (const [x, z] of [[1.25, 2.0], [-1.25, 2.0], [1.25, -1.9], [-1.25, -1.9]]) {
+    const w = new THREE.Group();
+    const t = cyl(0.78, 0.78, 0.6, MAT.tire, 16);
+    t.rotation.z = Math.PI / 2;
+    w.add(t);
+    const rim = cyl(0.42, 0.42, 0.62, MAT.rim, 10);
+    rim.rotation.z = Math.PI / 2;
+    w.add(rim);
+    w.position.set(x, 0.78, z);
+    g.add(w);
+    const arch = mesh(new THREE.TorusGeometry(0.9, 0.12, 5, 12, Math.PI), MAT.blue);
+    arch.rotation.y = Math.PI / 2;
+    arch.position.set(x * 1.02, 0.95, z);
+    g.add(arch);
+  }
+  // a few logs in the bed
+  for (let i = 0; i < 3; i++) {
+    const l = cyl(0.3, 0.3, 2.6, MAT.wood, 8);
     l.rotation.x = Math.PI / 2;
-    l.position.set(-0.75 + (i % 3) * 0.75 + (i > 2 ? 0.37 : 0), 1.85 + (i > 2 ? 0.62 : 0), -1);
+    l.position.set(-0.65 + i * 0.65, 1.75, -1.9);
     g.add(l);
   }
   return g;
@@ -495,41 +578,85 @@ export function buildLandmarks(hf) {
     honey.add(h);
   }
 
-  // Monkey king's tree with a platform, ladder and throne
-  const mk = place(bigTree(1.55, '#4f9c3c'), -55, -21, 0, -0.3);
+  // Tiki and Babu's cave (built for them by the bears), mouth facing east
   {
-    const plat = new THREE.Group();
-    const deck = cyl(3.2, 3.2, 0.25, MAT.plank, 12);
-    plat.add(deck);
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      plat.add(box(0.1, 0.8, 0.1, MAT.wood, Math.cos(a) * 3.1, 0.45, Math.sin(a) * 3.1));
+    const cv = new THREE.Group();
+    const rocks = [], dark = [];
+    const RR = rng(21);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 1.6 - Math.PI * 0.3 + Math.PI;
+      const r = 3.6 + RR() * 1.2;
+      const geo = new THREE.DodecahedronGeometry(1.4 + RR() * 1.1, 0);
+      geo.scale(1, 0.8 + RR() * 0.6, 1);
+      geo.translate(Math.cos(a) * r, 0.8 + RR() * 1.5, Math.sin(a) * r * 0.8 - 1.5);
+      (i % 3 ? rocks : dark).push(geo);
     }
-    const ring = mesh(new THREE.TorusGeometry(3.1, 0.06, 4, 24), MAT.wood);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.85;
-    plat.add(ring);
-    const throne = new THREE.Group();
-    throne.add(box(1.0, 0.5, 0.9, MAT.red, 0, 0.4, 0));
-    throne.add(box(1.0, 1.2, 0.2, MAT.red, 0, 0.9, -0.4));
-    throne.add(box(1.1, 0.12, 0.25, MAT.hive, 0, 1.55, -0.4));
-    throne.position.set(0, 0, 1.9);
-    plat.add(throne);
-    const flagPole = box(0.08, 2.4, 0.08, MAT.wood, -2.2, 1.3, -1.2);
-    plat.add(flagPole);
-    const flag = box(0.9, 0.55, 0.03, MAT.hive, -1.75, 2.2, -1.2);
-    plat.add(flag);
-    plat.position.y = 2.7;
-    mk.add(plat);
-    const ladder = [];
-    for (let i = 0; i < 6; i++) ladder.push(at(new THREE.BoxGeometry(0.8, 0.07, 0.07), 0, 0.3 + i * 0.45, 0));
-    ladder.push(at(new THREE.BoxGeometry(0.07, 2.8, 0.07), -0.4, 1.4, 0), at(new THREE.BoxGeometry(0.07, 2.8, 0.07), 0.4, 1.4, 0));
-    const lad = mesh(merge(ladder), MAT.wood);
-    lad.position.set(0, 0, 1.05);
-    lad.rotation.x = -0.12;
-    mk.add(lad);
+    for (let i = 0; i < 6; i++) {
+      const geo = new THREE.DodecahedronGeometry(1.8 + RR(), 0);
+      geo.translate((RR() - 0.5) * 4, 3.4 + RR() * 1.2, -2 - RR() * 2);
+      rocks.push(geo);
+    }
+    cv.add(mesh(merge(rocks), MAT.rock), mesh(merge(dark), MAT.rockDark));
+    // dark hollow framed by an arch of boulders
+    const hollow = mesh(new THREE.SphereGeometry(2.0, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), MAT.coal, false);
+    hollow.scale.set(1, 1.15, 0.8);
+    hollow.position.set(0, 0, 1.2);
+    cv.add(hollow);
+    const arch = [];
+    for (let i = 0; i <= 6; i++) {
+      const a = (i / 6) * Math.PI;
+      const geo = new THREE.DodecahedronGeometry(0.75, 0);
+      geo.translate(Math.cos(a) * 2.4, Math.sin(a) * 2.6, 2.3);
+      arch.push(geo);
+    }
+    cv.add(mesh(merge(arch), MAT.rock));
+    // Tiki's stone seat and a pile of fruit by the entrance
+    cv.add(box(1.4, 0.6, 1.0, MAT.rock, -1.2, 0.3, 2.6));
+    const fruit = [];
+    for (let i = 0; i < 10; i++) fruit.push(at(new THREE.IcosahedronGeometry(0.22, 1), 1.5 + (i % 4) * 0.35, 0.2 + Math.floor(i / 4) * 0.3, 2.2 + (i % 3) * 0.25));
+    cv.add(mesh(merge(fruit), MAT.red));
+    place(cv, HOMES.cave.x, HOMES.cave.z, Math.PI / 2, -0.3);
   }
-  const bigTrees = [honey, mk, home];
+
+  // Hoo Hoo's tree house
+  const owlTree = place(bigTree(1.2, '#4f9c3c'), HOMES.owl.x, HOMES.owl.z, 0.6, -0.2);
+  {
+    const hut = new THREE.Group();
+    hut.add(box(2.0, 1.6, 2.0, MAT.plank, 0, 0.8, 0));
+    const roofC = mesh(new THREE.ConeGeometry(1.8, 1.4, 6), MAT.roof);
+    roofC.position.y = 2.3;
+    hut.add(roofC);
+    const door = mesh(new THREE.CircleGeometry(0.4, 12), MAT.coal, false);
+    door.position.set(0, 0.8, 1.02);
+    hut.add(door);
+    hut.add(cyl(1.6, 1.6, 0.15, MAT.wood, 10));
+    hut.position.set(2.2, 3.4, 1.4);
+    const prop = cyl(0.08, 0.1, 3.4, MAT.wood, 5);
+    prop.position.set(2.2, 1.7, 1.4);
+    owlTree.add(prop);
+    owlTree.add(hut);
+  }
+
+  // Warren's tree hollow, stuffed with pine cones
+  {
+    const t = new THREE.Group();
+    const trunk = cyl(0.9, 1.3, 10, MAT.bark, 9);
+    trunk.position.y = 5;
+    t.add(trunk);
+    const crown = [];
+    for (let i = 0; i < 5; i++) crown.push(at(new THREE.ConeGeometry(3.4 - i * 0.55, 2.6, 8), 0, 6 + i * 1.5, 0, 0, i * 0.5));
+    t.add(mesh(merge(crown), M('#2f6b48')));
+    const hole = mesh(new THREE.CircleGeometry(0.45, 12), MAT.coal, false);
+    hole.position.set(0, 3.2, 1.08);
+    t.add(hole);
+    const cones = [];
+    const RC = rng(9);
+    for (let i = 0; i < 26; i++) cones.push(at(new THREE.ConeGeometry(0.16, 0.38, 6), (RC() - 0.5) * 2.2, 0.15 + RC() * 0.25, 1.4 + RC() * 1.2, Math.PI / 2 + (RC() - 0.5), RC() * 6));
+    for (let i = 0; i < 5; i++) cones.push(at(new THREE.ConeGeometry(0.12, 0.3, 6), (RC() - 0.5) * 0.5, 3.0, 1.15, Math.PI / 2));
+    t.add(mesh(merge(cones), MAT.cone));
+    place(t, HOMES.squirrel.x, HOMES.squirrel.z, 0, -0.2);
+  }
+  const bigTrees = [honey, owlTree, home];
 
   // Bridge across the creek
   {

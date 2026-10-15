@@ -178,13 +178,15 @@ export function buildTerrain(hf, palette) {
           vec3 c = mix(uGrass2, uGrass, smoothstep(0.25, 0.75, vNoise));
           c = mix(c, uMeadow, vMask.w);
           // speckles: flowers in spring and summer, fallen leaves in autumn
-          vec2 cell = floor(vWP.xz * 2.2);
+          vec2 sp = vWP.xz * 3.0;
+          vec2 cell = floor(sp);
           float r = hh(cell);
+          float dotm = smoothstep(0.34, 0.22, length(fract(sp) - 0.5 - (vec2(hh(cell + 1.3), hh(cell + 2.7)) - 0.5) * 0.3));
           float grassy = (1.0 - vMask.x) * (1.0 - vMask.y) * (1.0 - vMask.z);
-          float fl = step(0.93 - 0.12 * vMask.w, r) * uFlowers * grassy;
+          float fl = step(0.9 - 0.15 * vMask.w, r) * uFlowers * grassy * dotm;
           vec3 fc = r > 0.975 ? vec3(1.0, 0.92, 0.35) : (r > 0.955 ? vec3(1.0, 0.62, 0.78) : vec3(0.98, 0.98, 1.0));
           c = mix(c, fc, fl);
-          float lt = step(0.6, hh(cell + 7.0)) * uLitter * grassy;
+          float lt = step(0.55, hh(cell + 7.0)) * uLitter * grassy * dotm;
           vec3 lc = mix(vec3(0.85, 0.42, 0.16), vec3(0.93, 0.7, 0.2), hh(cell + 3.0));
           c = mix(c, lc, lt * 0.7);
           c = mix(c, uBank, vMask.z);
