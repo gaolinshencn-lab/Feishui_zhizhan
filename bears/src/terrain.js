@@ -1,7 +1,7 @@
 // Procedural terrain of Bear Ridge: heightfield, seasonal ground shader, diorama board, and water.
 import * as THREE from 'three';
 import { fbm, Line2, smooth, clamp, lerp } from './util.js';
-import { BOARD, LAKE, RIVER, OUTFLOW, PATHS, CLEARINGS, HILLS, WATERFALL } from './places.js';
+import { BOARD, LAKE, RIVER, OUTFLOW, PATHS, CLEARINGS, HILLS, WATERFALL, CLIFF, lakePoint } from './places.js';
 import { U, snowify } from './shared.js';
 
 const HALF = BOARD / 2;
@@ -142,7 +142,11 @@ export function buildTerrain(hf, palette) {
     for (const c of CLEARINGS) if (c.meadow) meadow = Math.max(meadow, 1 - smooth(c.r * 0.6, c.r * 1.4, Math.hypot(x - c.x, z - c.z)));
     mask[v * 4] = 1 - smooth(0, 1.2, pd);
     mask[v * 4 + 1] = 0; // rock, filled after normals
-    mask[v * 4 + 2] = 1 - smooth(0.5, 3.5, wd);
+    const el = Math.hypot((x - LAKE.x) / LAKE.rx, (z - LAKE.z) / LAKE.rz);
+    const th = Math.atan2((z - LAKE.z) / LAKE.rz, (x - LAKE.x) / LAKE.rx);
+    const cliffSide = th > CLIFF.from - 0.1 && th < CLIFF.to + 0.1 ? 1 : 0;
+    const beach = (1 - smooth(1.15, 1.42 + 0.12 * Math.max(0, Math.sin(th)), el)) * (1 - cliffSide);
+    mask[v * 4 + 2] = Math.max(1 - smooth(0.5, 3.5, wd), beach);
     mask[v * 4 + 3] = meadow;
     noise[v] = fbm(x * 0.08 + 11, z * 0.08 - 4, 3) * 0.5 + 0.5;
   }
@@ -349,7 +353,7 @@ export function buildWater(hf) {
   const mk = (extra = {}) => {
     const m = new THREE.ShaderMaterial({
       uniforms: { ...uni, ...extra }, vertexShader: waterVert, fragmentShader: waterFrag,
-      transparent: true, fog: true, depthWrite: false,
+      transparent: true, fog: true, depthWrite: false, side: THREE.DoubleSide,
     });
     return m;
   };
@@ -469,6 +473,39 @@ export function buildWater(hf) {
     const fall = new THREE.Mesh(geo, fallMat);
     fall.renderOrder = 3;
     g.add(fall);
+  }
+
+  // second waterfall: off the cliff top straight into the lake
+  {
+    const [bx, bz] = lakePoint(CLIFF.fallAngle, 0.98);
+    const [tx, tz] = lakePoint(CLIFF.fallAngle, CLIFF.e + 0.1);
+    const pos = [], uv = [], edge = [], idx = [];
+    const S = 20;
+    for (let i = 0; i <= S; i++) {
+      const t = i / S;
+      const y = LAKE.level + CLIFF.height * (1 - t);
+      const out = Math.sin(t * Math.PI * 0.5) * 0.25;
+      const x = lerp(tx, bx, out + t * 0.1), z = lerp(tz, bz, out + t * 0.1);
+      const w = 2.0 + t * 1.2;
+      for (const s of [-1, 0, 1]) {
+        pos.push(x + s * w * 0.8, y, z + s * w * 0.6);
+        uv.push(s * 0.5 + 0.5, -t * 2);
+        edge.push(Math.abs(s));
+      }
+    }
+    for (let i = 0; i < S; i++)
+      for (let s = 0; s < 2; s++) {
+        const a = i * 3 + s, b = a + 3;
+        idx.push(a, a + 1, b, b, a + 1, b + 1);
+      }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setAttribute('aEdge', new THREE.Float32BufferAttribute(edge, 1));
+    geo.setIndex(idx);
+    const fall2 = new THREE.Mesh(geo, fallMat);
+    fall2.renderOrder = 3;
+    g.add(fall2);
   }
 
   g.userData.setSeason = (p) => {

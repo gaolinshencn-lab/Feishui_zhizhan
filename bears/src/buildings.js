@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { merge, at } from './flora.js';
 import { snowify, stdMat, U } from './shared.js';
 import { rng } from './util.js';
-import { LAKE, CLEARINGS } from './places.js';
+import { LAKE, CLEARINGS, CLIFF, lakePoint, WATERFALL } from './places.js';
 import { HOMES } from './characters.js';
 
 const M = (c, o) => snowify(stdMat(c, o), { key: 'b' });
@@ -41,35 +41,212 @@ const ball = (r, mat, d = 1) => mesh(new THREE.IcosahedronGeometry(r, d), mat);
 
 // ------------------------------------------------------------------------------------------
 
-function cabin(windows) {
-  // Logger Vick's house as seen in the show: crooked dark-red plank walls, uneven blue-grey slab
-  // roof with a front dormer, green lattice door and windows, strings of red chili peppers.
-  const g = new THREE.Group();
-  const W = 9, D = 6.5, H = 3.4;
-  const R = rng(5);
-  g.add(box(W + 0.4, 0.5, D + 0.4, MAT.stone, 0, 0.25, 0));
-  const walls = new THREE.Group();
-  walls.rotation.z = 0.015;
-  walls.add(box(W, H, D, MAT.house, 0, 0.5 + H / 2, 0));
-  const planks = [];
-  for (let i = 0; i <= 18; i++) {
-    const x = -W / 2 + (i / 18) * W;
-    planks.push(at(new THREE.BoxGeometry(0.07, H, 0.06), x, 0.5 + H / 2, D / 2 + 0.03), at(new THREE.BoxGeometry(0.07, H, 0.06), x, 0.5 + H / 2, -D / 2 - 0.03));
+// Small canvas textures for the interior (stone floor, bamboo mat, floral quilt).
+function canvasTex(w, h, draw, repeat = [1, 1]) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(...repeat);
+  return t;
+}
+const TEX = {
+  stone: () =>
+    canvasTex(256, 256, (g, w, h) => {
+      g.fillStyle = '#7f8a92';
+      g.fillRect(0, 0, w, h);
+      const R = rng(3);
+      for (let i = 0; i < 40; i++) {
+        g.fillStyle = `hsl(205, 8%, ${48 + R() * 16}%)`;
+        g.beginPath();
+        const cx = R() * w, cy = R() * h, r = 18 + R() * 26;
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2 + R() * 0.5;
+          g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.8);
+        }
+        g.closePath();
+        g.fill();
+        g.strokeStyle = '#4c555c';
+        g.lineWidth = 2;
+        g.stroke();
+      }
+    }, [3, 2]),
+  bamboo: () =>
+    canvasTex(128, 128, (g, w, h) => {
+      for (let x = 0; x < w; x += 8) {
+        g.fillStyle = x % 16 ? '#c9b46a' : '#b8a35a';
+        g.fillRect(x, 0, 8, h);
+        g.fillStyle = '#8e7d3e';
+        g.fillRect(x, 0, 1, h);
+      }
+      g.fillStyle = '#4f8a3a';
+      g.fillRect(0, 0, w, 6);
+      g.fillRect(0, h - 6, w, 6);
+    }),
+  quilt: () =>
+    canvasTex(256, 256, (g, w, h) => {
+      g.fillStyle = '#2f54a3';
+      g.fillRect(0, 0, w, h);
+      const R = rng(8);
+      g.strokeStyle = '#c9d8f2';
+      g.fillStyle = '#c9d8f2';
+      g.lineWidth = 2;
+      for (let i = 0; i < 26; i++) {
+        const cx = R() * w, cy = R() * h, r = 8 + R() * 10;
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          g.beginPath();
+          g.ellipse(cx + Math.cos(a) * r, cy + Math.sin(a) * r, r * 0.45, r * 0.22, a, 0, Math.PI * 2);
+          g.stroke();
+        }
+        g.beginPath();
+        g.arc(cx, cy, r * 0.35, 0, Math.PI * 2);
+        g.fill();
+        g.beginPath();
+        g.moveTo(cx + r * 1.6, cy);
+        g.bezierCurveTo(cx + r * 2.5, cy - r * 1.5, cx + r * 3.5, cy + r, cx + r * 4.2, cy - r * 0.3);
+        g.stroke();
+      }
+      // patches, as on Vick's old quilt
+      g.fillStyle = '#4a3f9a';
+      g.fillRect(80, 150, 70, 55);
+      g.fillStyle = '#3c6f9a';
+      g.fillRect(40, 60, 60, 60);
+    }),
+};
+
+// Board wall of length L (along x) and height H with rectangular openings, built from horizontal
+// boards in several wood shades. Returns geometry lists per shade.
+function boardWall(L, H, holes, shades, R, board = 0.32, depth = 0.12) {
+  const out = shades.map(() => []);
+  for (let y = 0; y < H - 1e-3; y += board) {
+    const bh = Math.min(board, H - y) - 0.02;
+    const yc = y + bh / 2;
+    // split [−L/2, L/2] by holes intersecting this board
+    let segs = [[-L / 2, L / 2]];
+    for (const o of holes) {
+      if (yc < o.y0 || yc > o.y1) continue;
+      segs = segs.flatMap(([s0, s1]) => {
+        if (o.x1 <= s0 || o.x0 >= s1) return [[s0, s1]];
+        const r = [];
+        if (o.x0 > s0) r.push([s0, o.x0]);
+        if (o.x1 < s1) r.push([o.x1, s1]);
+        return r;
+      });
+    }
+    for (const [s0, s1] of segs) {
+      if (s1 - s0 < 0.02) continue;
+      const g = new THREE.BoxGeometry(s1 - s0, bh, depth);
+      g.translate((s0 + s1) / 2, yc, (R() - 0.5) * 0.02);
+      out[Math.floor(R() * shades.length)].push(g);
+    }
   }
-  for (const [x, z] of [[-W / 2, D / 2], [W / 2, D / 2], [-W / 2, -D / 2], [W / 2, -D / 2]]) planks.push(at(new THREE.BoxGeometry(0.35, H + 0.2, 0.35), x, 0.5 + H / 2, z));
-  planks.push(at(new THREE.BoxGeometry(W + 0.3, 0.25, 0.3), 0, 0.5 + H, D / 2 + 0.05), at(new THREE.BoxGeometry(W + 0.3, 0.25, 0.3), 0, 0.5 + H, -D / 2 - 0.05));
-  walls.add(mesh(merge(planks), MAT.houseDark));
-  g.add(walls);
-  const top = 0.5 + H;
-  // gables
+  return out;
+}
+
+const WOOD = ['#c98b4c', '#b7773c', '#d89c5a', '#a8693a', '#c27f45'].map((c) => M(c));
+const WALL_IN = ['#5f7688', '#6b8292', '#566b7c'].map((c) => M(c));
+const YELLOW = M('#e2c24a');
+
+function cabin(windows) {
+  // Logger Vick's house after the show: horizontal planks in mixed tan/orange wood, yellow corner
+  // trim, yellow double doors and small square lattice windows, uneven slab roof. Inside: blue-grey
+  // plank walls, stone floor, kang bed with bamboo mat and blue floral quilt, green fridge, teal
+  // kitchen, round lattice window, chili and corn strings. The roof lifts off to look inside.
+  const g = new THREE.Group();
+  const W = 9, D = 6.5, H = 3.4, B = 0.5;
+  const R = rng(5);
+  g.add(box(W + 0.4, B, D + 0.4, MAT.stone, 0, B / 2, 0));
+  const shell = new THREE.Group(); // walls
+  g.add(shell);
+  const door = { x0: -1.5, x1: 0.3, y0: 0, y1: 2.35 };
+  const winF = [{ x0: -3.6, x1: -2.8, y0: 2.0, y1: 2.8 }, { x0: 2.2, x1: 3.0, y0: 2.0, y1: 2.8 }];
+  const winBack = { x0: 0.1, x1: 1.5, y0: 1.5, y1: 2.9 };
+  const winSide = { x0: -0.4, x1: 0.4, y0: 2.0, y1: 2.8 };
+  const walls = [
+    { L: W, holes: [door, ...winF], tf: (geo) => geo.translate(0, B, D / 2 - 0.06) },
+    { L: W, holes: [winBack], tf: (geo) => geo.rotateY(Math.PI).translate(0, B, -D / 2 + 0.06) },
+    { L: D, holes: [winSide], tf: (geo) => geo.rotateY(Math.PI / 2).translate(W / 2 - 0.06, B, 0) },
+    { L: D, holes: [], tf: (geo) => geo.rotateY(-Math.PI / 2).translate(-W / 2 + 0.06, B, 0) },
+  ];
+  const outGeo = WOOD.map(() => []), inGeo = WALL_IN.map(() => []);
+  for (const w of walls) {
+    boardWall(w.L, H, w.holes, WOOD, R).forEach((list, i) => list.forEach((geo) => outGeo[i].push(w.tf(geo.translate(0, 0, 0.05)))));
+    boardWall(w.L - 0.3, H, w.holes, WALL_IN, R, 0.28, 0.06).forEach((list, i) => list.forEach((geo) => inGeo[i].push(w.tf(geo.translate(0, 0, -0.1)))));
+  }
+  outGeo.forEach((l, i) => l.length && shell.add(mesh(merge(l), WOOD[i])));
+  inGeo.forEach((l, i) => l.length && shell.add(mesh(merge(l), WALL_IN[i])));
+  // yellow corner boards, door and window frames
+  const trim = [];
+  for (const [x, z] of [[-W / 2, D / 2], [W / 2, D / 2], [-W / 2, -D / 2], [W / 2, -D / 2]]) trim.push(at(new THREE.BoxGeometry(0.3, H, 0.3), x, B + H / 2, z));
+  const frame = (o, z, rotY = 0, xOff = 0) => {
+    const w = o.x1 - o.x0, h = o.y1 - o.y0, cx = (o.x0 + o.x1) / 2, cy = B + (o.y0 + o.y1) / 2;
+    const parts = [
+      at(new THREE.BoxGeometry(w + 0.24, 0.12, 0.2), cx, cy + h / 2 + 0.06, 0),
+      at(new THREE.BoxGeometry(w + 0.24, 0.12, 0.2), cx, cy - h / 2 - 0.06, 0),
+      at(new THREE.BoxGeometry(0.12, h, 0.2), o.x0 - 0.06, cy, 0),
+      at(new THREE.BoxGeometry(0.12, h, 0.2), o.x1 + 0.06, cy, 0),
+    ];
+    parts.forEach((p) => {
+      p.rotateY(rotY);
+      p.translate(xOff, 0, z);
+      trim.push(p);
+    });
+  };
+  frame(door, D / 2 + 0.02);
+  winF.forEach((o) => frame(o, D / 2 + 0.02));
+  frame(winSide, 0, Math.PI / 2, W / 2 + 0.02);
+  frame(winBack, -D / 2 - 0.02, Math.PI);
+  shell.add(mesh(merge(trim), YELLOW));
+  // small square lattice windows (glass + yellow lattice)
+  const lattice = (o, place) => {
+    const w = o.x1 - o.x0, h = o.y1 - o.y0;
+    const grp = new THREE.Group();
+    const lm = win();
+    windows.push(lm);
+    grp.add(box(w, h, 0.03, lm, 0, 0, 0));
+    const lat = [];
+    lat.push(at(new THREE.BoxGeometry(w, 0.05, 0.05), 0, h * 0.25, 0.03), at(new THREE.BoxGeometry(w, 0.05, 0.05), 0, -h * 0.25, 0.03));
+    lat.push(at(new THREE.BoxGeometry(0.05, h, 0.05), w * 0.25, 0, 0.03), at(new THREE.BoxGeometry(0.05, h, 0.05), -w * 0.25, 0, 0.03));
+    lat.push(at(new THREE.BoxGeometry(w * 0.5, 0.05, 0.05), 0, 0, 0.04));
+    grp.add(mesh(merge(lat), YELLOW, false));
+    place(grp, (o.x0 + o.x1) / 2, B + (o.y0 + o.y1) / 2);
+    shell.add(grp);
+  };
+  winF.forEach((o) => lattice(o, (grp, x, y) => grp.position.set(x, y, D / 2 - 0.02)));
+  lattice(winSide, (grp, x, y) => {
+    grp.rotation.y = Math.PI / 2;
+    grp.position.set(W / 2 - 0.02, y, 0);
+  });
+  // yellow double doors, swung open
+  for (const s of [-1, 1]) {
+    const leaf = new THREE.Group();
+    const dw = (door.x1 - door.x0) / 2;
+    leaf.add(box(dw, 2.3, 0.08, YELLOW, (s * dw) / 2, 1.15, 0));
+    const lat = [];
+    for (let i = 1; i < 3; i++) lat.push(at(new THREE.BoxGeometry(0.04, 0.8, 0.04), (s * dw * i) / 3, 1.75, 0.06));
+    for (let i = 1; i < 3; i++) lat.push(at(new THREE.BoxGeometry(dw, 0.04, 0.04), (s * dw) / 2, 1.35 + i * 0.27, 0.06));
+    leaf.add(mesh(merge(lat), MAT.lattice, false));
+    leaf.position.set(s < 0 ? door.x1 : door.x0, B, D / 2 + 0.05);
+    leaf.rotation.y = -s * 1.25;
+    shell.add(leaf);
+  }
+  shell.add(box(door.x1 - door.x0 + 0.4, 0.3, 1.0, MAT.plank, (door.x0 + door.x1) / 2, B - 0.1, D / 2 + 0.55)); // step
+
+  // ---- roof (removable for the interior view)
+  const roof = new THREE.Group();
+  g.add(roof);
+  const top = B + H;
   const gable = new THREE.Shape([new THREE.Vector2(-D / 2, 0), new THREE.Vector2(D / 2, 0), new THREE.Vector2(0, 2.4)]);
   for (const sx of [-1, 1]) {
-    const gm = mesh(new THREE.ExtrudeGeometry(gable, { depth: 0.25, bevelEnabled: false }), MAT.house);
+    const gm = mesh(new THREE.ExtrudeGeometry(gable, { depth: 0.2, bevelEnabled: false }), WOOD[1]);
     gm.rotation.y = Math.PI / 2;
-    gm.position.set(sx * (W / 2) - 0.12, top, 0);
-    g.add(gm);
+    gm.position.set(sx * (W / 2) - 0.1, top, 0);
+    roof.add(gm);
   }
-  // roof of uneven stone slabs, three shades
   const slope = Math.atan2(2.4, D / 2);
   const len = Math.hypot(2.4, D / 2) + 0.8;
   const slabs = [[], [], []];
@@ -77,77 +254,151 @@ function cabin(windows) {
     const rows = 6, cols = 9;
     for (let r = 0; r < rows; r++)
       for (let c = 0; c < cols; c++) {
-        const u = (r + 0.5) / rows; // 0 ridge .. 1 eave
+        const u = (r + 0.5) / rows;
         const x = -W / 2 - 0.6 + ((c + 0.5 + (r % 2) * 0.5) / cols) * (W + 1.2);
-        const dz = u * len * Math.cos(slope), dy = -u * len * Math.sin(slope);
         const geo = new THREE.BoxGeometry((W + 1.2) / cols + 0.12, 0.16, len / rows + 0.25);
         geo.rotateX(side * slope + (R() - 0.5) * 0.08);
         geo.rotateY((R() - 0.5) * 0.06);
-        geo.translate(x, top + 2.4 + 0.15 + dy + (R() - 0.5) * 0.05, side * (dz - 0.0));
+        geo.translate(x, top + 2.4 + 0.15 - u * len * Math.sin(slope) + (R() - 0.5) * 0.05, side * u * len * Math.cos(slope));
         slabs[Math.floor(R() * 3)].push(geo);
       }
   }
-  [MAT.slateA, MAT.slateB, MAT.slateC].forEach((m, i) => slabs[i].length && g.add(mesh(merge(slabs[i]), m)));
-  g.add(box(W + 1.4, 0.3, 0.4, MAT.slateC, 0, top + 2.6, 0)); // ridge
-  // front dormer
-  const dorm = new THREE.Group();
-  dorm.add(box(1.8, 1.3, 1.6, MAT.house, 0, 0.65, 0));
-  const dw = win();
-  windows.push(dw);
-  dorm.add(box(0.9, 0.7, 0.06, dw, 0, 0.7, 0.81));
-  const dg = new THREE.Shape([new THREE.Vector2(-1.1, 0), new THREE.Vector2(1.1, 0), new THREE.Vector2(0, 0.9)]);
-  const dr = mesh(new THREE.ExtrudeGeometry(dg, { depth: 2.0, bevelEnabled: false }), MAT.slateB);
-  dr.position.set(0, 1.3, -1.0);
-  dorm.add(dr);
-  dorm.position.set(-1.5, top + 0.9, D / 4 + 0.5);
-  g.add(dorm);
-  // chimney
-  g.add(box(0.9, 2.6, 0.9, MAT.stone, 2.6, top + 2.2, -1.2));
+  [MAT.slateA, MAT.slateB, MAT.slateC].forEach((m, i) => slabs[i].length && roof.add(mesh(merge(slabs[i]), m)));
+  roof.add(box(W + 1.4, 0.3, 0.4, MAT.slateC, 0, top + 2.6, 0));
+  roof.add(box(0.9, 2.6, 0.9, MAT.stone, 2.6, top + 2.2, -1.2));
   g.userData.chimney = new THREE.Vector3(2.6, top + 3.6, -1.2);
-  // green lattice door and windows
-  const latt = (w, h, x, y, z, light) => {
-    const grp = new THREE.Group();
-    if (light) {
-      const lm = win();
-      windows.push(lm);
-      grp.add(box(w, h, 0.05, lm, 0, 0, -0.02));
-    } else grp.add(box(w, h, 0.05, MAT.lattice, 0, 0, -0.02));
-    const bars = [];
-    for (let i = 1; i < 4; i++) bars.push(at(new THREE.BoxGeometry(0.05, h, 0.05), -w / 2 + (i * w) / 4, 0, 0.03));
-    for (let i = 1; i < 5; i++) bars.push(at(new THREE.BoxGeometry(w, 0.05, 0.05), 0, -h / 2 + (i * h) / 5, 0.03));
-    bars.push(at(new THREE.BoxGeometry(w + 0.2, 0.14, 0.12), 0, h / 2 + 0.05, 0.03), at(new THREE.BoxGeometry(w + 0.2, 0.14, 0.12), 0, -h / 2 - 0.05, 0.03));
-    bars.push(at(new THREE.BoxGeometry(0.14, h + 0.2, 0.12), -w / 2 - 0.05, 0, 0.03), at(new THREE.BoxGeometry(0.14, h + 0.2, 0.12), w / 2 + 0.05, 0, 0.03));
-    grp.add(mesh(merge(bars), MAT.lattice));
-    grp.position.set(x, y, z);
-    return grp;
-  };
-  g.add(latt(1.4, 2.3, -0.6, 0.5 + 1.15, D / 2 + 0.08, false));
-  g.add(latt(1.3, 1.1, -3.0, 2.3, D / 2 + 0.08, true));
-  g.add(latt(1.3, 1.1, 2.3, 2.3, D / 2 + 0.08, true));
-  const side = latt(1.2, 1.0, 0, 2.3, 0, true);
-  side.rotation.y = Math.PI / 2;
-  side.position.set(W / 2 + 0.08, 2.3, 0);
-  g.add(side);
-  // strings of red chili peppers either side of the door
+  // chili strings outside by the door
   const chilis = [];
-  for (const x of [-1.7, 0.5])
-    for (let i = 0; i < 9; i++) chilis.push(at(new THREE.ConeGeometry(0.09, 0.32, 5), x + Math.sin(i * 1.7) * 0.06, 3.3 - i * 0.22, D / 2 + 0.25, Math.PI + Math.sin(i) * 0.3));
-  g.add(mesh(merge(chilis), MAT.chili));
-  // porch step and eave
-  g.add(box(2.4, 0.3, 1.2, MAT.plank, -0.6, 0.15, D / 2 + 0.7));
-  const eave = box(W + 0.6, 0.14, 1.4, MAT.slateA, 0, top - 0.25, D / 2 + 0.55);
-  eave.rotation.x = 0.25;
-  g.add(eave);
-  // icicles under the eave (winter)
+  for (const x of [-2.0, 0.8])
+    for (let i = 0; i < 9; i++) chilis.push(at(new THREE.ConeGeometry(0.09, 0.32, 5), x + Math.sin(i * 1.7) * 0.06, B + 2.9 - i * 0.22, D / 2 + 0.2, Math.PI + Math.sin(i) * 0.3));
+  shell.add(mesh(merge(chilis), MAT.chili));
+  // icicles (winter)
   const ic = [];
   for (let i = 0; i < 28; i++) {
     const x = -W / 2 - 0.2 + (i / 27) * (W + 0.4);
     const l = 0.3 + ((i * 7) % 5) * 0.12;
-    ic.push(at(new THREE.ConeGeometry(0.07, l, 4), x, top - 0.45 - l / 2, D / 2 + 1.2, Math.PI));
+    ic.push(at(new THREE.ConeGeometry(0.07, l, 4), x, top - l / 2, D / 2 + 0.75, Math.PI));
   }
   const icicles = mesh(merge(ic), MAT.ice, false);
-  g.add(icicles);
+  roof.add(icicles);
   g.userData.icicles = icicles;
+
+  // ---- interior
+  const inn = new THREE.Group();
+  inn.position.y = B;
+  g.add(inn);
+  const floor = mesh(new THREE.PlaneGeometry(W - 0.3, D - 0.3), new THREE.MeshStandardMaterial({ map: TEX.stone(), roughness: 0.9 }), false);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0.01;
+  inn.add(floor);
+  // kang: brick base, bamboo mat, floral quilt, red pillow
+  const kang = new THREE.Group();
+  kang.add(box(3.6, 0.7, 2.3, M('#8c6a52'), 0, 0.35, 0));
+  kang.add(box(3.7, 0.1, 2.4, M('#6b4a34'), 0, 0.72, 0));
+  const mat = mesh(new THREE.PlaneGeometry(3.5, 2.2), new THREE.MeshStandardMaterial({ map: TEX.bamboo(), roughness: 0.8 }), false);
+  mat.rotation.x = -Math.PI / 2;
+  mat.position.y = 0.78;
+  kang.add(mat);
+  const quiltGeo = new THREE.BoxGeometry(1.6, 0.35, 1.9, 8, 2, 8);
+  const qp = quiltGeo.attributes.position;
+  for (let i = 0; i < qp.count; i++) {
+    const x = qp.getX(i), y = qp.getY(i), z = qp.getZ(i);
+    if (y > 0) qp.setY(i, y + Math.sin(x * 3) * 0.06 + Math.cos(z * 2.6) * 0.06);
+  }
+  quiltGeo.computeVertexNormals();
+  const quilt = mesh(quiltGeo, new THREE.MeshStandardMaterial({ map: TEX.quilt(), roughness: 0.85 }));
+  quilt.position.set(-0.6, 0.98, 0.05);
+  kang.add(quilt);
+  kang.add(box(0.5, 0.2, 0.9, M('#9b2a2a'), 1.3, 0.9, 0.05));
+  kang.position.set(-2.5, 0, -1.85);
+  inn.add(kang);
+  // green fridge (rounded) with a white handle, cans on the floor
+  const fr = new THREE.Group();
+  const fgeo = new THREE.BoxGeometry(1.0, 2.0, 0.85, 4, 8, 4);
+  const fp = fgeo.attributes.position;
+  for (let i = 0; i < fp.count; i++) {
+    const x = fp.getX(i), y = fp.getY(i), z = fp.getZ(i);
+    const k = 1 - 0.08 * Math.pow(Math.abs(y), 4);
+    fp.setXYZ(i, x * k, y, z * k);
+  }
+  fgeo.computeVertexNormals();
+  fr.add(mesh(fgeo, M('#7fb5a5', { roughness: 0.5 })));
+  fr.add(box(0.06, 0.4, 0.08, MAT.white, 0.38, 0.55, 0.45));
+  fr.add(box(0.95, 0.03, 0.02, M('#5d8f80'), 0, 0.25, 0.43));
+  fr.position.set(-4.0 + 0.6, 1.0, 0.0);
+  fr.rotation.y = Math.PI / 2;
+  inn.add(fr);
+  for (let i = 0; i < 6; i++) {
+    const can = cyl(0.09, 0.09, 0.22, M(i % 2 ? '#c8302a' : '#d9d9d9'), 8);
+    can.position.set(-3.6 + (i % 3) * 0.25, 0.11, 0.9 + Math.floor(i / 3) * 0.3);
+    if (i === 4) {
+      can.rotation.z = Math.PI / 2;
+      can.position.y = 0.09;
+    }
+    inn.add(can);
+  }
+  // teal kitchen counter with wok, pot and sink
+  const kit = new THREE.Group();
+  kit.add(box(0.9, 0.95, 3.0, M('#4f9d94'), 0, 0.48, 0));
+  kit.add(box(1.0, 0.08, 3.1, M('#3f857d'), 0, 0.98, 0));
+  for (const z of [-1.0, 0, 1.0]) kit.add(box(0.03, 0.7, 0.85, M('#3a7a73'), -0.46, 0.48, z));
+  const wok = mesh(new THREE.SphereGeometry(0.4, 14, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), MAT.coal);
+  wok.position.set(0, 1.25, -0.8);
+  kit.add(wok);
+  const pot = cyl(0.25, 0.22, 0.35, MAT.metal, 12);
+  pot.position.set(0.1, 1.2, 0.3);
+  kit.add(pot);
+  const sink = cyl(0.42, 0.38, 0.3, MAT.metal, 14);
+  sink.position.set(0, 1.12, 1.15);
+  kit.add(sink);
+  kit.add(box(0.2, 0.08, 0.06, MAT.metal, 0, 1.5, 1.15 + 0.4));
+  kit.position.set(W / 2 - 0.75, 0, -0.6);
+  inn.add(kit);
+  // round lattice window on the back wall, chili and corn hanging beside it
+  const rw = new THREE.Group();
+  const rwl = win();
+  windows.push(rwl);
+  rw.add(mesh(new THREE.CircleGeometry(0.62, 20), rwl, false));
+  rw.add(mesh(new THREE.TorusGeometry(0.66, 0.08, 6, 24), MAT.wood));
+  const rb = [];
+  for (const k of [-1, 0, 1]) rb.push(at(new THREE.BoxGeometry(0.04, 1.2, 0.04), k * 0.3, 0, 0.03), at(new THREE.BoxGeometry(1.2, 0.04, 0.04), 0, k * 0.3, 0.03));
+  rw.add(mesh(merge(rb), MAT.wood, false));
+  rw.position.set(-0.8, 2.2, -D / 2 + 0.2);
+  inn.add(rw);
+  const hang = [];
+  for (let i = 0; i < 10; i++) hang.push(at(new THREE.ConeGeometry(0.07, 0.3, 5), -1.85 + Math.sin(i) * 0.05, 3.2 - i * 0.16, -D / 2 + 0.35, Math.PI));
+  inn.add(mesh(merge(hang), MAT.chili, false));
+  const corn = [];
+  for (let i = 0; i < 6; i++) corn.push(at(new THREE.CapsuleGeometry(0.08, 0.4, 3, 6), 0.4 + (i % 3) * 0.12 - 0.12, 2.75 - Math.floor(i / 3) * 0.2, -D / 2 + 0.35 + (i % 2) * 0.08, 0, 0, (i - 2.5) * 0.08));
+  inn.add(mesh(merge(corn), M('#f0cc4a'), false));
+  // shelf with bowls and books; cupboard; firewood inside the door
+  const sh = new THREE.Group();
+  for (const y of [0.9, 1.6, 2.3]) sh.add(box(1.6, 0.06, 0.45, MAT.plank, 0, y, 0));
+  for (const x of [-0.78, 0.78]) sh.add(box(0.06, 2.5, 0.45, MAT.plank, x, 1.25, 0));
+  for (let i = 0; i < 5; i++) sh.add(box(0.12, 0.35, 0.3, M(['#7a3b2a', '#3b5a7a', '#d8c27a', '#556b3a', '#9b4a6a'][i]), -0.5 + i * 0.14, 1.82, 0));
+  const bowl = mesh(new THREE.SphereGeometry(0.16, 10, 5, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), MAT.white);
+  bowl.position.set(-0.4, 1.1, 0);
+  sh.add(bowl);
+  const jug = cyl(0.12, 0.16, 0.4, M('#8aa3a0'), 10);
+  jug.position.set(0.45, 2.53, 0);
+  sh.add(jug);
+  sh.position.set(1.9, 0, -D / 2 + 0.45);
+  inn.add(sh);
+  const cup = new THREE.Group();
+  cup.add(box(1.1, 1.8, 0.6, M('#c9a77a'), 0, 0.9, 0));
+  cup.add(box(0.5, 1.2, 0.03, M('#b8956a'), -0.26, 1.0, 0.31), box(0.5, 1.2, 0.03, M('#b8956a'), 0.26, 1.0, 0.31));
+  cup.position.set(W / 2 - 0.6, 0, D / 2 - 0.7);
+  cup.rotation.y = -Math.PI / 2;
+  inn.add(cup);
+  const fwood = logPile(3);
+  fwood.scale.setScalar(0.32);
+  fwood.position.set(-0.6, 0, D / 2 - 0.9);
+  inn.add(fwood);
+  const lamp = new THREE.PointLight('#ffcf8a', 0, 12, 1.5);
+  lamp.position.set(0, 2.8, 0);
+  inn.add(lamp);
+  g.userData.roof = roof;
+  g.userData.lamp = lamp;
   return g;
 }
 
@@ -540,6 +791,7 @@ export function buildLandmarks(hf) {
   // Logger Vick's cabin
   const cab = place(cabin(windows), 55, 38, 0.15, -0.1);
   season(cab.userData.icicles, (p) => p.weights[3]);
+  cab.updateMatrixWorld(true);
   const chimney = cab.localToWorld(cab.userData.chimney.clone());
   place(truck(), 62.5, 47, 0.95);
   place(logPile(4), 47, 34, 1.4);
@@ -679,6 +931,27 @@ export function buildLandmarks(hf) {
     root.add(b);
   }
 
+  // Mossy rounded boulders stepping down beside the mountain waterfall
+  {
+    const [tx, tz] = WATERFALL.top, [px, pz] = WATERFALL.pool;
+    const dx = px - tx, dz = pz - tz, L = Math.hypot(dx, dz);
+    const nx = -dz / L, nz = dx / L;
+    const RB = rng(41);
+    const stone = [], moss = [];
+    for (let i = 0; i < 9; i++) {
+      const t = 0.08 + (i / 8) * 0.95;
+      for (const side of [-1, 1]) {
+        const off = 2.6 + RB() * 1.4;
+        const x = tx + dx * t + nx * off * side, z = tz + dz * t + nz * off * side;
+        const r = 1.3 + RB() * 1.1;
+        const y = hf.h(x, z);
+        stone.push(at(new THREE.IcosahedronGeometry(r, 1).scale(1.2, 0.8, 1), x, y + r * 0.35, z, 0, RB() * 6));
+        moss.push(at(new THREE.SphereGeometry(r * 1.05, 10, 5, 0, Math.PI * 2, 0, Math.PI * 0.32).scale(1.2, 0.8, 1), x, y + r * 0.42, z));
+      }
+    }
+    root.add(mesh(merge(stone), M('#6d7a83')), mesh(merge(moss), M('#4e8f4a')));
+  }
+
   // Lake: dock, boat (summer), lily pads (summer), skating marks are part of the ice shader
   {
     const dock = new THREE.Group();
@@ -686,8 +959,8 @@ export function buildLandmarks(hf) {
     for (let i = 0; i < 12; i++) planks.push(at(new THREE.BoxGeometry(1.8, 0.12, 0.42), 0, 0, -i * 0.5));
     dock.add(mesh(merge(planks), MAT.plank));
     for (const [x, z] of [[-0.85, 0], [0.85, 0], [-0.85, -5.5], [0.85, -5.5]]) dock.add(box(0.18, 1.6, 0.18, MAT.log, x, -0.6, z));
-    dock.position.set(-31, LAKE.level + 0.45, 46);
-    dock.rotation.y = -Math.PI / 2 - 0.35;
+    dock.position.set(-50, LAKE.level + 0.45, 75.2);
+    dock.rotation.y = 0;
     root.add(dock);
     const b = boat();
     b.position.set(-48, LAKE.level - 0.05, 50);
@@ -771,6 +1044,79 @@ export function buildLandmarks(hf) {
     season(patch, (p) => 1 - p.weights[3]);
   }
 
+  // Dark rock cliff on the lake's north-west shore: a few massive rounded, faceted rock masses
+  // (the waterfall itself is in terrain.js)
+  {
+    const RC = rng(31);
+    const darkA = [], darkB = [];
+    const n = 7;
+    for (let i = 0; i <= n; i++) {
+      const th = CLIFF.from + ((CLIFF.to - CLIFF.from) * i) / n;
+      for (let layer = 0; layer < 2; layer++) {
+        if (!layer && Math.abs(th - CLIFF.fallAngle) < 0.3) continue; // leave a notch for the waterfall
+        const [x, z] = lakePoint(th + (RC() - 0.5) * 0.08, CLIFF.e + 0.04 + layer * 0.16);
+        const k = 0.6 + 0.4 * Math.sin(((i + 0.5) / (n + 1)) * Math.PI);
+        const r = (5 + RC() * 2.5) * (layer ? 1.15 : 1);
+        const geo = new THREE.IcosahedronGeometry(r, 1);
+        const p = geo.attributes.position;
+        for (let v = 0; v < p.count; v++) {
+          const f = 1 + (Math.sin(p.getX(v) * 1.3 + i) * Math.cos(p.getZ(v) * 1.1 + layer) * 0.12);
+          p.setXYZ(v, p.getX(v) * f, p.getY(v) * f, p.getZ(v) * f);
+        }
+        const hy = (CLIFF.height * k * (layer ? 1.15 : 1)) / r;
+        geo.scale(1, hy, 0.85);
+        geo.rotateY(-th + (RC() - 0.5) * 0.5);
+        geo.translate(x, LAKE.level - 1.5, z);
+        (RC() < 0.5 ? darkA : darkB).push(geo);
+      }
+    }
+    root.add(mesh(merge(darkA), M('#5a5b61')), mesh(merge(darkB), M('#46474d')));
+  }
+  // Crabs scuttling sideways on the beach (not in winter)
+  {
+    const crabs = new THREE.Group();
+    const shell = M('#7d8c7a'), leg = M('#5f6d5c');
+    const list = [];
+    for (let i = 0; i < 12; i++) {
+      const c = new THREE.Group();
+      const b = ball(0.32, shell, 1);
+      b.scale.set(1.3, 0.45, 1);
+      b.position.y = 0.2;
+      c.add(b);
+      for (const s of [-1, 1]) {
+        for (let k = 0; k < 3; k++) {
+          const l = box(0.45, 0.05, 0.05, leg, s * 0.48, 0.12, -0.15 + k * 0.15);
+          l.rotation.z = s * 0.5;
+          c.add(l);
+        }
+        const claw = ball(0.12, shell, 0);
+        claw.position.set(s * 0.32, 0.25, 0.32);
+        c.add(claw);
+        const eye = cyl(0.025, 0.025, 0.18, MAT.coal, 4);
+        eye.position.set(s * 0.1, 0.38, 0.2);
+        c.add(eye);
+      }
+      const th = 0.35 + RC2() * 2.4;
+      const e = 1.06 + RC2() * 0.22;
+      crabs.add(c);
+      list.push({ c, th, e, ph: RC2() * 6, sp: 0.04 + RC2() * 0.05 });
+    }
+    function RC2() {
+      return R();
+    }
+    root.add(crabs);
+    season(crabs, (p) => p.weights[0] * 0.6 + p.weights[1] + p.weights[2]);
+    animated.push((t) => {
+      for (const k of list) {
+        const th = k.th + Math.sin(t * k.sp * 3 + k.ph) * 0.06;
+        const [x, z] = lakePoint(th, k.e);
+        k.c.position.set(x, hf.h(x, z), z);
+        k.c.rotation.y = -th;
+        k.c.children.forEach((m, j) => j && j < 7 && (m.rotation.x = Math.sin(t * 12 + j) * 0.3));
+      }
+    });
+  }
+
   // Road gate at the edge of the board
   {
     const g = new THREE.Group();
@@ -796,5 +1142,9 @@ export function buildLandmarks(hf) {
   const setNight = (n) => {
     for (const w of windows) w.emissiveIntensity = 0.15 + n * 2.6;
   };
-  return { root, setSeason, setNight, animated, chimney };
+  const setCutaway = (on) => {
+    cab.userData.roof.visible = !on;
+    cab.userData.lamp.intensity = on ? 14 : 0;
+  };
+  return { root, setSeason, setNight, setCutaway, animated, chimney };
 }

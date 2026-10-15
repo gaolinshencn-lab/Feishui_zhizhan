@@ -3,7 +3,10 @@
 // not traced from any official map.
 
 export const BOARD = 200;
-export const LAKE = { x: -52, z: 52, rx: 24, rz: 17, level: 2.3 };
+export const LAKE = { x: -55, z: 54, rx: 30, rz: 20, level: 2.3 };
+// Dark cliff on the lake's north-west shore with a waterfall dropping straight into the lake.
+export const CLIFF = { from: -2.75, to: -1.3, e: 1.12, fallAngle: -2.0, height: 14 };
+export const lakePoint = (theta, e = 1) => [LAKE.x + Math.cos(theta) * LAKE.rx * e, LAKE.z + Math.sin(theta) * LAKE.rz * e];
 
 // Creek: from the pool under the waterfall, down through the forest into the lake.
 export const RIVER = [
@@ -11,7 +14,7 @@ export const RIVER = [
 ];
 // Outflow from the lake to the south-west edge of the board.
 export const OUTFLOW = [
-  [-64, 64], [-74, 72], [-86, 80], [-101, 86],
+  [-77, 67], [-84, 74], [-92, 80], [-101, 86],
 ];
 export const WATERFALL = { top: [15, -66], pool: [12, -53] };
 
@@ -36,13 +39,14 @@ export const CLEARINGS = [
   { x: -70, z: -8, r: 7 }, // Tiki and Babu's cave
   { x: -6, z: 24, r: 4.5 }, // Hoo Hoo's tree house
   { x: -25, z: -11, r: 4.5 }, // Warren's tree hollow
-  { x: -30, z: 47, r: 5 }, // lake shore landing
+  { x: -50, z: 78, r: 6 }, // lake beach and dock
 ];
 
 // Hills added to the base terrain: [x, z, height, radius]
 export const HILLS = [
   [38, -15, 5, 10],
   [-86, -12, 9, 18],
+  [-72, 22, 12, 13], // high ground behind the lake cliff
   [80, -10, 7, 16],
   [-20, -82, 18, 22],
   [42, -84, 12, 18],
@@ -113,14 +117,24 @@ export const PLACES = [
     ),
   },
   {
-    id: 'lake', name: '林中大湖', x: -52, z: 52, y: 2, kind: 'water',
-    brief: '小溪汇入的湖泊，湖边有一个小码头。',
+    id: 'lake', name: '林中大湖', x: -55, z: 56, y: 2, kind: 'water',
+    brief: '小溪汇入的大湖。南岸是一片橙黄色的沙滩，常有小螃蟹横着爬；北岸是黑色的石崖，一道瀑布从崖顶直落湖中。',
     text: S(
       '湖冰消融，湖边柳枝抽芽。',
       '湖上荡着一条小木船，荷叶铺满湖湾。',
       '湖水更清，倒映着金黄的林子。',
       '湖面冻成天然滑冰场。'
     ),
+  },
+  {
+    id: 'cliff', name: '湖边瀑布', x: -66, z: 34, y: 14, kind: 'water',
+    brief: '大湖北岸的黑色石崖，瀑布从崖顶落进湖里，崖下和湖边长着金黄的白桦。',
+    text: S('雪水让瀑布变得又宽又急。', '瀑布下的水花最凉快。', '夕阳下石崖和金黄的白桦倒映在湖里。', '瀑布冻成一道冰柱。'),
+  },
+  {
+    id: 'cabinin', name: '光头强家里', x: 55, z: 38, y: 0, kind: 'interior',
+    brief: '掀开屋顶看看光头强的家：石板地面、蓝灰色木板墙，土炕上铺着竹席和蓝底白花的旧被子，墙角一台绿色冰箱，青绿色的灶台上放着炒锅，圆窗旁挂着辣椒串和玉米。',
+    text: S('开春了，光头强把炕上的被子拿出去晒。', '天热，光头强穿着背心短裤在灶台前做饭。', '玉米和辣椒挂满房梁，冰箱里放着强妈腌的酸菜。', '炕烧得热乎乎的，光头强困了就上炕睡觉。'),
   },
   {
     id: 'meadow', name: '花海草甸', x: 12, z: 30, y: 2, kind: 'meadow',

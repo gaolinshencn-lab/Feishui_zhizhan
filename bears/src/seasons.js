@@ -5,7 +5,7 @@ import * as THREE from 'three';
 export const SEASONS = [
   {
     key: 'spring', name: '春', series: '春日对对碰', tag: '冰雪消融 · 百花盛开',
-    grass: '#93cf5c', grass2: '#73b84b', meadow: '#a9da6a', dirt: '#b98d5c', rock: '#8e8a82', bank: '#c8b27a',
+    grass: '#93cf5c', grass2: '#73b84b', meadow: '#a9da6a', dirt: '#b98d5c', rock: '#8e8a82', bank: '#d6a85e',
     leaf: ['#86d65c', '#a4e070', '#f2a7c3'], pine: '#3a7d4c', larch: '#9fd06a', birch: '#b2e07a',
     skyTop: '#7cc6f5', skyBottom: '#eaf7ff', fog: '#d9eef7', sun: '#fff4e0', sunI: 2.6, hemiI: 1.05,
     water: '#4fb5da', waterDeep: '#2b7fb0', ice: 0,
@@ -13,7 +13,7 @@ export const SEASONS = [
   },
   {
     key: 'summer', name: '夏', series: '夏日连连看', tag: '林深叶茂 · 蝉鸣湖光',
-    grass: '#5fae3f', grass2: '#428f33', meadow: '#7cbf47', dirt: '#ad8352', rock: '#86837c', bank: '#c4ac72',
+    grass: '#5fae3f', grass2: '#428f33', meadow: '#7cbf47', dirt: '#ad8352', rock: '#86837c', bank: '#dba658',
     leaf: ['#3e9e3a', '#4fae3f', '#2f8a35'], pine: '#2d6a46', larch: '#5f9e48', birch: '#5db24a',
     skyTop: '#3fa7f2', skyBottom: '#d8f0ff', fog: '#cbe6f5', sun: '#fffbe8', sunI: 3.0, hemiI: 1.0,
     water: '#2fa2cc', waterDeep: '#1a6c9c', ice: 0,
@@ -21,7 +21,7 @@ export const SEASONS = [
   },
   {
     key: 'autumn', name: '秋', series: '秋日团团转', tag: '层林尽染 · 硕果满枝',
-    grass: '#bea64e', grass2: '#a5823a', meadow: '#cfae55', dirt: '#a97a4a', rock: '#8a837a', bank: '#c7a96b',
+    grass: '#bea64e', grass2: '#a5823a', meadow: '#cfae55', dirt: '#a97a4a', rock: '#8a837a', bank: '#d4983f',
     leaf: ['#ee8a2c', '#d8442b', '#f3bf3a'], pine: '#3a6a46', larch: '#e3b23a', birch: '#f4cb3e',
     skyTop: '#f0b979', skyBottom: '#fbeedb', fog: '#f3dfc6', sun: '#ffd9a6', sunI: 2.6, hemiI: 0.95,
     water: '#3f9cbd', waterDeep: '#255f80', ice: 0,

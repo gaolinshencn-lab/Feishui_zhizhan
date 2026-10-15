@@ -183,7 +183,7 @@ function logger() {
     a.children[0].add(blob({ r: [0.08, 0.09, 0.07], at: [0, a.userData.end - 0.03, 0], color: SK }));
     body.add(a);
     arms.push(a);
-    const l = limb({ len: 0.78, r0: 0.11, r1: 0.085, color: PANTS, at: [s * 0.13, 0.92, 0] });
+    const l = limb({ len: 0.78, r0: 0.11, r1: 0.085, color: PANTS, at: [s * 0.13, 0.92, 0], paint: (t, x) => (s * x > 0.82 ? '#eeeeee' : PANTS) }); // track trousers with white side stripes
     l.children[0].add(blob({ r: [0.1, 0.07, 0.2], at: [0, l.userData.end - 0.02, 0.07], color: SHOE }));
     g.add(l);
     legs.push(l);
@@ -351,14 +351,21 @@ function hoohoo() {
   const CREAM = '#f3ead6', RUST = '#b4513a';
   const body = new THREE.Group();
   g.add(body);
-  body.add(blob({ r: [0.36, 0.42, 0.34], at: [0, 0.5, 0], paint: (x, y, z) => (z > -0.1 ? CREAM : '#d9b89a') }));
+  // red body, cream chest with scalloped feather rows
+  body.add(blob({ r: [0.37, 0.43, 0.34], at: [0, 0.5, 0], seg: 34, paint: (x, y, z) => (z > 0.35 && Math.abs(x) < 0.7 ? (Math.sin(y * 22 + Math.abs(x) * 9) > 0.75 ? '#e5c9a8' : CREAM) : RUST) }));
   const head = new THREE.Group();
   head.position.set(0, 1.02, 0.02);
   body.add(head);
-  head.add(blob({ r: [0.34, 0.3, 0.32], paint: (x, y, z) => (z > 0.25 && y < 0.55 ? CREAM : RUST) }));
-  eyes(head, { x: 0.12, y: 0.03, z: 0.24, r: 0.1, iris: '#4f9a3a', irisR: 0.5, spread: 0.3 });
+  head.add(blob({ r: [0.36, 0.31, 0.32], paint: (x, y, z) => (z > 0.3 && y < 0.5 ? CREAM : RUST) }));
+  // cream facial disc with red rings around the big green eyes
+  for (const s of [-1, 1]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.03, 6, 18), new THREE.MeshStandardMaterial({ color: '#b23a2c' }));
+    ring.position.set(s * 0.12, 0.03, 0.27);
+    ring.rotation.y = s * 0.3;
+    head.add(ring);
+  }
+  eyes(head, { x: 0.12, y: 0.03, z: 0.24, r: 0.1, iris: '#4f9a3a', irisR: 0.5, spread: 0.3, lid: '#f3ead6' });
   head.add(blob({ r: [0.05, 0.07, 0.05], at: [0, -0.1, 0.33], color: '#f1b62e' }));
-  head.add(blob({ r: [0.3, 0.09, 0.3], at: [-0.06, 0.29, -0.02], rot: [0, 0, 0.25], color: '#5f7795' }));
   const wings = [];
   for (const s of [-1, 1]) {
     const piv = new THREE.Group();
@@ -381,8 +388,9 @@ function herbert() {
   const head = new THREE.Group();
   head.position.set(0, 1.08, 0.05);
   body.add(head);
-  head.add(blob({ r: [0.3, 0.26, 0.28], paint: (x, y, z) => (z > 0.3 && y < 0.3 ? CREAM : BR) }));
-  head.add(blob({ r: [0.05, 0.04, 0.04], at: [0, -0.02, 0.3], color: '#4a2a18' }));
+  // broad head with a big cream face mask and pink nose
+  head.add(blob({ r: [0.33, 0.27, 0.29], paint: (x, y, z) => (z > 0.05 && y < 0.55 - Math.abs(x) * 0.4 ? CREAM : BR) }));
+  head.add(blob({ r: [0.07, 0.05, 0.05], at: [0, -0.01, 0.3], color: '#d9868a', mat: GLOSS }));
   const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.02), new THREE.MeshStandardMaterial({ color: '#ffffff' }));
   tooth.position.set(0, -0.15, 0.27);
   head.add(tooth);
@@ -420,7 +428,7 @@ const MEADOW = { x: 12, z: 30 };
 export const CHARACTERS = [
   {
     id: 'briar', name: '熊大', desc: '哥哥，红棕色毛，胸前一大片白色 V 字毛，红鼻子厚嘴唇，聪明勇敢，带头保护森林。常在树洞家、木桥和吉吉的山洞之间巡山。',
-    make: () => bear({ fur: '#9b4f2e', furDark: '#7c3a20', bib: '#f4ece0', muzzle: '#f1e2cf', nose: '#d4424a', scarf: '#d83a33' }),
+    make: () => bear({ fur: '#9b4f2e', furDark: '#7c3a20', bib: '#efdcc2', muzzle: '#f1e2cf', nose: '#d4424a', scarf: '#d83a33' }),
     route: [[28, -4], [20, -3], [8, 1], [-4, 2], [-12, 2], [-24, -5], [-40, -10], [-56, -10], [-68, -8]], speed: 2.4, scale: 1.2, tagY: 2.75,
   },
   {

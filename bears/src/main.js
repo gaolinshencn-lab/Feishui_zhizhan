@@ -240,18 +240,22 @@ class App {
     const pl = PLACES.find((p) => p.id === id);
     if (!pl) return;
     const y = this.hf.h(pl.x, pl.z) + (pl.y || 0) * 0.4;
-    const dist = pl.kind === 'mountain' ? 90 : pl.kind === 'forest' || pl.kind === 'water' ? 60 : 38;
+    const inside = pl.kind === 'interior';
+    const dist = inside ? 15 : pl.kind === 'mountain' ? 90 : pl.kind === 'forest' || pl.kind === 'water' ? 60 : 38;
     this.follow = null;
-    this.flyTo(new THREE.Vector3(pl.x, y, pl.z), dist, { pitch: pl.kind === 'mountain' ? 0.5 : 0.62 });
+    this.marks.setCutaway(inside);
+    this.flyTo(new THREE.Vector3(pl.x, y + (inside ? 1.5 : 0), pl.z), dist, { pitch: inside ? 0.95 : pl.kind === 'mountain' ? 0.5 : 0.62, yaw: inside ? 0.25 : null });
   }
   followChar(id) {
     const c = this.chars.list.find((c) => c.id === id);
     if (!c) return;
+    this.marks.setCutaway(false);
     this.follow = c;
     this.flyTo(c.holder.position.clone().add(new THREE.Vector3(0, 2, 0)), 22, { pitch: 0.45 });
     this.ui.setFollow(c);
   }
   resetView() {
+    this.marks.setCutaway(false);
     this.follow = null;
     this.ui.setFollow(null);
     this.fly = { t: 0, from: { p: this.camera.position.clone(), t: this.controls.target.clone() }, to: { p: this.home.pos.clone(), t: this.home.target.clone() } };

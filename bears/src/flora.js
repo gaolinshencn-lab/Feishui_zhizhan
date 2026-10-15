@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { rng, fbm, smooth } from './util.js';
-import { BOARD, CLEARINGS } from './places.js';
+import { BOARD, CLEARINGS, LAKE, CLIFF } from './places.js';
 import { snowify, stdMat } from './shared.js';
 
 export const ni = (g) => (g.index ? g.toNonIndexed() : g);
@@ -92,6 +92,10 @@ export function buildFlora(hf, palette) {
   const spots = { pine: [], larch: [], broad: [], birch: [], bush: [], rock: [], flower: [] };
 
   const blocked = (x, z, pad = 0) => {
+    const el = Math.hypot((x - LAKE.x) / LAKE.rx, (z - LAKE.z) / LAKE.rz);
+    const th = Math.atan2((z - LAKE.z) / LAKE.rz, (x - LAKE.x) / LAKE.rx);
+    if (el < 1.3) return true; // beach
+    if (th > CLIFF.from - 0.1 && th < CLIFF.to + 0.1 && el < CLIFF.e + 0.35) return true; // cliff
     for (const c of CLEARINGS) if (Math.hypot(x - c.x, z - c.z) < c.r + pad) return true;
     return false;
   };
@@ -109,7 +113,7 @@ export function buildFlora(hf, palette) {
       if (hf.pathDist(px, pz) < 1.6) continue;
       if (blocked(px, pz)) continue;
       const north = smooth(-30, -60, pz);
-      const birchZone = smooth(25, 5, Math.hypot(px + 82, pz - 22)) + smooth(14, 3, hf.waterDist(px, pz)) * 0.35;
+      const birchZone = smooth(2.1, 1.35, Math.hypot((px - LAKE.x) / LAKE.rx, (pz - LAKE.z) / LAKE.rz)) * 0.85 + smooth(14, 3, hf.waterDist(px, pz)) * 0.3;
       const r = R();
       let kind;
       if (r < 0.5 + north * 0.45 + smooth(18, 30, y) * 0.5) kind = 'pine';

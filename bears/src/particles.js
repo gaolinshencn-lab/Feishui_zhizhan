@@ -2,7 +2,7 @@
 // plus chimney smoke, bees around the honey tree and mist at the foot of the waterfall.
 import * as THREE from 'three';
 import { rng } from './util.js';
-import { BOARD, WATERFALL } from './places.js';
+import { BOARD, WATERFALL, LAKE, CLIFF, lakePoint } from './places.js';
 import { U } from './shared.js';
 
 const vert = /* glsl */ `
@@ -112,10 +112,15 @@ export function buildParticles(hf, chimney) {
   });
   const [px, pz] = WATERFALL.pool;
   const mist = layer({
-    n: 220, seed: 7, size: 2.0, fall: 0.35, drift: 3, height: 5, mode: 2, shape: 0, colA: '#ffffff',
+    n: 160, seed: 7, size: 1.3, fall: 0.35, drift: 2.5, height: 4, mode: 2, shape: 0, colA: '#ffffff',
     spawn: (R) => [px + (R() - 0.5) * 4, hf.bed[0] + 1, pz + (R() - 0.5) * 3 - 1.5],
   });
-  const all = [snow, petals, leaves, flies, smoke, bees, mist];
+  const [fx, fz] = lakePoint(CLIFF.fallAngle, 0.97);
+  const mist2 = layer({
+    n: 160, seed: 8, size: 1.3, fall: 0.3, drift: 2.5, height: 4, mode: 2, shape: 0, colA: '#ffffff',
+    spawn: (R) => [fx + (R() - 0.5) * 4, LAKE.level, fz + (R() - 0.5) * 3],
+  });
+  const all = [snow, petals, leaves, flies, smoke, bees, mist, mist2];
   g.add(...all);
 
   const setSeason = (p, night) => {
@@ -126,7 +131,8 @@ export function buildParticles(hf, chimney) {
     flies.material.uniforms.uAmount.value = w[1] * (0.15 + night * 0.85);
     smoke.material.uniforms.uAmount.value = 0.35 + w[3] * 0.4 + w[2] * 0.2 + night * 0.2;
     bees.material.uniforms.uAmount.value = (w[0] + w[1] + w[2] * 0.5) * (1 - night * 0.8);
-    mist.material.uniforms.uAmount.value = 0.5 * (1 - p.ice);
+    mist.material.uniforms.uAmount.value = 0.3 * (1 - p.ice);
+    mist2.material.uniforms.uAmount.value = 0.3 * (1 - p.ice);
     for (const o of all) o.visible = o.material.uniforms.uAmount.value > 0.01;
   };
   const setPixelScale = (px) => {
