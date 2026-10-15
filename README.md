@@ -4,8 +4,6 @@
 
 ![淝水决战](docs/screenshots/battle.jpg)
 
-> 本仓库另含一个独立的小项目：**[熊出没 · 四季狗熊岭 3D 地图](bears/README.md)**（`docs/bears/index.html`），以《熊出没》四季篇为灵感的同人森林沙盘，可切换春夏秋冬与昼夜。
-
 ## 打开方式
 
 - **直接打开**：双击 [`docs/index.html`](docs/index.html)。这是一个约 2.6 MB 的单文件，地形、字体和程序都已内嵌，不需要服务器，离线也能看。

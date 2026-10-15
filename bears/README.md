@@ -2,12 +2,12 @@
 
 以《熊出没》四季篇（《春日对对碰》《夏日连连看》《秋日团团转》《冬日乐翻天》）为灵感的狗熊岭三维地图模型。整片森林做成一块立体沙盘，可在春、夏、秋、冬之间平滑切换，也可切换白天与夜晚。
 
-![四季](../docs/bears-screenshots/seasons.jpg)
+![四季](screenshots/seasons.jpg)
 
 ## 打开方式
 
-- **直接打开**：双击 [`docs/bears/index.html`](../docs/bears/index.html)。单文件，约 0.7 MB，地形和模型都在浏览器里实时生成，不需要服务器。
-- **GitHub Pages**：若仓库已按根目录 README 发布 `/docs`，访问 `<站点地址>/bears/` 即可。
+- **直接打开**：双击 [`docs/index.html`](docs/index.html)。单文件，约 0.7 MB，地形和模型都在浏览器里实时生成，不需要服务器。
+- **GitHub Pages**：发布本目录下的 `docs/` 即可得到在线地址。
 - 需要支持 WebGL 2 的浏览器。
 
 操作：拖动旋转，滚轮缩放，右键平移。底部四个按钮或数字键 1–4 切换季节；空格键开关“四季自动轮换”（默认每 16 秒换一季）；N 切换昼夜；R 回到全景。点击地名飞往该处并显示当季说明，点击角色名或“索引”里的角色可跟随角色移动。
@@ -29,7 +29,7 @@
 
 角色：熊大在熊窝—木桥—猴王树之间巡山，熊二在熊窝和蜂蜜树之间来回，光头强在木屋、柴堆、伐木车和伐木场之间忙活。冬天他们会围上围巾。
 
-![近景：光头强的木屋、熊窝、冬天的猴王树、林中大湖、山间瀑布](../docs/bears-screenshots/closeups.jpg)
+![近景：光头强的木屋、熊窝、冬天的猴王树、林中大湖、山间瀑布](screenshots/closeups.jpg)
 
 ## 四季变化
 
@@ -47,8 +47,8 @@
 
 ```bash
 npm install
-npm run dev:bears     # http://localhost:5174
-npm run build:bears   # 生成单文件 docs/bears/index.html
+npm run dev     # http://localhost:5174
+npm run build   # 生成单文件 docs/index.html
 ```
 
 | 文件 | 内容 |
