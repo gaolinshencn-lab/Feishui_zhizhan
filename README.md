@@ -9,6 +9,7 @@
 - **直接打开**：双击 [`docs/index.html`](docs/index.html)。这是一个约 2.6 MB 的单文件，地形、字体和程序都已内嵌，不需要服务器，离线也能看。
 - **GitHub Pages**：在仓库 Settings → Pages 中选择 `main` 分支的 `/docs` 目录，即可得到在线地址。
 - 需要支持 WebGL 2 的浏览器（新版 Chrome、Edge、Firefox、Safari 均可）。
+- **配套讲解**：[`docs/feishui-guide.pptx`](docs/feishui-guide.pptx)（PowerPoint / WPS，37 页，含演讲者备注）与同内容的 [`docs/feishui-guide.pdf`](docs/feishui-guide.pdf)。按十三个节点逐节讲解：沙盘画面与每个箭头、标注出现的秒数，白话经过与《通鉴》《晋书》原文。
 
 操作：拖动旋转，滚轮缩放，右键平移；空格键播放或暂停，← / → 切换时间节点。右上角可切换沙盘、开关自动镜头、打开“地名索引”（古今地名对照，点击即飞往该处）、开启声音（合成的琴声、战鼓与风声，默认关闭），并在“图层”里调节地名、古今对照、路线、等高线、方格网、地形夸张倍数和画质。
 
