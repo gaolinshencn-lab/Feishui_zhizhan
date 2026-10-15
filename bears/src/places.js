@@ -39,7 +39,7 @@ export const CLEARINGS = [
 
 // Hills added to the base terrain: [x, z, height, radius]
 export const HILLS = [
-  [38, -15, 10, 10],
+  [38, -15, 5, 10],
   [-86, -12, 9, 18],
   [80, -10, 7, 16],
   [-20, -82, 18, 22],
@@ -52,7 +52,7 @@ const S = (spring, summer, autumn, winter) => ({ spring, summer, autumn, winter 
 export const PLACES = [
   {
     id: 'home', name: '熊大熊二的家', x: 29, z: -7, y: 8, kind: 'home',
-    brief: '狗熊岭中部小山坡上的熊窝，门前一条小路通往木桥和蜂蜜树。',
+    brief: '一棵巨大老树的树洞，熊大熊二住在里面。树根下开着拱形木门，门前小路通往木桥和蜂蜜树。',
     text: S(
       '冬眠结束，熊大推开木门伸个懒腰，门口的野花一夜之间全开了。',
       '天热，兄弟俩常在门前树荫下乘凉，熊二惦记着蜂蜜树。',
@@ -139,6 +139,11 @@ export const PLACES = [
       '满树黄叶，平台上堆着收来的果子。',
       '平台积雪，猴子们挤在一起取暖。'
     ),
+  },
+  {
+    id: 'burrow', name: '萝卜头的地洞', x: 26, z: 20, y: 3, kind: 'home',
+    brief: '花海草甸东边的地洞，旁边是萝卜头种的萝卜地。',
+    text: S('萝卜刚种下，冒出嫩叶。', '萝卜长得正好，萝卜头天天守着。', '收萝卜的季节，地洞里囤满了萝卜。', '萝卜地被雪盖住，萝卜头躲在洞里不出来。'),
   },
   {
     id: 'peak', name: '狗熊岭主峰', x: -20, z: -80, y: 30, kind: 'mountain',

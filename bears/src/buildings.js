@@ -149,57 +149,69 @@ function stump(r = 0.5) {
   return g;
 }
 
+// Briar and Bramble live inside a huge old hollow tree (树洞). Door at the foot of the trunk, +z side.
 function bearHome(windows) {
-  const g = new THREE.Group();
-  // stone arch and earthen mound pushed into the hillside
-  const mound = ball(5.2, M('#6fa34a'), 1);
-  g.userData.mound = mound;
-  mound.scale.set(1.15, 0.75, 1);
-  mound.position.set(0, 0.3, -2.8);
-  g.add(mound);
-  const arch = mesh(new THREE.TorusGeometry(1.7, 0.42, 6, 14, Math.PI), MAT.stone);
-  arch.position.set(0, 0.6, 1.55);
-  g.add(arch);
-  g.add(box(0.85, 0.6, 0.85, MAT.stone, -1.7, 0.3, 1.55));
-  g.add(box(0.85, 0.6, 0.85, MAT.stone, 1.7, 0.3, 1.55));
-  // round wooden door
-  const door = mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.2, 16, 1, false, 0, Math.PI), MAT.door);
-  door.rotation.set(Math.PI / 2, 0, Math.PI / 2);
-  door.position.set(0, 0.6, 1.45);
-  g.add(door);
-  g.add(box(2.6, 0.2, 0.1, MAT.wood, 0, 0.62, 1.58));
+  const g = bigTree(1.5, '#5aa83e');
+  const inner = new THREE.Group();
+  inner.scale.setScalar(1 / 1.5); // build in world units inside the scaled tree
+  g.add(inner);
+  // fat, slightly gnarled trunk and buttress roots
+  const trunk = mesh(new THREE.CylinderGeometry(2.1, 2.9, 8.5, 10, 3), MAT.log);
+  trunk.position.y = 4.25;
+  inner.add(trunk);
+  const roots = [];
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + 0.3;
+    if (Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2))) < 0.5) continue; // keep the doorway clear
+    roots.push(at(new THREE.ConeGeometry(0.9, 3.4, 6), Math.cos(a) * 2.9, 0.6, Math.sin(a) * 2.9, Math.sin(a) * 1.15, 0, -Math.cos(a) * 1.15));
+  }
+  inner.add(mesh(merge(roots), MAT.logDark));
+  // dark hollow, arched wooden door with frame
+  const hole = mesh(new THREE.CircleGeometry(1.25, 16, 0, Math.PI), MAT.coal, false);
+  hole.position.set(0, 1.2, 2.88);
+  inner.add(hole);
+  inner.add(box(2.5, 1.2, 0.05, MAT.coal, 0, 0.6, 2.88));
+  const door = mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.16, 16, 1, false, -Math.PI / 2, Math.PI), MAT.door);
+  door.rotation.x = Math.PI / 2;
+  door.position.set(0, 1.25, 2.95);
+  inner.add(door);
+  inner.add(box(2.2, 1.25, 0.16, MAT.door, 0, 0.62, 2.95));
+  for (const x of [-0.6, 0, 0.6]) inner.add(box(0.06, 2.2, 0.05, MAT.logDark, x, 1.15, 3.05));
+  const frame = mesh(new THREE.TorusGeometry(1.25, 0.16, 5, 16, Math.PI), MAT.wood);
+  frame.position.set(0, 1.2, 2.95);
+  inner.add(frame);
+  inner.add(box(0.3, 1.25, 0.3, MAT.wood, -1.25, 0.6, 2.95), box(0.3, 1.25, 0.3, MAT.wood, 1.25, 0.6, 2.95));
   const knob = ball(0.12, MAT.hive, 0);
-  knob.position.set(0.7, 1.1, 1.6);
-  g.add(knob);
-  // little window
+  knob.position.set(0.7, 1.0, 3.1);
+  inner.add(knob);
+  // round window higher up the trunk
   const wm = win();
   windows.push(wm);
   const w = mesh(new THREE.CircleGeometry(0.55, 12), wm, false);
-  w.position.set(3.1, 1.9, 1.15);
-  w.rotation.y = 0.45;
-  g.add(w);
+  w.position.set(1.1, 4.6, 2.62);
+  w.rotation.y = 0.4;
+  inner.add(w);
   const wf = mesh(new THREE.TorusGeometry(0.6, 0.1, 5, 12), MAT.wood);
   wf.position.copy(w.position);
-  wf.rotation.y = 0.45;
-  g.add(wf);
+  wf.rotation.y = 0.4;
+  inner.add(wf);
   // doorstep, mailbox, firewood, honey pots
-  g.add(box(3, 0.2, 1.4, MAT.stone, 0, 0.1, 2.4));
-  const post = box(0.15, 1.3, 0.15, MAT.wood, -3.2, 0.65, 3.2);
-  g.add(post);
-  g.add(box(0.7, 0.5, 0.45, MAT.red, -3.2, 1.45, 3.2));
+  inner.add(box(2.8, 0.2, 1.4, MAT.stone, 0, 0.1, 3.7));
+  inner.add(box(0.15, 1.3, 0.15, MAT.wood, -3.4, 0.65, 4.0));
+  inner.add(box(0.7, 0.5, 0.45, MAT.red, -3.4, 1.45, 4.0));
   const fw = logPile(3);
   fw.scale.setScalar(0.45);
   fw.rotation.y = 0.3;
-  fw.position.set(-3.6, 0, 0.6);
-  g.add(fw);
+  fw.position.set(-3.8, 0, 1.8);
+  inner.add(fw);
   for (let i = 0; i < 3; i++) {
     const pot = ball(0.35, MAT.hiveDark, 1);
     pot.scale.y = 1.1;
-    pot.position.set(2.2 + i * 0.7, 0.35, 2.4 + (i % 2) * 0.4);
-    g.add(pot);
+    pot.position.set(2.4 + i * 0.7, 0.35, 3.6 + (i % 2) * 0.4);
+    inner.add(pot);
     const lid = cyl(0.2, 0.25, 0.12, MAT.cloth2);
     lid.position.set(pot.position.x, 0.78, pot.position.z);
-    g.add(lid);
+    inner.add(lid);
   }
   return g;
 }
@@ -469,7 +481,6 @@ export function buildLandmarks(hf) {
 
   // Bears' home: tucked into the hill, door facing the path to the bridge
   const home = place(bearHome(windows), 30, -7, -0.95, -0.2);
-  const moundMat = home.userData.mound.material;
   season(place(snowman(0.9), 25.5, -2.5, 0.8), (p) => p.weights[3]);
   for (let i = 0; i < 9; i++) {
     const a = R() * 6.28, r = 3 + R() * 6;
@@ -503,23 +514,22 @@ export function buildLandmarks(hf) {
     throne.add(box(1.0, 1.2, 0.2, MAT.red, 0, 0.9, -0.4));
     throne.add(box(1.1, 0.12, 0.25, MAT.hive, 0, 1.55, -0.4));
     throne.position.set(0, 0, 1.9);
-    throne.rotation.y = Math.PI;
     plat.add(throne);
     const flagPole = box(0.08, 2.4, 0.08, MAT.wood, -2.2, 1.3, -1.2);
     plat.add(flagPole);
     const flag = box(0.9, 0.55, 0.03, MAT.hive, -1.75, 2.2, -1.2);
     plat.add(flag);
-    plat.position.y = 4.2;
+    plat.position.y = 2.7;
     mk.add(plat);
     const ladder = [];
-    for (let i = 0; i < 9; i++) ladder.push(at(new THREE.BoxGeometry(0.8, 0.07, 0.07), 0, 0.3 + i * 0.47, 0));
-    ladder.push(at(new THREE.BoxGeometry(0.07, 4.3, 0.07), -0.4, 2.15, 0), at(new THREE.BoxGeometry(0.07, 4.3, 0.07), 0.4, 2.15, 0));
+    for (let i = 0; i < 6; i++) ladder.push(at(new THREE.BoxGeometry(0.8, 0.07, 0.07), 0, 0.3 + i * 0.45, 0));
+    ladder.push(at(new THREE.BoxGeometry(0.07, 2.8, 0.07), -0.4, 1.4, 0), at(new THREE.BoxGeometry(0.07, 2.8, 0.07), 0.4, 1.4, 0));
     const lad = mesh(merge(ladder), MAT.wood);
     lad.position.set(0, 0, 1.05);
     lad.rotation.x = -0.12;
     mk.add(lad);
   }
-  const bigTrees = [honey, mk];
+  const bigTrees = [honey, mk, home];
 
   // Bridge across the creek
   {
@@ -611,6 +621,29 @@ export function buildLandmarks(hf) {
     season(place(mushroom(0.5 + R() * 0.7, R() < 0.6 ? MAT.red : MAT.hiveDark), x, z, R() * 6), (p) => p.weights[2] + p.weights[1] * 0.25);
   }
 
+  // Luo Bo Tou's burrow and radish patch, east edge of the meadow
+  {
+    const bx = 24, bz = 21;
+    const ring = mesh(new THREE.TorusGeometry(0.95, 0.35, 6, 14), M('#8a6440'));
+    ring.rotation.x = Math.PI / 2;
+    ring.scale.z = 0.6;
+    place(ring, bx, bz, 0, 0.05);
+    const hole = mesh(new THREE.CircleGeometry(0.85, 14), MAT.coal, false);
+    hole.rotation.x = -Math.PI / 2;
+    place(hole, bx, bz, 0, 0.08);
+    const leaves = [], roots = [];
+    for (let r = 0; r < 4; r++)
+      for (let i = 0; i < 6; i++) {
+        const x = bx + 2.5 + i * 0.9, z = bz - 2.5 + r * 1.2, y = hf.h(x, z);
+        roots.push(at(new THREE.SphereGeometry(0.22, 6, 5), x, y + 0.08, z));
+        for (let k = 0; k < 3; k++) leaves.push(at(new THREE.ConeGeometry(0.12, 0.6, 4), x, y + 0.4, z, 0.35, (k / 3) * Math.PI * 2, 0));
+      }
+    const patch = new THREE.Group();
+    patch.add(mesh(merge(leaves), MAT.green, false), mesh(merge(roots), M('#e04a5a'), false));
+    root.add(patch);
+    season(patch, (p) => 1 - p.weights[3]);
+  }
+
   // Road gate at the edge of the board
   {
     const g = new THREE.Group();
@@ -627,7 +660,6 @@ export function buildLandmarks(hf) {
       s.obj.scale.setScalar(Math.max(0.0001, e * s.s0));
       s.obj.visible = e > 0.01;
     }
-    moundMat.color.copy(p.grass2).multiplyScalar(0.92);
     for (const t of bigTrees) {
       t.userData.leafU.value = p.leafScale;
       t.userData.crown.visible = p.leafScale > 0.01;

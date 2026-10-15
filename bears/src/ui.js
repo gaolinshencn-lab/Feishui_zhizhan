@@ -2,7 +2,7 @@
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { SEASONS } from './seasons.js';
 import { PLACES } from './places.js';
-import { CHARACTERS } from './characters.js';
+import { ALL_CHARACTERS } from './characters.js';
 
 const ACCENT = ['#e8628f', '#2b9a5f', '#d9692a', '#4f86c9'];
 const ICON = { spring: '🌸', summer: '☀️', autumn: '🍁', winter: '❄️' };
@@ -77,7 +77,7 @@ export class UI {
     idx.appendChild(ul);
     idx.appendChild(h('h3', null, '角色'));
     const cl = h('ul', 'chars');
-    for (const c of CHARACTERS) {
+    for (const c of ALL_CHARACTERS) {
       const li = h('li', null, `<b>${c.name}</b><span>${c.desc}</span>`);
       li.addEventListener('click', () => {
         app.followChar(c.id);
