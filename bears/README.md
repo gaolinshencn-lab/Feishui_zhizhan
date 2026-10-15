@@ -4,6 +4,8 @@
 
 ![四季](screenshots/seasons.jpg)
 
+> 另有 **Blender 版**精细 3D 地图：见 [`blender/`](blender/README.md)（`build_boonie_bears_map.py` 脚本、`boonie_bears_forest_map.blend` 场景文件、总览与室内渲染图）。
+
 ## 打开方式
 
 - **直接打开**：双击 [`docs/index.html`](docs/index.html)。单文件，约 0.7 MB，地形和模型都在浏览器里实时生成，不需要服务器。
