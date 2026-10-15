@@ -9,7 +9,9 @@
     "build": "vite build && node tools/postbuild.mjs",
     "preview": "vite preview --outDir docs",
     "fonts": "python3 tools/subset_fonts.py",
-    "geodata": "python3 tools/geodata.py"
+    "geodata": "python3 tools/geodata.py",
+    "dev:bears": "vite --config bears/vite.config.js",
+    "build:bears": "vite build --config bears/vite.config.js"
   },
   "dependencies": {
     "three": "0.185.1"
