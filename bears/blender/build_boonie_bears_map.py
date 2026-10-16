@@ -1362,7 +1362,7 @@ def build_house():
 def build_house_interior(root, INT, inner, B):
     W, D = W_HOUSE, D_HOUSE
 
-    INFERRED_POS = ("Kang", "Slippers", "Storage_Shelf", "Cupboard", "Lantern")
+    INFERRED_POS = ("Kang", "Slippers", "Storage_Shelf", "Cupboard", "Lantern", "Low_Table", "Chest", "Armchair", "PaperCut")
 
     def obj(name, cn, mats, build, loc=(0, 0, 0), rot=(0, 0, 0), status="observed", note=None, smooth_shade=False):
         bm = bmesh.new()
@@ -1400,13 +1400,55 @@ def build_house_interior(root, INT, inner, B):
             edge = min(1.0, (1 - abs(v.co.x)) * 6, (1 - abs(v.co.y)) * 6)
             v.co = Vector((x, y, 0.06 + 0.22 * edge + 0.05 * math.sin(x * 6) * math.cos(y * 5)))
         bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.03)
-    obj("GQ_Int_Kang_Quilt", "蓝底白花打补丁的被子", [mat_quilt()], quilt, loc=(kx - 0.35, ky + 0.05, 0.63),
+    obj("GQ_Int_Kang_Quilt", "蓝底白花打补丁的被子", [mat_quilt()], quilt, loc=(kx + 0.3, ky + 0.05, 0.63),
         smooth_shade=True, note="U6：蓝底白花，带蓝色、紫色补丁")
     obj("GQ_Int_Kang_Pillow", "红棕色枕头", [mat("Fabric_Pillow_Red", "#8e2f2a", rough=0.85)],
-        lambda bm: bm_cube(bm, (0.32, 0.65, 0.18), loc=(0, 0, 0.09)), loc=(kx + 0.95, ky + 0.05, 0.63), note="U6")
+        lambda bm: bm_cube(bm, (0.32, 0.65, 0.18), loc=(0, 0, 0.09)), loc=(kx - 1.05, ky + 0.05, 0.63), note="U6；E44：枕头一头靠墙")
     obj("GQ_Int_Slippers_Red", "红拖鞋", [mat("Rubber_Slipper_Red", "#c4322b", rough=0.6)],
         lambda bm: (bm_cube(bm, (0.11, 0.27, 0.04), loc=(-0.08, 0, 0.02)), bm_cube(bm, (0.11, 0.27, 0.04), loc=(0.1, 0.03, 0.02))),
         loc=(kx + 0.6, ky + 1.25, 0), note="U6")
+
+    # 《冬日乐翻天》第 44 集室内画面（E44）：炕头靠墙，墙上挂日历、旧衣服、辣椒串，旁边挂蒜辫；
+    # 炕头边放绿色电话和水杯。对面墙有贴红色“春”字窗花的格子窗，窗下有矮木桌和红棕色木箱，角落一张绿色单人沙发。
+    wx = -W / 2 + 0.2  # 西墙内表面附近
+    obj("GQ_Int_Wall_Calendar", "墙上的日历", [mat_noise("Wood_Calendar_Board", "#9b7a52", "#ab8a60", scale=8), mat("Paper_Calendar", "#efe8d6")],
+        lambda bm: (bm_cube(bm, (0.03, 0.42, 0.55), loc=(0, 0, 0), mi=0), bm_cube(bm, (0.012, 0.36, 0.4), loc=(0.02, 0, -0.04), mi=1)),
+        loc=(wx, -1.25, 1.75), note="E44")
+    obj("GQ_Int_Hanging_Clothes", "墙上挂的旧衣服", [mat_noise("Fabric_Old_Grey", "#9aa0a6", "#b0b5ba", scale=12)],
+        lambda bm: (bm_cube(bm, (0.06, 0.42, 1.0), loc=(0, 0, 0)), bm_cube(bm, (0.05, 0.12, 0.9), loc=(0, -0.26, 0.02)),
+                    bm_cube(bm, (0.05, 0.12, 0.9), loc=(0, 0.26, 0.02))), loc=(wx + 0.02, -0.45, 1.7), note="E44")
+    obj("GQ_Int_Chili_String_Bedside", "炕边墙上的辣椒串", [MATS.get("Chili_Red") or mat("Chili_Red", "#c8241c", rough=0.45)],
+        lambda bm: [bm_cyl(bm, 0.045, 0.0, 0.2, loc=(math.sin(i * 1.3) * 0.05, math.cos(i * 1.7) * 0.06, -i * 0.1), rot=(math.pi, 0, 0), seg=6)
+                    for i in range(14)], loc=(wx + 0.06, 0.05, 2.55), note="E44")
+    obj("GQ_Int_Garlic_Braid", "蒜辫", [mat("Garlic_White", "#ece6da", rough=0.6)],
+        lambda bm: [bm_sphere(bm, (0.06, 0.06, 0.055), loc=(math.sin(i * 2.1) * 0.03, 0, -i * 0.11), seg=10, rings=6) for i in range(12)],
+        loc=(wx + 0.07, 0.4, 2.6), smooth_shade=True, note="E44")
+    obj("GQ_Int_Phone_And_Glass", "炕头边的绿色电话和水杯", [mat("Phone_Teal", "#3e9a86", rough=0.4), mat("Glass_Cup", "#d8e6ea", rough=0.1, transmission=0.6),
+                                                       mat_noise("Wood_Ledge", "#8a6440", "#9c7550", scale=8)],
+        lambda bm: (bm_cube(bm, (0.45, 0.4, 0.05), loc=(0, 0, 0), mi=2), bm_cube(bm, (0.22, 0.17, 0.08), loc=(-0.05, 0, 0.065), mi=0),
+                    bm_cube(bm, (0.2, 0.05, 0.05), loc=(-0.05, -0.04, 0.13), rot=(0.4, 0, 0), mi=0),
+                    bm_cyl(bm, 0.035, 0.03, 0.11, loc=(0.13, 0.05, 0.08), seg=10, mi=1)), loc=(wx + 0.2, -0.75, 0.62), note="E44")
+    obj("GQ_Int_Window_PaperCut_Chun", "窗上的红色“春”字窗花", [mat("Paper_Red_Chun", "#cc2a24", rough=0.7)],
+        lambda bm: bm_cube(bm, (0.32, 0.01, 0.32), loc=(0, 0, 0), rot=(0, math.pi / 4, 0)), loc=(-3.05, D / 2 - 0.2, 2.25),
+        note="E44：格子窗上贴红色“春”字窗花；E44 的窗看起来比 U3 正面小方窗大（冲突），按 U3 尺寸贴在左窗上")
+    obj("GQ_Int_Low_Table", "窗下矮木桌", [mat_noise("Wood_Low_Table", "#a2703f", "#b5824d", scale=8)],
+        lambda bm: (bm_cube(bm, (0.9, 0.5, 0.05), loc=(0, 0, 0.45)),
+                    [bm_cube(bm, (0.06, 0.06, 0.43), loc=(sx * 0.38, sy * 0.19, 0.215)) for sx in (-1, 1) for sy in (-1, 1)]),
+        loc=(-2.85, D / 2 - 0.5, 0), note="E44")
+    obj("GQ_Int_Chest_Red", "红棕色木箱", [mat_noise("Wood_Chest_Red", "#7a3328", "#8c3e30", scale=8), mat("Steel_Pot", "#8f969c", metal=0.7, rough=0.35)],
+        lambda bm: (bm_cube(bm, (0.7, 0.45, 0.5), loc=(0, 0, 0.25), mi=0), bm_cube(bm, (0.08, 0.02, 0.06), loc=(0, -0.235, 0.4), mi=1)),
+        loc=(-1.85, D / 2 - 0.45, 0), note="E44")
+
+    def armchair(bm):
+        bm_cube(bm, (0.8, 0.75, 0.42), loc=(0, 0, 0.21))
+        bm_cube(bm, (0.8, 0.2, 0.55), loc=(0, 0.3, 0.68))
+        for sx in (-1, 1):
+            bm_cube(bm, (0.16, 0.75, 0.25), loc=(sx * 0.36, 0, 0.52))
+    ob = obj("GQ_Int_Armchair_Green", "绿色单人沙发", [mat("Fabric_Armchair_Green", "#3f9a5c", rough=0.8)], armchair,
+             loc=(-3.85, 2.3, 0), rot=(0, 0, math.pi * 0.75), note="E44：画面右侧角落的绿色沙发")
+    md = ob.modifiers.new("Bevel_Soft", "BEVEL")
+    md.width = 0.06
+    md.segments = 3
 
     # 绿冰箱（U5）：圆角、上门冷冻室、白把手、门上两张纸条；地上易拉罐、陶罐
     fx, fy = -1.05, -2.55
@@ -1859,9 +1901,9 @@ def build_pickup():
         bm_cube(bm, (0.5, 0.02, 0.15), loc=(0, yb - 0.025, SILL + 0.17), mi=4)
     part("Vehicle_Pickup_Rear_Lights_Bumper", "竖条组合尾灯、后保险杠、黄色后车牌", [amber, red, white, dark, plate], rear, bevel=0.01,
          note="S1E1-35/40/47")
-    # 车牌文字 “Y2 MMK”（S1E1-33/47）
+    # 车牌文字（S1E1-33/47）：前五个字符读作“Y2 MM”；最后一个字符分辨率太低，K/R 难以区分，按 R（推测）
     fc = bpy.data.curves.new("Vehicle_Pickup_Plate_Text", "FONT")
-    fc.body = "Y2 MMK"
+    fc.body = "Y2 MMR"
     fc.size = 0.085
     fc.align_x = "CENTER"
     fc.align_y = "CENTER"
@@ -1872,7 +1914,7 @@ def build_pickup():
     to.parent = root
     to.location = (0, BED_B - 0.04, SILL + 0.17)
     to.rotation_euler = (math.pi / 2, 0, 0)  # 字面朝车尾（-Y），从车后看是正读
-    tag(to, cn="后车牌文字 Y2 MMK", status="observed", note="S1E1-33/47")
+    tag(to, cn="后车牌文字 Y2 MMR（最后一个字母不确定）", status="inferred", note="S1E1-33/47：最后一个字符看不清，K 或 R")
     # 侧踏杠、后视镜
     part("Vehicle_Pickup_Side_Steps", "镀铬侧踏杠", [chrome], lambda bm: (
         tubes(bm, [((sxx * 1.0, -0.4, 0.86), (sxx * 1.0, 0.75, 0.86)) for sxx in (-1, 1)], 0.04),
@@ -2028,7 +2070,7 @@ def eyes_pair(root, C, prefix, M, x, y, z, r, iris=None, ring=None):
                   seg=12, rings=8, subsurf=1)
 
 
-def bear(name_en, cn, C, pos, rot, fur, fur_dark, bib, belly, muzzle, nose, plump=1.0):
+def bear(name_en, cn, C, pos, rot, fur, fur_dark, bib, belly, muzzle, nose, plump=1.0, eye_patch=None):
     gz = ground(*pos)
     root = empty(f"{name_en}_Root", C, (pos[0], pos[1], gz), (0, 0, rot), size=0.6,
                  props=dict(cn=cn, status="observed", note="高 2.0 m（比例基准）"))
@@ -2053,6 +2095,10 @@ def bear(name_en, cn, C, pos, rot, fur, fur_dark, bib, belly, muzzle, nose, plum
     part_blob(root, C, f"{name_en}_Nose", "鼻子", [M["Nose"]], (0.14, 0.1, 0.095), (0, -0.53, hz + 0.0), subsurf=1)
     part_blob(root, C, f"{name_en}_Mouth", "嘴", [M["Mouth"]], (0.12, 0.05, 0.035), (0, -0.5, hz - 0.15), subsurf=1)
     eyes_pair(root, C, name_en, M, 0.13, -0.36, hz + 0.12, 0.065)
+    if eye_patch:  # E44、S1E1-13：熊二眼睛周围一圈浅色
+        for s, sn in ((-1, "L"), (1, "R")):
+            part_blob(root, C, f"{name_en}_EyePatch_{sn}", "眼周浅色毛", [mat(f"{name_en}_EyePatch", eye_patch)],
+                      (0.12, 0.04, 0.11), (s * 0.13, -0.345, hz + 0.12), subsurf=1)
     for s, sn in ((-1, "L"), (1, "R")):
         part_blob(root, C, f"{name_en}_Brow_{sn}", "眉毛", [M["FurDark"]], (0.1, 0.05, 0.035), (s * 0.13, -0.37, hz + 0.21),
                   rot=(0, s * 0.25, 0), subsurf=1)
@@ -2083,8 +2129,10 @@ def guangtouqiang(C, pos, rot):
     for s, sn in ((-1, "L"), (1, "R")):
         part_limb(root, C, f"GuangtouQiang_Leg_{sn}", "裤腿（紫色运动裤）", [M["Pants"]], (s * 0.1, 0, 0.78), (s * 0.11, 0, 0.12), 0.075, 0.062)
         bm = bmesh.new()
-        bm_cube(bm, (0.012, 0.03, 0.62), loc=(s * 0.172, 0, 0.45), rot=(0, s * -0.02, 0))
-        new_obj(f"GuangtouQiang_Pants_Stripe_{sn}", bm, C, [M["Stripe"]], parent=root, props=dict(cn="裤子侧边白条", note="U4"))
+        for dy in (-0.016, 0.016):
+            bm_cube(bm, (0.012, 0.009, 0.62), loc=(s * 0.172, dy, 0.45), rot=(0, s * -0.02, 0))
+        new_obj(f"GuangtouQiang_Pants_Stripe_{sn}", bm, C, [M["Stripe"]], parent=root,
+                props=dict(cn="裤子侧边两道白条", note="U4；E44 清楚看到每条裤腿侧边两道白条"))
         part_blob(root, C, f"GuangtouQiang_Shoe_{sn}", "黑鞋", [M["Shoe"]], (0.075, 0.15, 0.06), (s * 0.11, -0.05, 0.06), subsurf=1)
     part_blob(root, C, "GuangtouQiang_Belt", "腰带", [M["Belt"]], (0.19, 0.14, 0.04), (0, 0, 0.76), subsurf=1)
     part_blob(root, C, "GuangtouQiang_Torso_Sweater", "深蓝毛衣", [M["Sweater"]], (0.2, 0.14, 0.27), (0, 0, 0.98),
@@ -2225,7 +2273,7 @@ def build_characters():
     bear("XiongDa", "熊大", CH["Characters_XiongDa"], (m[0] - 1.6, m[1] + 2.0), math.radians(10),
          fur="#9b4f2e", fur_dark="#7c3a20", bib="#efdcc2", belly=None, muzzle="#f1e2cf", nose="#d4424a")
     bear("XiongEr", "熊二", CH["Characters_XiongEr"], (m[0] + 1.6, m[1] + 1.6), math.radians(-12),
-         fur="#d6a356", fur_dark="#b9853c", bib=None, belly="#ecca8c", muzzle="#f2ddb0", nose="#5e6683", plump=1.15)
+         fur="#d6a356", fur_dark="#b9853c", bib=None, belly="#ecca8c", muzzle="#f2ddb0", nose="#5e6683", plump=1.15, eye_patch="#f0dfb2")
     guangtouqiang(CH["Characters_GuangtouQiang"], (HOUSE["x"] + 1.8, HOUSE["y"] + 5.4), math.radians(160))
     bx, by = lake_point(math.radians(-62), 1.33)
     tutu(CH["Characters_TuTu"], (bx - 0.75, by), math.radians(-12))
