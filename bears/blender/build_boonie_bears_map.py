@@ -895,24 +895,25 @@ def build_lake_and_rocks():
 
 
 def spruce_proto(name, h, seed):
-    """云杉：略弯的红褐色树干、树根、8–12 层下垂的枝层（第一季截图中森林的主体）。"""
+    """云杉：粗壮略弯的红褐色树干，下部约 1/4 没有枝条（第一季第 1 集《新邻居》里林间能看到高高的光树干），
+    树根外露，上面 8–12 层下垂的枝层。"""
     rnd = random.Random(seed)
     bm = bmesh.new()
     pts, rad = [], []
     for i in range(8):
         t = i / 7
         pts.append((math.sin(t * 2.2 + seed) * 0.12 * h / 14, math.cos(t * 1.7) * 0.08 * h / 14 - 0.08, t * h * 0.97))
-        rad.append(lerp(0.32, 0.04, t) * h / 14)
+        rad.append(lerp(0.42, 0.05, t ** 0.8) * h / 14)
     bm_tube(bm, pts, rad, seg=8, mi=0)
     for k in range(5):
         a = 2 * math.pi * k / 5 + rnd.random()
-        bm_tube(bm, [(0, 0, 0.5), (math.cos(a) * 0.7, math.sin(a) * 0.7, 0.12), (math.cos(a) * 1.2, math.sin(a) * 1.2, -0.05)],
-                [0.16 * h / 14, 0.09, 0.03], seg=6, mi=0)
+        bm_tube(bm, [(0, 0, 0.6), (math.cos(a) * 0.8, math.sin(a) * 0.8, 0.15), (math.cos(a) * 1.5, math.sin(a) * 1.5, -0.05)],
+                [0.22 * h / 14, 0.12, 0.04], seg=6, mi=0)
     tiers = int(h / 1.35)
     for i in range(tiers):
         t = i / max(1, tiers - 1)
-        z = lerp(h * 0.16, h * 0.9, t)
-        R = lerp(h * 0.24, h * 0.055, t ** 0.9) * rnd.uniform(0.9, 1.08)
+        z = lerp(h * 0.26, h * 0.9, t)
+        R = lerp(h * 0.22, h * 0.055, t ** 0.9) * rnd.uniform(0.9, 1.08)
         th = lerp(h * 0.17, h * 0.1, t)
         segs = 14
         top = bm.verts.new((pts[0][0] + 0, 0, z + th))
@@ -1726,7 +1727,11 @@ def build_pickup():
             for sx in (-1, 1):
                 bm_torus(bm, wr + 0.12, 0.08, loc=(sx * (Wd / 2 + 0.02), sy, wr), rot=(0, math.pi / 2, 0), seg=16, rseg=6,
                          arc=math.pi, mi=0)
-    part("Vehicle_Pickup_Body", "车身", [blue, dark], body)
+    pb = part("Vehicle_Pickup_Body", "车身", [blue, dark], body)
+    bv = pb.modifiers.new("Bevel_Rounded", "BEVEL")  # 第一季截图：车身边角圆润
+    bv.width = 0.06
+    bv.segments = 3
+    bv.limit_method = "ANGLE"
     part("Vehicle_Pickup_Windows", "车窗", [glass], lambda bm: (
         bm_cube(bm, (Wd * 0.98, 0.04, 0.55), loc=(0, 1.08, zb + 1.2), rot=(-0.35, 0, 0)),
         bm_cube(bm, (Wd * 0.98, 1.2, 0.5), loc=(0, 0.3, zb + 1.22)),
