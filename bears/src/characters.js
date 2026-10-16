@@ -70,7 +70,7 @@ function eyes(parent, { x, y, z, r, iris = '#2a1a10', irisR = 0.5, look = 0, lid
 // ---------------------------------------------------------------------------------------------
 // Bears: Asian black bears drawn very stout — pear-shaped body, short legs, long arms.
 
-function bear({ fur, furDark, bib, muzzle, nose, belly, plump = 1, scarf }) {
+function bear({ fur, furDark, bib, muzzle, nose, belly, plump = 1, scarf, eyePatch }) {
   const g = new THREE.Group();
   const body = new THREE.Group();
   g.add(body);
@@ -103,6 +103,7 @@ function bear({ fur, furDark, bib, muzzle, nose, belly, plump = 1, scarf }) {
   mouth.rotation.z = Math.PI;
   mouth.position.set(0, -0.12, 0.47);
   head.add(mouth);
+  if (eyePatch) for (const s of [-1, 1]) head.add(blob({ r: [0.12, 0.11, 0.04], at: [s * 0.13, 0.13, 0.3], color: eyePatch, seg: 16 })); // Bramble's pale eye patches
   eyes(head, { x: 0.13, y: 0.13, z: 0.3, r: 0.065, iris: '#1d140e', irisR: 0.55 });
   for (const s of [-1, 1]) {
     head.add(blob({ r: [0.11, 0.04, 0.05], at: [s * 0.13, 0.22, 0.31], rot: [0, 0, -s * 0.25], color: furDark, seg: 12 }));
@@ -142,7 +143,7 @@ function logger() {
   const g = new THREE.Group();
   const body = new THREE.Group();
   g.add(body);
-  const SK = '#eab68c', NAVY = '#26305f', VEST = '#b98242', FUR = '#ecdcb8', PANTS = '#4a3577', SHOE = '#1c1a1a';
+  const SK = '#eab68c', NAVY = '#26305f', VEST = '#b98242', FUR = '#ecdcb8', PANTS = '#5b3f93', SHOE = '#1c1a1a';
   body.add(
     blob({
       r: [0.3, 0.42, 0.21], at: [0, 1.3, 0], seg: 44, taper: (y) => 1 + 0.08 * y,
@@ -183,8 +184,16 @@ function logger() {
     a.children[0].add(blob({ r: [0.08, 0.09, 0.07], at: [0, a.userData.end - 0.03, 0], color: SK }));
     body.add(a);
     arms.push(a);
-    const l = limb({ len: 0.78, r0: 0.11, r1: 0.085, color: PANTS, at: [s * 0.13, 0.92, 0], paint: (t, x) => (s * x > 0.82 ? '#eeeeee' : PANTS) }); // track trousers with white side stripes
+    const l = limb({ len: 0.78, r0: 0.11, r1: 0.085, color: PANTS, at: [s * 0.13, 0.92, 0] });
     l.children[0].add(blob({ r: [0.1, 0.07, 0.2], at: [0, l.userData.end - 0.02, 0.07], color: SHOE }));
+    // track trousers: two white stripes down each outer side (Snow Daze ep. 44)
+    const stripeMat = new THREE.MeshStandardMaterial({ color: '#eeeeee', roughness: 0.6 });
+    for (const dz of [-0.022, 0.022]) {
+      const st = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.74, 0.012), stripeMat);
+      st.position.set(s * 0.1, -0.4, dz);
+      st.rotation.z = s * 0.03;
+      l.children[0].add(st);
+    }
     g.add(l);
     legs.push(l);
   }
@@ -433,7 +442,7 @@ export const CHARACTERS = [
   },
   {
     id: 'bramble', name: '熊二', desc: '弟弟，金黄色毛，灰蓝色大鼻子，比哥哥更胖更壮，憨厚贪吃，最爱蜂蜜和鱼。总在树洞家和蜂蜜树之间来回。',
-    make: () => bear({ fur: '#d6a356', furDark: '#b9853c', belly: '#ecca8c', muzzle: '#f2ddb0', nose: '#5e6683', plump: 1.15, scarf: '#f2c230' }),
+    make: () => bear({ fur: '#d6a356', furDark: '#b9853c', belly: '#ecca8c', muzzle: '#f2ddb0', nose: '#5e6683', plump: 1.15, scarf: '#f2c230', eyePatch: '#f0dfb2' }),
     route: [[27, -2], [31, -8], [34, -12], [38, -18], [41, -22]], speed: 1.5, scale: 1.25, tagY: 2.75,
   },
   {
