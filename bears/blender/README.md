@@ -15,6 +15,10 @@
 | `preview.png` | 地图总览渲染（Cycles，1600×900） |
 | `preview_interior.png` | 木屋室内相机渲染 |
 | `preview_views.jpg` | 其余 5 个相机的低采样预览 |
+| `REFERENCE_CATALOG.md` | 参考图逐张核对清单：参考图—对应物体—可确认细节—看不清的部分 |
+| `render_checks.py` | 渲染全部检查视图（正交相机） |
+| `make_check_sheets.py` | 把检查视图拼成检查图（需要 Pillow） |
+| `checks/` | 检查图：人物正侧背、皮卡四视图、木屋四视图、室内平面（带标注）、地图俯视 |
 | `REFERENCE_NOTES.md` | 参考清单、冲突取舍、比例与布局（.blend 里的文本块 `Reference_Notes.md` 也是这份内容） |
 
 ## 打开文件
@@ -34,6 +38,32 @@
   可选参数：`--res 1920x1080`。
 
 脚本可以重复运行，每次都会先清空再重建，不会产生重复物体。
+
+## 检查视图
+
+`Lights_and_Cameras/Check_Cameras` 里有 28 个正交相机：
+
+- 每个人物 3 个：正面、侧面、背面。
+- 皮卡 4 个、木屋 4 个：正面、侧面、背面、俯视。
+- 室内平面 1 个（渲染时会自动隐藏屋顶）。
+- 地图俯视 1 个。
+
+这些相机的裁剪范围只包住目标物体，所以周围的树不会挡住画面。
+
+```bash
+blender -b boonie_bears_forest_map.blend -P render_checks.py -- checks_out 24
+python3 make_check_sheets.py checks_out checks
+```
+
+| 检查图 | 内容 |
+|---|---|
+| `checks/check_map_top.jpg` | 整体俯视 |
+| `checks/check_characters.jpg` | 六个人物的正面、侧面、背面 |
+| `checks/check_pickup_4views.jpg` | 皮卡正面、侧面、车尾、俯视 |
+| `checks/check_house_exterior.jpg` | 木屋正面、东侧、背面、俯视 |
+| `checks/check_house_interior_plan_labeled.jpg` | 室内平面图。绿色标注：位置能从剧照解释；橙色：位置为推测 |
+
+![室内平面](checks/check_house_interior_plan_labeled.jpg)
 
 ## 移动视角
 
@@ -84,7 +114,7 @@
   - `name_cn`：中文名。
   - `ref_status`：`observed` 表示剧照可见，`inferred` 表示推测。
   - `ref_note`：依据说明。
-- **推测模型**：都同时链接进 `Reference_Notes/Inferred_Models` 集合。在大纲视图里右键这个集合 → 选择物体，就能一次选中全部推测模型，方便替换。
+- **推测模型**：都同时链接进 `Reference_Notes/Inferred_Models` 集合。这个集合默认从视图层排除（大纲里复选框未勾选），只当“清单”用，这样隐藏其他集合时物体不会经由它继续显示。要一次选中全部推测模型：勾上它的复选框 → 右键 → 选择物体，用完再取消勾选。
 - **树木和植物**：同一种树共用一份网格，是“关联复制”。改一棵树的形状，同类的树会一起改；只想改一棵时，选中后按 `F3` 搜“设为单用户”（Make Single User）。原型网格在隐藏集合 `Reference_Notes/Prototypes_Hidden` 里。
 - **材质**：每种材质都有清楚的英文名，例如：
   - `Paint_Fridge_Mint`：冰箱

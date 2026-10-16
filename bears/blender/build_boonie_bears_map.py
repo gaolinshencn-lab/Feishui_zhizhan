@@ -207,7 +207,7 @@ def _nodes(m):
     return m.node_tree.nodes, m.node_tree.links
 
 
-def mat_noise(name, c1, c2, scale=6.0, rough=0.85, bump=0.15, detail=4.0, ramp=(0.35, 0.65)):
+def mat_noise(name, c1, c2, scale=6.0, rough=0.85, bump=0.15, detail=4.0, ramp=(0.35, 0.65), stretch=None):
     """两色噪声材质（树皮、木头、岩石、草地等）。"""
     if name in MATS:
         return MATS[name]
@@ -223,7 +223,13 @@ def mat_noise(name, c1, c2, scale=6.0, rough=0.85, bump=0.15, detail=4.0, ramp=(
     cr.color_ramp.elements[1].position = ramp[1]
     cr.color_ramp.elements[0].color = srgb(c1)
     cr.color_ramp.elements[1].color = srgb(c2)
-    links.new(tc.outputs["Object"], nz.inputs["Vector"])
+    if stretch:
+        mp = nodes.new("ShaderNodeMapping")
+        mp.inputs["Scale"].default_value = stretch
+        links.new(tc.outputs["Object"], mp.inputs["Vector"])
+        links.new(mp.outputs["Vector"], nz.inputs["Vector"])
+    else:
+        links.new(tc.outputs["Object"], nz.inputs["Vector"])
     links.new(nz.outputs["Fac"], cr.inputs["Fac"])
     links.new(cr.outputs["Color"], b.inputs["Base Color"])
     _set(b, "Roughness", rough)
@@ -874,8 +880,13 @@ def build_lake_and_rocks():
     for k in range(5):
         bm = bmesh.new()
         bm_ico(bm, 1.0, scale=(1.2, 1.0, 0.7), subdiv=2, rough=0.25, seed=k * 7.3)
+        if k < 3:  # S1E1-3/5/12：长满苔藓的圆石
+            for f in bm.faces:
+                if f.normal.z > 0.45 + 0.1 * noise.noise(f.calc_center_median() * 2.0):
+                    f.material_index = 1
         protos.append(new_obj(f"Proto_Rock_{k}", bm, COLL["Prototypes_Hidden"],
-                              [mat_noise("Rock_Grey", "#6f6c69", "#8e8a85", scale=2.5, bump=0.35)]))
+                              [mat_noise("Rock_Grey", "#6f6c69", "#8e8a85", scale=2.5, bump=0.35),
+                               mat_noise("Moss_Green", "#4f7d32", "#6a9a3e", scale=6, bump=0.3)]))
     placed = 0
     for i in range(700):
         x = rnd.uniform(-110, 110)
@@ -934,7 +945,7 @@ def spruce_proto(name, h, seed):
     for k in range(6):
         bm.faces.new((tip, base[k], base[(k + 1) % 6])).material_index = 2
     return new_obj(name, bm, COLL["Prototypes_Hidden"],
-                   [mat_noise("Bark_Spruce", "#5e3524", "#7d4a33", scale=8, bump=0.3),
+                   [mat_noise("Bark_Spruce", "#4f2e20", "#80513a", scale=5, bump=0.8, stretch=(3.0, 3.0, 0.35), ramp=(0.4, 0.6)),
                     mat_noise("Foliage_Spruce", "#24563a", "#2f6a46", scale=3, bump=0.2),
                     mat_noise("Foliage_Spruce_Light", "#2e6a45", "#3c7d52", scale=3, bump=0.2)], recalc=False)
 
@@ -1004,6 +1015,30 @@ def fern_proto(name, seed):
     return ob
 
 
+def leafy_plant_proto(name, seed):
+    """S1E1-71/72：地面上的大叶植物（宽叶片，向外弯垂）。"""
+    rnd = random.Random(seed)
+    bm = bmesh.new()
+    for k in range(7):
+        a = 2 * math.pi * k / 7 + rnd.uniform(-0.2, 0.2)
+        L = rnd.uniform(0.6, 0.9)
+        dx, dy = math.cos(a), math.sin(a)
+        px, py = -dy, dx
+        prev = None
+        for s_ in range(7):
+            t = s_ / 6
+            w = 0.22 * math.sin(t * math.pi) + 0.02
+            cx, cy = dx * L * t, dy * L * t
+            cz = 0.55 * math.sin(t * math.pi * 0.55) - 0.2 * t * t
+            row = (bm.verts.new((cx + px * w, cy + py * w, cz - w * 0.3)), bm.verts.new((cx, cy, cz)),
+                   bm.verts.new((cx - px * w, cy - py * w, cz - w * 0.3)))
+            if prev:
+                bm.faces.new((prev[0], prev[1], row[1], row[0]))
+                bm.faces.new((prev[1], prev[2], row[2], row[1]))
+            prev = row
+    return new_obj(name, bm, COLL["Prototypes_Hidden"], [mat("Plant_BigLeaf", "#3f8a36", rough=0.55)], smooth_shade=True, recalc=False)
+
+
 def build_forest():
     T = COLL["Forest_Trees"]
     P = COLL["Forest_Plants"]
@@ -1019,6 +1054,7 @@ def build_forest():
     bushes = [bush_proto(f"Proto_Bush_{i}", 90 + i, m) for i, m in
               enumerate((mat_noise("Plant_Bush", "#3d7a32", "#559a40", scale=3), foliage_dark, foliage_green))]
     ferns = [fern_proto(f"Proto_Fern_{i}", 120 + i) for i in range(2)]
+    ferns.append(leafy_plant_proto("Proto_BigLeaf_Plant", 140))
 
     rnd = random.Random(5)
     W, H = TERRAIN
@@ -1326,11 +1362,15 @@ def build_house():
 def build_house_interior(root, INT, inner, B):
     W, D = W_HOUSE, D_HOUSE
 
+    INFERRED_POS = ("Kang", "Slippers", "Storage_Shelf", "Cupboard", "Lantern")
+
     def obj(name, cn, mats, build, loc=(0, 0, 0), rot=(0, 0, 0), status="observed", note=None, smooth_shade=False):
         bm = bmesh.new()
         build(bm)
         ob = new_obj(name, bm, INT, mats, smooth_shade=smooth_shade, parent=root,
                      props=dict(cn=cn, status=status, note=note))
+        # 位置依据：灶台一侧（冰箱→水盆→灶台→圆窗）的相对顺序来自 U5/U7；炕、储物架、碗柜、马灯靠哪面墙看不到
+        ob["position_status"] = "inferred" if any(k in name for k in INFERRED_POS) else "observed"
         ob.location = (loc[0], loc[1], B + loc[2])
         ob.rotation_euler = rot
         return ob
@@ -1688,90 +1728,195 @@ def build_bears_home():
 
 
 def build_pickup():
+    """光头强的蓝色皮卡，逐部件按第一季第 1 集截图制作（见 REFERENCE_CATALOG.md 第 1 节）。
+    局部坐标：+Y 车头，+X 车身右侧，Z 向上；原点在车底中心的地面上。
+    尺寸为估算：车长约 5.3 m，宽 2.0 m（含轮拱），高 2.3 m，轮胎直径 1.05 m，轴距 3.1 m。"""
     V = COLL["Vehicles"]
     x, y, rot = 41.5, -18.5, math.radians(-100)
     root = empty("Vehicle_Pickup_Root", V, (x, y, ground(x, y)), (0, 0, rot), size=1.5,
                  props=dict(cn="光头强的蓝色皮卡", status="inferred",
-                            note="第一季截图：蓝色四驱皮卡；四季篇是否同一辆车无法确认"))
-    blue = mat("Paint_Pickup_Blue", "#2f63b9", rough=0.35, metal=0.2)
-    dark = mat("Pickup_Chassis_Dark", "#2b2e33", rough=0.6)
-    chrome = mat("Chrome", "#d5dbe0", metal=0.9, rough=0.2)
-    glass = mat("Glass_Car", "#9fc0d4", rough=0.08, transmission=0.6)
-    seat = mat("Seat_Orange", "#d9742c", rough=0.7)
+                            note="各部件按第一季截图（S1E1-18/25/33/39/47/60 等）制作；四季篇是否同一辆车无法确认"))
+    blue = mat_noise("Paint_Pickup_Blue", "#2a58b8", "#3366c4", scale=14, rough=0.35, bump=0.02)
+    blue_dark = mat("Paint_Pickup_Blue_Dark", "#21468f", rough=0.45)
+    dark = mat("Pickup_Chassis_Dark", "#25282c", rough=0.6)
+    chrome = mat("Chrome", "#d5dbe0", metal=0.95, rough=0.15)
+    glass = mat("Glass_Car", "#9fc0d4", rough=0.06, transmission=0.7)
+    seat = mat_noise("Seat_Orange_Cloth", "#c9662a", "#dc7a35", scale=30, rough=0.85, bump=0.05)
     plate = mat("Plate_Yellow", "#f2c521", rough=0.5)
-    tail = mat("Light_Tail_Red", "#d8261e", emit="#ff2010", emit_strength=0.5)
-    head = mat("Light_Head", "#f6f3e4", emit="#fff8e0", emit_strength=0.4)
+    plate_ink = mat("Plate_Ink_Black", "#151515", rough=0.5)
+    amber = mat("Light_Tail_Amber", "#f0a020", emit="#ff9a10", emit_strength=0.3)
+    red = mat("Light_Tail_Red", "#d8261e", emit="#ff2010", emit_strength=0.4)
+    white = mat("Light_Reverse_White", "#f4f4f0", rough=0.2)
+    head = mat("Light_Head", "#f6f3e4", emit="#fff8e0", emit_strength=0.5)
     tire = MATS.get("Rubber_Tire") or mat("Rubber_Tire", "#232426", rough=0.9)
-    rim = mat("Rim_Silver", "#b9c0c6", metal=0.7, rough=0.3)
-    L, Wd = 5.2, 2.0
-    wr = 0.48  # 轮胎半径
-    zb = wr + 0.35  # 底盘高（越野抬高）
+    rim = mat("Rim_Silver_Steel", "#b9c0c6", metal=0.7, rough=0.3)
 
-    def part(name, cn, mats, build, smooth_shade=False):
+    WB, TR, R = 3.1, 0.93, 0.525  # 轴距、轮距半宽、轮胎半径
+    SILL, BELT, ROOF = 1.02, 1.6, 2.28  # 车门下沿、车窗下沿、车顶高度
+    CAB_F, CAB_B = 0.78, -0.48  # 驾驶室前后（风挡根部 / 驾驶室后墙）
+    BED_B = -2.58
+
+    def part(name, cn, mats, build, smooth_shade=False, bevel=0.0, status="observed", note=None, loc=(0, 0, 0), rot=(0, 0, 0)):
         bm = bmesh.new()
         build(bm)
-        return new_obj(name, bm, V, mats, smooth_shade=smooth_shade, parent=root, props=dict(cn=cn, status="inferred"))
+        ob = new_obj(name, bm, V, mats, smooth_shade=smooth_shade, parent=root, props=dict(cn=cn, status=status, note=note))
+        ob.location = loc
+        ob.rotation_euler = rot
+        if bevel:
+            md = ob.modifiers.new("Bevel_Rounded", "BEVEL")
+            md.width = bevel
+            md.segments = 3
+            md.limit_method = "ANGLE"
+            md.harden_normals = False
+        return ob
 
-    def body(bm):
-        bm_cube(bm, (Wd * 0.9, L * 0.95, 0.25), loc=(0, 0, zb), mi=1)  # 车架
-        bm_cube(bm, (Wd, 1.75, 0.7), loc=(0, L / 2 - 0.9, zb + 0.45), mi=0)  # 引擎盖
-        bm_cube(bm, (Wd, 1.7, 0.8), loc=(0, 0.45, zb + 0.5), mi=0)  # 驾驶室下部
-        bm_cube(bm, (Wd * 0.96, 1.45, 0.65), loc=(0, 0.35, zb + 1.22), mi=0)  # 驾驶室上部
-        bm_cube(bm, (Wd * 0.96, 1.5, 0.07), loc=(0, 0.35, zb + 1.57), mi=0)  # 车顶
-        bm_cube(bm, (Wd, 2.2, 0.15), loc=(0, -1.55, zb + 0.18), mi=0)  # 车斗底
-        for sx in (-1, 1):
-            bm_cube(bm, (0.08, 2.2, 0.62), loc=(sx * Wd / 2, -1.55, zb + 0.55), mi=0)
-        bm_cube(bm, (Wd, 0.08, 0.62), loc=(0, -2.62, zb + 0.55), mi=0)
-        # 轮拱
-        for sy in (L / 2 - 1.0, -1.7):
-            for sx in (-1, 1):
-                bm_torus(bm, wr + 0.12, 0.08, loc=(sx * (Wd / 2 + 0.02), sy, wr), rot=(0, math.pi / 2, 0), seg=16, rseg=6,
-                         arc=math.pi, mi=0)
-    pb = part("Vehicle_Pickup_Body", "车身", [blue, dark], body)
-    bv = pb.modifiers.new("Bevel_Rounded", "BEVEL")  # 第一季截图：车身边角圆润
-    bv.width = 0.06
-    bv.segments = 3
-    bv.limit_method = "ANGLE"
-    part("Vehicle_Pickup_Windows", "车窗", [glass], lambda bm: (
-        bm_cube(bm, (Wd * 0.98, 0.04, 0.55), loc=(0, 1.08, zb + 1.2), rot=(-0.35, 0, 0)),
-        bm_cube(bm, (Wd * 0.98, 1.2, 0.5), loc=(0, 0.3, zb + 1.22)),
-        bm_cube(bm, (Wd * 0.9, 0.04, 0.45), loc=(0, -0.38, zb + 1.22))))
-    part("Vehicle_Pickup_Seats", "橙色座椅", [seat], lambda bm: bm_cube(bm, (Wd * 0.85, 0.5, 0.75), loc=(0, 0.0, zb + 0.95)))
-    part("Vehicle_Pickup_Grille_BullBar", "镀铬格栅和护杠", [chrome], lambda bm: (
-        bm_cube(bm, (1.3, 0.05, 0.42), loc=(0, L / 2 - 0.02, zb + 0.5)),
-        [bm_cube(bm, (0.04, 0.07, 0.4), loc=(-0.55 + i * 0.11, L / 2, zb + 0.5)) for i in range(11)],
-        bm_cyl(bm, 0.06, 0.06, Wd * 1.05, loc=(0, L / 2 + 0.25, zb + 0.05), rot=(0, math.pi / 2, 0), seg=10),
-        bm_cyl(bm, 0.05, 0.05, Wd * 0.85, loc=(0, L / 2 + 0.28, zb + 0.6), rot=(0, math.pi / 2, 0), seg=10),
-        [bm_cyl(bm, 0.05, 0.05, 0.6, loc=(sx * 0.6, L / 2 + 0.26, zb + 0.32), seg=8) for sx in (-1, 1)]), smooth_shade=True)
-    part("Vehicle_Pickup_Lights", "车灯", [head, tail], lambda bm: (
-        [bm_cyl(bm, 0.14, 0.14, 0.05, loc=(sx * 0.78, L / 2 + 0.0, zb + 0.58), rot=(math.pi / 2, 0, 0), seg=14, mi=0) for sx in (-1, 1)],
-        [bm_cube(bm, (0.2, 0.05, 0.28), loc=(sx * 0.88, -2.67, zb + 0.6), mi=1) for sx in (-1, 1)]))
-    part("Vehicle_Pickup_Plates", "黄色车牌", [plate], lambda bm: (
-        bm_cube(bm, (0.55, 0.03, 0.17), loc=(0, L / 2 + 0.03, zb + 0.16)),
-        bm_cube(bm, (0.55, 0.03, 0.17), loc=(0, -2.68, zb + 0.3))))
-    part("Vehicle_Pickup_Mirrors", "后视镜", [dark], lambda bm: [
-        bm_cube(bm, (0.08, 0.2, 0.16), loc=(sx * (Wd / 2 + 0.12), 1.05, zb + 1.15)) for sx in (-1, 1)])
-    # 四个独立车轮
-    for wi, (sx, sy) in enumerate(((-1, L / 2 - 1.0), (1, L / 2 - 1.0), (-1, -1.7), (1, -1.7))):
-        bm = bmesh.new()
-        bm_cyl(bm, wr, wr, 0.42, rot=(0, math.pi / 2, 0), seg=20, mi=0)
-        for k in range(16):
-            a = 2 * math.pi * k / 16
-            bm_cube(bm, (0.44, 0.1, 0.06), loc=(0, math.cos(a) * wr, math.sin(a) * wr), rot=(a, 0, 0), mi=0)
-        bm_cyl(bm, wr * 0.55, wr * 0.55, 0.44, rot=(0, math.pi / 2, 0), seg=10, mi=1)
-        ob = new_obj(f"Vehicle_Pickup_Wheel_{['FL', 'FR', 'RL', 'RR'][wi]}", bm, V, [tire, rim], smooth_shade=False, parent=root,
-                     props=dict(cn="越野轮胎（银色轮毂）", status="observed", note="第一季截图：大越野胎、银色轮毂"))
-        ob.location = (sx * (Wd / 2 - 0.05), sy, wr)
-    # 车斗里的原木
-    part("Vehicle_Pickup_Bed_Logs", "车斗里的原木", [MATS["Bark_Log"], MATS["Wood_Cut_End"]], lambda bm: [
-        (bm_cyl(bm, 0.22, 0.22, 2.0, loc=(-0.55 + i * 0.55, -1.55, zb + 0.48), rot=(math.pi / 2, 0, 0), seg=10, mi=0)) for i in range(3)])
+    def tubes(bm, segs, r, mi=0):
+        for a, b in segs:
+            bm_tube(bm, [a, b], [r, r], seg=10, mi=mi)
+
+    # 车架、车桥、油箱（抬高底盘下可见）
+    part("Vehicle_Pickup_Chassis", "车架和车桥（抬高底盘）", [dark], lambda bm: (
+        [bm_cube(bm, (0.14, 5.0, 0.18), loc=(sx * 0.55, -0.1, 0.82)) for sx in (-1, 1)],
+        [bm_cube(bm, (1.2, 0.12, 0.14), loc=(0, yy, 0.82)) for yy in (2.0, 0.6, -1.0, -2.3)],
+        [bm_cyl(bm, 0.09, 0.09, 2 * TR - 0.3, loc=(0, yy, R), rot=(0, math.pi / 2, 0), seg=10) for yy in (WB / 2, -WB / 2)],
+        [bm_cyl(bm, 0.06, 0.06, 0.5, loc=(sx * 0.55, yy, R + 0.2), rot=(0, 0, 0), seg=8) for sx in (-1, 1) for yy in (WB / 2, -WB / 2)],
+        bm_cube(bm, (0.6, 0.7, 0.3), loc=(0.55, -0.9, 0.85))), status="inferred", note="车底细节剧照看不清")
+    # 车头：引擎盖 + 前翼子板（圆润）
+    part("Vehicle_Pickup_Body_Front", "车头（引擎盖、翼子板）", [blue], lambda bm: (
+        bm_cube(bm, (1.82, 2.4 - CAB_F + 0.05, 0.58), loc=(0, (CAB_F + 2.4) / 2, SILL + 0.27)),
+        bm_cube(bm, (1.7, 0.4, 0.12), loc=(0, 2.25, SILL + 0.6), rot=(0.12, 0, 0))), bevel=0.09, note="S1E1-25：圆润的长车头")
+    # 驾驶室下半（车门以外的部分）和车顶、立柱
+    part("Vehicle_Pickup_Cab_Body", "驾驶室车身", [blue], lambda bm: (
+        bm_cube(bm, (1.82, 0.12, BELT - SILL + 0.05), loc=(0, CAB_F - 0.02, (SILL + BELT) / 2)),
+        bm_cube(bm, (1.82, 0.12, BELT - SILL + 0.05), loc=(0, CAB_B + 0.06, (SILL + BELT) / 2)),
+        bm_cube(bm, (1.7, CAB_F - CAB_B - 0.35, 0.08), loc=(0, (CAB_F + CAB_B) / 2 - 0.15, ROOF - 0.04)),
+        [bm_tube(bm, [(sx * 0.86, CAB_F, BELT), (sx * 0.83, CAB_F - 0.42, ROOF - 0.04)], [0.05, 0.05], seg=8) for sx in (-1, 1)],
+        [bm_cube(bm, (0.08, 0.14, ROOF - BELT), loc=(sx * 0.85, CAB_B + 0.08, (BELT + ROOF) / 2)) for sx in (-1, 1)],
+        [bm_cube(bm, (0.06, 0.06, ROOF - BELT), loc=(sx * 0.85, CAB_F - 0.75, (BELT + ROOF) / 2)) for sx in (-1, 1)],
+        bm_cube(bm, (1.82, 0.06, ROOF - BELT), loc=(0, CAB_B + 0.03, (BELT + ROOF) / 2))), bevel=0.04,
+        note="S1E1-41/42：平车顶；S1E1-20：侧窗与三角窗")
+    # 车窗玻璃：前风挡、侧窗、三角窗、后窗
+    part("Vehicle_Pickup_Glass", "车窗玻璃", [glass], lambda bm: (
+        bm_cube(bm, (1.62, 0.02, 0.78), loc=(0, CAB_F - 0.21, (BELT + ROOF) / 2), rot=(-0.5, 0, 0)),
+        [bm_cube(bm, (0.02, CAB_F - CAB_B - 0.55, ROOF - BELT - 0.08), loc=(sx * 0.855, (CAB_F + CAB_B) / 2 - 0.12, (BELT + ROOF) / 2 - 0.02)) for sx in (-1, 1)],
+        bm_cube(bm, (1.5, 0.02, 0.5), loc=(0, CAB_B, BELT + 0.35))), note="S1E1-20/33")
+    # 车门（左右各一，可单独打开）：门板、镀铬把手、下部饰条
+    for sx, sn in ((-1, "Left"), (1, "Right")):
+        part(f"Vehicle_Pickup_Door_{sn}", "车门（原点在铰链，可绕 Z 轴打开）", [blue, chrome, dark], lambda bm, sx=sx: (
+            bm_cube(bm, (0.06, 1.1, BELT - SILL), loc=(0, -0.55, (BELT + SILL) / 2 - SILL), mi=0),
+            bm_cube(bm, (0.03, 0.22, 0.05), loc=(sx * 0.04, -0.9, BELT - SILL - 0.12), mi=1),
+            bm_cube(bm, (0.02, 1.08, 0.035), loc=(sx * 0.035, -0.55, 0.15), mi=1),
+            bm_cube(bm, (0.012, 0.012, BELT - SILL), loc=(sx * 0.035, -1.09, (BELT - SILL) / 2), mi=2)),
+            bevel=0.025, note="S1E1-19：镀铬门把手、车门下部横饰条", loc=(sx * 0.92, CAB_F - 0.06, SILL))
+    # 车斗：底板、侧板、前板、边沿、绳钩；尾门单独
+    def bed(bm):
+        L = CAB_B - 0.1 - BED_B
+        yc = (CAB_B - 0.1 + BED_B) / 2
+        bm_cube(bm, (1.82, L, 0.12), loc=(0, yc, SILL + 0.06), mi=0)
+        for sxx in (-1, 1):
+            bm_cube(bm, (0.07, L, 0.6), loc=(sxx * 0.875, yc, SILL + 0.36), mi=0)
+            bm_cube(bm, (0.14, L, 0.05), loc=(sxx * 0.87, yc, SILL + 0.68), mi=1)
+            for k in range(5):
+                bm_torus(bm, 0.035, 0.008, loc=(sxx * 0.95, yc - L / 2 + 0.25 + k * (L - 0.5) / 4, SILL + 0.6), rot=(0, math.pi / 2, 0), seg=10, rseg=4, mi=2)
+        bm_cube(bm, (1.82, 0.07, 0.6), loc=(0, CAB_B - 0.12, SILL + 0.36), mi=0)
+    part("Vehicle_Pickup_Bed", "车斗（带绳钩）", [blue, blue_dark, chrome], bed, bevel=0.03, note="S1E1-49/51：车斗边沿一排绳钩")
+    part("Vehicle_Pickup_Tailgate", "尾门（带镀铬把手）", [blue, chrome], lambda bm: (
+        bm_cube(bm, (1.72, 0.07, 0.6), loc=(0, 0, 0.3), mi=0),
+        bm_cube(bm, (0.32, 0.03, 0.08), loc=(0, -0.05, 0.47), mi=1)), bevel=0.02, note="S1E1-47：尾门中间镀铬把手",
+        loc=(0, BED_B + 0.04, SILL + 0.06))
+    # 轮拱（外扩）
+    def arches(bm):
+        for yy in (WB / 2, -WB / 2):
+            for sxx in (-1, 1):
+                bm_torus(bm, R + 0.1, 0.1, loc=(sxx * 0.93, yy, R + 0.02), rot=(0, math.pi / 2, 0), seg=18, rseg=6, arc=math.pi, mi=0,
+                         scale=(1.0, 1.0, 1.4))
+    part("Vehicle_Pickup_Fender_Flares", "外扩轮拱", [blue], arches, smooth_shade=True, note="S1E1-27")
+    # 车头：镀铬竖条格栅、方形大灯、前保险杠、护杠、前车牌
+    def front(bm):
+        yf = 2.42
+        bm_cube(bm, (1.1, 0.06, 0.44), loc=(0, yf, SILL + 0.3), mi=0)
+        for i in range(11):
+            bm_cube(bm, (0.035, 0.06, 0.38), loc=(-0.5 + i * 0.1, yf + 0.03, SILL + 0.3), mi=1)
+        for sxx in (-1, 1):
+            bm_cube(bm, (0.32, 0.06, 0.22), loc=(sxx * 0.74, yf, SILL + 0.33), mi=0)
+            bm_cube(bm, (0.27, 0.02, 0.17), loc=(sxx * 0.74, yf + 0.035, SILL + 0.33), mi=2)
+        bm_cube(bm, (1.96, 0.22, 0.22), loc=(0, yf + 0.12, SILL - 0.06), mi=3)
+        bm_cube(bm, (0.5, 0.02, 0.15), loc=(0, yf + 0.235, SILL - 0.06), mi=4)
+    part("Vehicle_Pickup_Front_Grille_Lights_Bumper", "镀铬格栅、方形大灯、前保险杠、黄色前车牌", [chrome, MATS.get("Chrome_Bars") or chrome, head, dark, plate],
+         front, bevel=0.015, note="S1E1-18/25")
+    part("Vehicle_Pickup_Bull_Bar", "镀铬护杠", [chrome], lambda bm: tubes(bm, [
+        ((-0.5, 2.68, SILL - 0.1), (-0.5, 2.68, SILL + 0.55)), ((0.5, 2.68, SILL - 0.1), (0.5, 2.68, SILL + 0.55)),
+        ((-0.62, 2.66, SILL + 0.55), (0.62, 2.66, SILL + 0.55)), ((-0.85, 2.62, SILL + 0.2), (0.85, 2.62, SILL + 0.2)),
+        ((-0.5, 2.68, SILL - 0.1), (-0.5, 2.5, SILL - 0.1)), ((0.5, 2.68, SILL - 0.1), (0.5, 2.5, SILL - 0.1))], 0.045),
+        smooth_shade=True, note="S1E1-25：格栅前竖管 + 横管护杠")
+    # 车尾：竖条组合尾灯（上琥珀、红、白、红）、后保险杠、后车牌
+    def rear(bm):
+        yb = BED_B + 0.0
+        for sxx in (-1, 1):
+            for k, mi in enumerate((0, 1, 2, 1)):
+                bm_cube(bm, (0.1, 0.05, 0.12), loc=(sxx * 0.86, yb - 0.01, SILL + 0.62 - k * 0.13), mi=mi)
+        bm_cube(bm, (1.9, 0.2, 0.18), loc=(0, yb - 0.1, SILL - 0.08), mi=3)
+        bm_cube(bm, (0.5, 0.02, 0.15), loc=(0, yb - 0.025, SILL + 0.17), mi=4)
+    part("Vehicle_Pickup_Rear_Lights_Bumper", "竖条组合尾灯、后保险杠、黄色后车牌", [amber, red, white, dark, plate], rear, bevel=0.01,
+         note="S1E1-35/40/47")
+    # 车牌文字 “Y2 MMK”（S1E1-33/47）
+    fc = bpy.data.curves.new("Vehicle_Pickup_Plate_Text", "FONT")
+    fc.body = "Y2 MMK"
+    fc.size = 0.085
+    fc.align_x = "CENTER"
+    fc.align_y = "CENTER"
+    fc.extrude = 0.004
+    fc.materials.append(plate_ink)
+    to = bpy.data.objects.new("Vehicle_Pickup_Plate_Text", fc)
+    V.objects.link(to)
+    to.parent = root
+    to.location = (0, BED_B - 0.04, SILL + 0.17)
+    to.rotation_euler = (math.pi / 2, 0, 0)  # 字面朝车尾（-Y），从车后看是正读
+    tag(to, cn="后车牌文字 Y2 MMK", status="observed", note="S1E1-33/47")
+    # 侧踏杠、后视镜
+    part("Vehicle_Pickup_Side_Steps", "镀铬侧踏杠", [chrome], lambda bm: (
+        tubes(bm, [((sxx * 1.0, -0.4, 0.86), (sxx * 1.0, 0.75, 0.86)) for sxx in (-1, 1)], 0.04),
+        tubes(bm, [((sxx * 1.0, yy, 0.86), (sxx * 0.75, yy, 0.86)) for sxx in (-1, 1) for yy in (-0.3, 0.65)], 0.025)),
+        smooth_shade=True, note="S1E1-39/43")
+    part("Vehicle_Pickup_Mirrors", "方形大后视镜（镀铬支架）", [chrome, dark, glass], lambda bm: [
+        (bm_tube(bm, [(sxx * 0.9, CAB_F - 0.08, BELT + 0.05), (sxx * 1.08, CAB_F - 0.05, BELT + 0.12)], [0.02, 0.02], seg=6, mi=0),
+         bm_cube(bm, (0.05, 0.16, 0.26), loc=(sxx * 1.12, CAB_F - 0.05, BELT + 0.2), mi=1),
+         bm_cube(bm, (0.01, 0.13, 0.22), loc=(sxx * 1.12 + sxx * -0.03, CAB_F - 0.05, BELT + 0.2), mi=2)) for sxx in (-1, 1)],
+        note="S1E1-20")
+    # 车内：橙色座椅（带头枕）、方向盘、仪表台
+    part("Vehicle_Pickup_Interior", "车内：橙色座椅、方向盘、仪表台", [seat, dark], lambda bm: (
+        bm_cube(bm, (1.55, 0.55, 0.18), loc=(0, CAB_B + 0.45, SILL + 0.38), mi=0),
+        bm_cube(bm, (1.55, 0.16, 0.6), loc=(0, CAB_B + 0.18, SILL + 0.72), mi=0),
+        [bm_cube(bm, (0.32, 0.12, 0.22), loc=(sxx * 0.4, CAB_B + 0.18, SILL + 1.13), mi=0) for sxx in (-1, 1)],
+        bm_cube(bm, (1.6, 0.35, 0.22), loc=(0, CAB_F - 0.12, BELT - 0.05), mi=1),
+        bm_torus(bm, 0.18, 0.025, loc=(-0.4, CAB_F - 0.4, BELT + 0.02), rot=(1.1, 0, 0), seg=20, rseg=6, mi=1),
+        bm_cyl(bm, 0.03, 0.03, 0.4, loc=(-0.4, CAB_F - 0.25, BELT - 0.05), rot=(1.1, 0, 0), seg=6, mi=1)), bevel=0.03,
+        note="S1E1-24：橙色布座椅、黑色方向盘")
+    # 四个车轮：花纹越野胎 + 8 孔银色钢圈
+    for wi, (sx, sy) in enumerate(((-1, WB / 2), (1, WB / 2), (-1, -WB / 2), (1, -WB / 2))):
+        def wheel(bm, sx=sx):
+            bm_cyl(bm, R - 0.04, R - 0.04, 0.42, rot=(0, math.pi / 2, 0), seg=28, mi=0)
+            bm_torus(bm, R - 0.1, 0.1, rot=(0, math.pi / 2, 0), loc=(0.12, 0, 0), seg=28, rseg=8, mi=0)
+            bm_torus(bm, R - 0.1, 0.1, rot=(0, math.pi / 2, 0), loc=(-0.12, 0, 0), seg=28, rseg=8, mi=0)
+            for k in range(22):
+                a = 2 * math.pi * k / 22
+                for side in (-1, 1):
+                    off = 0.1 * side + (0.04 if k % 2 else -0.04)
+                    bm_cube(bm, (0.15, 0.16, 0.07), loc=(off, math.cos(a) * (R - 0.02), math.sin(a) * (R - 0.02)), rot=(a + math.pi / 2, 0, 0), mi=0)
+            bm_cyl(bm, 0.31, 0.31, 0.43, rot=(0, math.pi / 2, 0), seg=24, mi=1)
+            bm_cyl(bm, 0.09, 0.07, 0.48, rot=(0, math.pi / 2, 0), seg=12, mi=1)
+            for k in range(8):
+                a = 2 * math.pi * k / 8
+                bm_cyl(bm, 0.035, 0.035, 0.44, loc=(0, math.cos(a) * 0.2, math.sin(a) * 0.2), rot=(0, math.pi / 2, 0), seg=8, mi=2)
+        part(f"Vehicle_Pickup_Wheel_{['FL', 'FR', 'RL', 'RR'][wi]}", "越野花纹轮胎 + 8 孔银色钢圈", [tire, rim, dark], wheel,
+             smooth_shade=True, note="S1E1-39：大越野胎、8 孔银色钢圈", loc=(sx * TR, sy, R))
 
 
 # ------------------------------------------------------------------------------------------------
 # 阶段 5：角色
 
 
-def mat_fur_patch(name, fur, patch, kind, oval=(0.0, 0.82, 0.47, 0.5), front_y=-0.12):
+def mat_fur_patch(name, fur, patch, kind, oval=(0.0, 0.82, 0.47, 0.5), front_y=-0.12, swirl=False):
     """毛色分区材质：用物体坐标在着色器里画出平滑边界的色块。
     kind='bib'：熊大胸前的 V 字；kind='belly'：熊二的椭圆肚皮。坐标与角色身体网格一致（正面为 -Y）。"""
     if name in MATS:
@@ -1806,10 +1951,10 @@ def mat_fur_patch(name, fur, patch, kind, oval=(0.0, 0.82, 0.47, 0.5), front_y=-
     X, Y, Z = sep.outputs["X"], sep.outputs["Y"], sep.outputs["Z"]
     front = soft(math_node("SUBTRACT", front_y, Y), 0.04)  # y < front_y
     if kind == "bib":
-        # |x| < 0.05 + 0.34 * (z - 0.74)，且 0.74 < z < 1.72
-        lim = math_node("ADD", math_node("MULTIPLY", math_node("SUBTRACT", Z, 0.74), 0.34), 0.05)
+        # |x| < 0.05 + 0.4 * (z - 0.62)，且 0.62 < z < 1.74（S1E1-10/11/62：白色 V 字从脖子到肚子）
+        lim = math_node("ADD", math_node("MULTIPLY", math_node("SUBTRACT", Z, 0.62), 0.4), 0.05)
         v = soft(math_node("SUBTRACT", lim, math_node("ABSOLUTE", X)), 0.012)
-        top = soft(math_node("SUBTRACT", 1.72, Z), 0.02)
+        top = soft(math_node("SUBTRACT", 1.74, Z), 0.02)
         mask = math_node("MULTIPLY", math_node("MULTIPLY", v, top), front)
     else:
         # (x/0.47)^2 + ((z-0.82)/0.5)^2 < 1
@@ -1823,7 +1968,24 @@ def mat_fur_patch(name, fur, patch, kind, oval=(0.0, 0.82, 0.47, 0.5), front_y=-
     mix.inputs["A"].default_value = srgb(fur)
     mix.inputs["B"].default_value = srgb(patch)
     links.new(mask, mix.inputs["Factor"])
-    links.new(mix.outputs["Result"], b.inputs["Base Color"])
+    out = mix.outputs["Result"]
+    if swirl:
+        # S1E1-13/23/44：熊二身上一圈圈的弧形毛纹
+        wv = nodes.new("ShaderNodeTexWave")
+        wv.wave_type = "RINGS"
+        wv.inputs["Scale"].default_value = 5.0
+        wv.inputs["Distortion"].default_value = 1.5
+        links.new(tc.outputs["Object"], wv.inputs["Vector"])
+        mr = nodes.new("ShaderNodeMapRange")
+        mr.inputs["To Min"].default_value = 0.86
+        mr.inputs["To Max"].default_value = 1.0
+        links.new(wv.outputs["Fac"], mr.inputs["Value"])
+        mul = nodes.new("ShaderNodeVectorMath")
+        mul.operation = "SCALE"
+        links.new(out, mul.inputs[0])
+        links.new(mr.outputs["Result"], mul.inputs["Scale"])
+        out = mul.outputs["Vector"]
+    links.new(out, b.inputs["Base Color"])
     _set(b, "Roughness", 0.75)
     m.diffuse_color = srgb(fur)
     MATS[name] = m
@@ -1881,7 +2043,7 @@ def bear(name_en, cn, C, pos, rot, fur, fur_dark, bib, belly, muzzle, nose, plum
             if not bib and c.z < 0.45 and math.hypot(c.x * 1.15, (c.z + 0.1) * 0.85) < 0.62:
                 return 1
         return 0
-    body_mat = mat_fur_patch(f"{name_en}_Fur_With_{'Bib' if bib else 'Belly'}", fur, bib or belly, "bib" if bib else "belly")
+    body_mat = mat_fur_patch(f"{name_en}_Fur_With_{'Bib' if bib else 'Belly'}", fur, bib or belly, "bib" if bib else "belly", swirl=not bib)
     part_blob(root, C, f"{name_en}_Body", "身体（梨形，胸前毛色分区）", [body_mat], (rx, ry, rz), (0, 0, 1.0), deform=lambda co: Vector((co.x * (1 + 0.16 * -co.z), co.y * (1 + 0.12 * -co.z), co.z)),
               seg=48, rings=32)
     hz = 1.68
@@ -1916,7 +2078,7 @@ def guangtouqiang(C, pos, rot):
                  props=dict(cn="光头强（四季篇造型）", status="observed",
                             note="U3/U4 + 四季篇海报：护耳棉帽、深蓝外衣、毛边短夹克、紫色白条运动裤；高 1.55 m（估算）"))
     M = char_mats("GuangtouQiang", dict(Skin="#eab68c", Nose="#d9483d", Sweater="#26305f", Vest="#b98242", Trim="#ecdcb8",
-                                        Pants="#4a3577", Stripe="#eeeeee", Shoe="#1c1a1a", Belt="#6b2a24", Hat="#8d6648",
+                                        Pants="#5b3f93", Stripe="#eeeeee", Shoe="#1c1a1a", Belt="#6b2a24", Hat="#8d6648",
                                         HatLight="#a98163", Brow="#3a2618", **EYE))
     for s, sn in ((-1, "L"), (1, "R")):
         part_limb(root, C, f"GuangtouQiang_Leg_{sn}", "裤腿（紫色运动裤）", [M["Pants"]], (s * 0.1, 0, 0.78), (s * 0.11, 0, 0.12), 0.075, 0.062)
@@ -1936,9 +2098,9 @@ def guangtouqiang(C, pos, rot):
                  props=dict(cn="黄棕色毛边短夹克"))
     sd = ob.modifiers.new("Solidify", "SOLIDIFY")
     sd.thickness = 0.02
-    for nm, loc, R, sc in (("Collar", (0, 0, 1.2), 0.15, (1.0, 0.85, 1)), ("Hem", (0, 0, 0.8), 0.19, (1.05, 0.78, 1))):
+    for nm, loc, R, r, sc in (("Collar", (0, 0, 1.19), 0.135, 0.028, (1.0, 0.8, 1)), ("Hem", (0, 0, 0.82), 0.185, 0.022, (1.0, 0.76, 1))):
         bm = bmesh.new()
-        bm_torus(bm, R, 0.03, loc=loc, seg=22, rseg=8, scale=sc)
+        bm_torus(bm, R, r, loc=loc, seg=22, rseg=8, scale=sc)
         new_obj(f"GuangtouQiang_Fur_Trim_{nm}", bm, C, [M["Trim"]], smooth_shade=True, parent=root, props=dict(cn="奶白色毛边"))
     for s, sn in ((-1, "L"), (1, "R")):
         sh = Vector((s * 0.21, 0, 1.16))
@@ -2012,8 +2174,9 @@ def luobotou(C, pos, rot):
     part_blob(root, C, "LuoBoTou_Body", "身体（棕色，奶白肚皮）",
               [mat_fur_patch("LuoBoTou_Brown_With_Belly", "#94653a", "#efdcb4", "oval", oval=(0, 0.24, 0.13, 0.22), front_y=-0.04)],
               (0.17, 0.15, 0.23), (0, 0, 0.25))
-    part_blob(root, C, "LuoBoTou_Head", "宽脸（大片奶白色）", [M["Brown"], M["Cream"]], (0.17, 0.15, 0.13), (0, -0.02, 0.53),
-              region=lambda c: 1 if c.y < 0.0 and c.z < 0.55 - abs(c.x) * 0.4 else 0)
+    part_blob(root, C, "LuoBoTou_Head", "宽脸（大片奶白色）",
+              [mat_fur_patch("LuoBoTou_Head_Brown_With_Face", "#94653a", "#efdcb4", "oval", oval=(0, 0.5, 0.16, 0.1), front_y=-0.04)],
+              (0.17, 0.15, 0.13), (0, -0.02, 0.53), seg=32, rings=22)
     part_blob(root, C, "LuoBoTou_Nose", "粉鼻子", [M["Nose"]], (0.035, 0.025, 0.025), (0, -0.17, 0.53), subsurf=1)
     part_blob(root, C, "LuoBoTou_Teeth", "大门牙", [M["Teeth"]], (0.03, 0.01, 0.035), (0, -0.155, 0.45), subsurf=0)
     eyes_pair(root, C, "LuoBoTou", M, 0.055, -0.12, 0.58, 0.03)
@@ -2032,8 +2195,10 @@ def bengbeng(C, pos, rot):
     part_blob(root, C, "BengBeng_Body", "身体（橙色，奶黄肚皮）",
               [mat_fur_patch("BengBeng_Orange_With_Belly", "#c8642c", "#f2d892", "oval", oval=(0, 0.17, 0.075, 0.14), front_y=-0.02)],
               (0.1, 0.09, 0.15), (0, 0, 0.17))
-    part_blob(root, C, "BengBeng_Head", "头", [M["Orange"], M["Cream"], M["Top"]], (0.11, 0.1, 0.1), (0, -0.01, 0.38),
-              region=lambda c: 2 if c.z > 0.5 else (1 if c.y < -0.1 and c.z < 0.35 else 0))
+    part_blob(root, C, "BengBeng_Head", "头（橙色，奶黄脸）",
+              [mat_fur_patch("BengBeng_Head_Orange_With_Face", "#c8642c", "#f2d892", "oval", oval=(0, 0.355, 0.085, 0.06), front_y=-0.03)],
+              (0.11, 0.1, 0.1), (0, -0.01, 0.38), seg=32, rings=22)
+    part_blob(root, C, "BengBeng_Head_Top", "头顶红棕色毛", [M["Top"]], (0.095, 0.085, 0.045), (0, 0.0, 0.445), subsurf=1)
     part_blob(root, C, "BengBeng_Snout", "口鼻", [M["Cream"]], (0.06, 0.05, 0.045), (0, -0.09, 0.35), subsurf=1)
     part_blob(root, C, "BengBeng_Teeth", "大门牙", [M["Teeth"]], (0.025, 0.008, 0.03), (0, -0.13, 0.31), subsurf=0)
     eyes_pair(root, C, "BengBeng", M, 0.045, -0.08, 0.42, 0.035, iris=M["Iris"])
@@ -2041,12 +2206,16 @@ def bengbeng(C, pos, rot):
         part_blob(root, C, f"BengBeng_Ear_{sn}", "棕色耳朵", [M["Top"]], (0.025, 0.015, 0.045), (s * 0.07, 0, 0.48), rot=(0, s * 0.35, 0), subsurf=1)
         part_limb(root, C, f"BengBeng_Arm_{sn}", "手臂", [M["Orange"]], (s * 0.08, -0.03, 0.25), (s * 0.11, -0.07, 0.15), 0.02, 0.016)
         part_blob(root, C, f"BengBeng_Foot_{sn}", "脚", [M["Orange"]], (0.03, 0.05, 0.02), (s * 0.05, -0.03, 0.02), subsurf=1)
-    # 大尾巴：一串球，棕色夹奶白色条纹
-    for i in range(8):
-        t = i / 7
-        part_blob(root, C, f"BengBeng_Tail_{i}", "棕色条纹大尾巴", [M["Cream"] if i % 3 == 1 else M["TailBrown"]],
-                  (0.08 + t * 0.03, 0.08 + t * 0.03, 0.08), (0, 0.12 + math.sin(t * 1.6) * 0.18 - t * t * 0.1, 0.12 + math.sin(t * 2.7) * 0.4),
-                  seg=12, rings=8, subsurf=1)
+    # 大尾巴：从身后向上弯起、尾尖向前卷的一整条蓬松尾巴，棕色夹浅色横纹（立绘、S1E1-78–81）
+    tail_m = mat_stripes("BengBeng_Tail_Striped", "#6c4630", "#d9bf86", scale=4.0, axis="Z")
+    cr = [n for n in tail_m.node_tree.nodes if n.type == "VALTORGB"][0].color_ramp
+    cr.interpolation = "EASE"
+    cr.elements[0].position = 0.84
+    cr.elements[1].position = 0.93
+    bm = bmesh.new()
+    bm_tube(bm, [(0, 0.07, 0.1), (0, 0.17, 0.14), (0, 0.27, 0.26), (0, 0.3, 0.42), (0, 0.25, 0.55), (0, 0.15, 0.6), (0, 0.09, 0.56)],
+            [0.035, 0.07, 0.11, 0.125, 0.115, 0.09, 0.05], seg=14)
+    new_obj("BengBeng_Tail", bm, C, [tail_m], smooth_shade=True, subsurf=2, parent=root, props=dict(cn="棕色条纹大尾巴"))
     return root
 
 
@@ -2155,6 +2324,61 @@ def build_lights_cameras():
         (bx, by, ground(bx, by) + 0.35), 40)
     cam("Cam_Pickup_Yard", "院子和皮卡", (hx + 16, hy + 10, gz + 3.5), (hx + 6, hy + 8, gz + 1.0), 28)
     bpy.context.scene.camera = ov
+    build_check_cameras()
+
+
+def build_check_cameras():
+    """正交检查相机：每个人物正/侧/背，皮卡和木屋四视图，室内平面，地图俯视。
+    相机的裁剪范围只包住目标物体，所以近处的树不会挡住画面。渲染用 render_checks.py。"""
+    CC = coll("Check_Cameras", COLL["Lights_and_Cameras"])
+
+    def ortho(name, cn, target, direction, dist, scale, clip_half, res):
+        cd = bpy.data.cameras.new(name)
+        cd.type = "ORTHO"
+        cd.ortho_scale = scale
+        cd.clip_start = max(0.05, dist - clip_half)
+        cd.clip_end = dist + clip_half
+        co = bpy.data.objects.new(name, cd)
+        CC.objects.link(co)
+        d = Vector(direction).normalized()
+        co.location = Vector(target) + d * dist
+        if abs(d.z) > 0.99:
+            co.rotation_euler = (0, 0, 0) if d.z > 0 else (math.pi, 0, 0)
+        else:
+            look_at(co, target)
+        co["name_cn"] = cn
+        co["check_res"] = res
+        return co
+
+    def views(root_name, label, h, width, clip_half, kinds=("Front", "Side", "Back"), res="700x900"):
+        r = bpy.data.objects[root_name]
+        rz = r.rotation_euler.z
+        fwd = Matrix.Rotation(rz, 3, "Z") @ Vector((0, -1, 0))  # 角色正面 = 局部 -Y
+        right = Matrix.Rotation(rz, 3, "Z") @ Vector((1, 0, 0))
+        tgt = r.location + Vector((0, 0, h / 2))
+        dirs = {"Front": fwd, "Side": right, "Back": -fwd, "Left": -right, "Top": Vector((0, 0, 1))}
+        names = {"Front": "正面", "Side": "侧面", "Back": "背面", "Left": "另一侧", "Top": "俯视"}
+        for k in kinds:
+            ortho(f"Check_{label}_{k}", f"{r.get('name_cn', label)} {names[k]}", tgt if k != "Top" else r.location,
+                  dirs[k], 30 if k == "Top" else max(8, clip_half + 4), max(h, width) * 1.25, clip_half if k != "Top" else 31, res)
+    for root_name, label, h, w, c in (("XiongDa_Root", "XiongDa", 2.05, 1.7, 1.3), ("XiongEr_Root", "XiongEr", 2.05, 1.9, 1.3),
+                                       ("GuangtouQiang_Root", "GuangtouQiang", 1.7, 0.9, 0.6), ("TuTu_Root", "TuTu", 0.6, 0.5, 0.33),
+                                       ("LuoBoTou_Root", "LuoBoTou", 0.7, 0.5, 0.33), ("BengBeng_Root", "BengBeng", 0.66, 0.6, 0.6)):
+        views(root_name, label, h, w, c)
+    views("Vehicle_Pickup_Root", "Pickup", 2.4, 5.6, 3.2, kinds=("Front", "Side", "Back", "Top"), res="1000x700")
+    # 皮卡正面 = 局部 +Y：把 Front/Back 对调
+    for a, b in (("Check_Pickup_Front", "Check_Pickup_Back_tmp"), ("Check_Pickup_Back", "Check_Pickup_Front"), ("Check_Pickup_Back_tmp", "Check_Pickup_Back")):
+        bpy.data.objects[a].name = b
+    for n, cn in (("Check_Pickup_Front", "皮卡 正面"), ("Check_Pickup_Back", "皮卡 车尾"), ("Check_Pickup_Side", "皮卡 侧面"), ("Check_Pickup_Top", "皮卡 俯视")):
+        bpy.data.objects[n]["name_cn"] = cn
+    views("GQ_House_Root", "House", 5.4, 10.5, 6.5, kinds=("Front", "Side", "Back", "Top"), res="1100x700")
+    for a, b in (("Check_House_Front", "Check_House_Back_tmp"), ("Check_House_Back", "Check_House_Front"), ("Check_House_Back_tmp", "Check_House_Back")):
+        bpy.data.objects[a].name = b
+    for n, cn in (("Check_House_Front", "木屋 正面"), ("Check_House_Back", "木屋 背面"), ("Check_House_Side", "木屋 侧面（东）"), ("Check_House_Top", "木屋 俯视")):
+        bpy.data.objects[n]["name_cn"] = cn
+    hr = bpy.data.objects["GQ_House_Root"]
+    ortho("Check_House_Interior_Plan", "木屋室内平面（隐藏屋顶）", hr.location + Vector((0, 0, 1.0)), (0, 0, 1), 12, 10.5, 10.6, "1100x800")
+    ortho("Check_Map_Top", "地图俯视", (0, 0, 0), (0, 0, 1), 260, 205, 300, "1400x1050")
 
 
 # ------------------------------------------------------------------------------------------------
@@ -2225,6 +2449,19 @@ def finalize_and_save():
         pass
     COLL["Prototypes_Hidden"].hide_render = True
     COLL["Prototypes_Hidden"].hide_viewport = True
+    # Inferred_Models 只是“推测模型”的选择清单：从视图层排除，避免物体经由它被重复显示，
+    # 这样在大纲里隐藏某个集合（例如可拆屋顶）时，它的物体会真正隐藏。
+    def _layer(lc, name):
+        if lc.collection.name == name:
+            return lc
+        for ch in lc.children:
+            r = _layer(ch, name)
+            if r:
+                return r
+    for n in ("Inferred_Models", "Prototypes_Hidden"):
+        lc = _layer(bpy.context.view_layer.layer_collection, n)
+        if lc:
+            lc.exclude = True
     os.makedirs(os.path.dirname(os.path.abspath(OUT_BLEND)), exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(OUT_BLEND), compress=True)
     print("SAVED", OUT_BLEND)
