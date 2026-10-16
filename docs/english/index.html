@@ -2,121 +2,175 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>English Check-in</title>
+<meta name="claude:viewport-fit-sides" content="cover">
 <style>
+  /* Layout: a daily study log; the selected day on the left, calendar and history on the right. */
   :root {
-    --bg: #f6f4ef;
+    --bg: #f3f5f7;
     --card: #ffffff;
-    --ink: #1f2328;
-    --muted: #6b7078;
-    --line: #e4e0d8;
-    --accent: #2f6fdb;
+    --ink: #1c2330;
+    --muted: #677184;
+    --line: #dfe4ea;
+    --field: #f7f9fb;
+    --accent: #2d62c9;
+    --accent-soft: #e3ebfa;
     --accent-ink: #ffffff;
-    --good: #2e9a5b;
-    --good-soft: #d5efdf;
-    --part: #e7b43c;
-    --part-soft: #f8ecc9;
-    --danger: #c8443a;
-    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
+    --good: #23885a;
+    --good-soft: #d9f0e3;
+    --part: #b98512;
+    --part-soft: #f6ead0;
+    --danger: #c0392f;
+    --shadow: 0 1px 2px rgba(20, 30, 50, .05), 0 4px 16px rgba(20, 30, 50, .04);
+    --font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #15171b; --card: #1e2127; --ink: #e8e9ec; --muted: #9aa0a9; --line: #2e323a;
-      --accent: #5b8ff0; --accent-ink: #0d1117; --good: #4cc27f; --good-soft: #1f3a2b;
-      --part: #e7b43c; --part-soft: #3d3420; --danger: #e86a5f; --shadow: none;
+      --bg: #13161c; --card: #1c2028; --ink: #e6e9ee; --muted: #98a1b0; --line: #2c323d; --field: #161a21;
+      --accent: #6c9bf2; --accent-soft: #22304a; --accent-ink: #0c1220; --good: #4cc286; --good-soft: #1b3428;
+      --part: #e0b04a; --part-soft: #382f1c; --danger: #ec6e63; --shadow: none; color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #15171b; --card: #1e2127; --ink: #e8e9ec; --muted: #9aa0a9; --line: #2e323a;
-    --accent: #5b8ff0; --accent-ink: #0d1117; --good: #4cc27f; --good-soft: #1f3a2b;
-    --part: #e7b43c; --part-soft: #3d3420; --danger: #e86a5f; --shadow: none;
+    --bg: #13161c; --card: #1c2028; --ink: #e6e9ee; --muted: #98a1b0; --line: #2c323d; --field: #161a21;
+    --accent: #6c9bf2; --accent-soft: #22304a; --accent-ink: #0c1220; --good: #4cc286; --good-soft: #1b3428;
+    --part: #e0b04a; --part-soft: #382f1c; --danger: #ec6e63; --shadow: none; color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font); }
+  .wrap {
+    max-width: 980px; margin: 0 auto; padding-block: 24px 56px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
   }
-  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
-  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
-  h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
-  h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+  h2 { font-size: 12.5px; margin: 0 0 10px; color: var(--muted); font-weight: 650; text-transform: uppercase; letter-spacing: .08em; }
   .sub { color: var(--muted); font-size: 14px; }
+  .hdr-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .sync { font-size: 12px; color: var(--muted); }
+
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
   .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
-  .stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+  .stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; line-height: 1.25; }
   .stat span { color: var(--muted); font-size: 13px; }
-  .grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; align-items: start; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); }
-  .dayhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
-  .dayhead .date { font-size: 18px; font-weight: 650; }
-  .dayhead .nav { display: flex; gap: 4px; }
+
+  .grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .col { display: grid; gap: 16px; min-width: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); min-width: 0; }
+  .section + .section { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+
+  .dayhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+  .dayhead .date { font-size: 19px; font-weight: 650; }
+  .nav { display: flex; gap: 4px; align-items: center; }
+
   button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button:disabled { opacity: .5; cursor: default; }
   .icon-btn { background: transparent; border: 1px solid var(--line); border-radius: 8px; width: 34px; height: 34px; }
-  .icon-btn:hover { border-color: var(--muted); }
+  .icon-btn:hover:not(:disabled) { border-color: var(--muted); }
   .btn { border: 1px solid var(--line); background: var(--card); border-radius: 9px; padding: 8px 14px; }
-  .btn:hover { border-color: var(--muted); }
+  .btn:hover:not(:disabled) { border-color: var(--muted); }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.good { background: var(--good); border-color: var(--good); color: var(--accent-ink); font-weight: 600; }
   .btn.small { padding: 4px 10px; font-size: 13px; }
-  .add { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-  .add input[type=text] { flex: 1 1 200px; }
+  .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+
   input, select, textarea {
-    font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+    font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line);
     border-radius: 9px; padding: 8px 10px; min-width: 0;
   }
-  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  .add input[type=number] { width: 76px; }
-  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 14px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .add input[type=text] { flex: 1 1 200px; }
+  input[type=number] { width: 80px; }
+  textarea { width: 100%; min-height: 84px; resize: vertical; }
+  label.lbl { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 14px; }
   .chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; font-size: 13px; color: var(--muted); }
-  .chip.on { border-color: var(--accent); color: var(--accent); }
-  ul.plan { list-style: none; margin: 0 0 14px; padding: 0; }
-  ul.plan li { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); }
+  .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  .progress { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 8px; }
+  .progress > div { height: 100%; background: var(--good); width: 0; transition: width .25s; }
+  ul.plan { list-style: none; margin: 0 0 10px; padding: 0; }
+  ul.plan li { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--line); }
   ul.plan li:last-child { border-bottom: 0; }
-  ul.plan input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--good); flex: none; }
-  ul.plan .txt { flex: 1; overflow-wrap: anywhere; }
+  ul.plan input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--good); flex: none; margin: 0; }
+  ul.plan .txt { flex: 1; min-width: 0; overflow-wrap: anywhere; cursor: text; }
   ul.plan li.done .txt { color: var(--muted); text-decoration: line-through; }
+  ul.plan .edit { flex: 1; min-width: 0; padding: 4px 8px; }
   .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; flex: none; }
   .mins { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
-  .del { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; padding: 0 4px; }
+  .del { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; padding: 0 4px; flex: none; }
   .del:hover { color: var(--danger); }
-  .empty { color: var(--muted); font-size: 14px; padding: 10px 0 16px; }
-  .progress { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 14px; }
-  .progress > div { height: 100%; background: var(--good); width: 0; transition: width .25s; }
-  label.lbl { display: block; font-size: 13px; color: var(--muted); margin: 6px 0 6px; }
-  textarea { width: 100%; min-height: 84px; resize: vertical; }
-  .checkin { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
-  .checkin .btn.primary.done { background: var(--good); border-color: var(--good); }
-  .checkin .note { color: var(--muted); font-size: 13px; }
+  .empty { color: var(--muted); font-size: 14px; padding: 6px 0 10px; }
+
+  .rating { display: flex; gap: 6px; flex-wrap: wrap; }
+  .rating button { border: 1px solid var(--line); background: transparent; border-radius: 9px; padding: 6px 12px; font-size: 14px; }
+  .rating button.on { border-color: var(--good); background: var(--good-soft); color: var(--good); font-weight: 600; }
+  .submitted { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--good-soft); color: var(--good);
+    border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-top: 14px; }
+  .submitted b { font-weight: 650; }
+  .submit-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  .hint { color: var(--muted); font-size: 13px; }
+
   .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .cal-head b { font-size: 16px; }
-  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
   .cal .dow { text-align: center; font-size: 12px; color: var(--muted); padding-bottom: 4px; }
   .cal .d {
-    aspect-ratio: 1; border-radius: 8px; border: 1px solid transparent; background: transparent;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px;
-    font-variant-numeric: tabular-nums; position: relative; padding: 0;
+    aspect-ratio: 1; max-width: 100%; border-radius: 8px; border: 1px solid transparent; background: transparent;
+    display: flex; align-items: center; justify-content: center; font-size: 13px; font-variant-numeric: tabular-nums; padding: 0;
   }
   .cal .d:hover { border-color: var(--line); }
   .cal .d.out { visibility: hidden; }
-  .cal .d.future { color: var(--muted); opacity: .5; }
-  .cal .d.plan { background: var(--part-soft); }
+  .cal .d.future { color: var(--muted); }
+  .cal .d.plan { background: var(--part-soft); color: var(--ink); }
   .cal .d.checked { background: var(--good-soft); color: var(--good); font-weight: 650; }
   .cal .d.today { border-color: var(--accent); }
   .cal .d.sel { outline: 2px solid var(--ink); outline-offset: -2px; }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
-  .history { margin-top: 16px; }
-  .history .row { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; cursor: pointer; }
-  .history .row:last-child { border-bottom: 0; }
-  .history .row span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
-  .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
-  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
-    padding: 9px 16px; border-radius: 10px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+
+  .history .hrow { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid var(--line);
+    font-size: 14px; cursor: pointer; background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; text-align: left; }
+  .history .hrow:last-child { border-bottom: 0; }
+  .history .hrow .meta { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+  .history .hrow .rep { grid-column: 1 / -1; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+  /* photo import */
+  .drop { border: 1.5px dashed var(--line); border-radius: 12px; padding: 16px; text-align: center; color: var(--muted); font-size: 14px; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; justify-content: center; }
+  .thumbs img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+  .range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+  .range label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+  .range input { width: 100%; }
+  .status { font-size: 14px; color: var(--muted); margin-top: 10px; }
+  .status.err { color: var(--danger); }
+  .preview { margin-top: 12px; max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .preview .pday { position: sticky; top: 0; background: var(--field); font-size: 12px; font-weight: 650; color: var(--muted);
+    padding: 6px 10px; border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: .06em; }
+  .preview .pitem { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); align-items: center; }
+  .preview .pitem input[type=text] { width: 100%; padding: 4px 8px; }
+  .preview .pitem input[type=number] { width: 64px; padding: 4px 6px; }
+  .preview .pitem input[type=date] { padding: 3px 6px; font-size: 13px; }
+  .preview .pitem .pmeta { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .preview .pitem select { padding: 3px 6px; font-size: 13px; }
+
+  .banner { background: var(--part-soft); color: var(--ink); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-top: 10px; display: grid; gap: 8px; }
+
+  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 9px 16px; border-radius: 10px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: calc(100% - 32px); }
   .toast.show { opacity: 1; }
-  @media (max-width: 760px) {
-    .grid { grid-template-columns: 1fr; }
+  @media (max-width: 780px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
     .stats { grid-template-columns: repeat(2, 1fr); }
   }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
@@ -124,104 +178,156 @@
   <header>
     <div>
       <h1>English Check-in</h1>
-      <div class="sub" id="greeting"></div>
+      <div class="sub" id="greeting">Loading your records…</div>
     </div>
-    <button class="btn small" id="themeBtn" title="Toggle theme">Theme</button>
+    <div class="hdr-tools">
+      <span class="sync" id="sync"></span>
+      <button class="btn small" id="themeBtn" type="button">Theme</button>
+    </div>
   </header>
 
   <section class="stats">
     <div class="stat"><b id="sStreak">0</b><span>day streak</span></div>
     <div class="stat"><b id="sBest">0</b><span>best streak</span></div>
-    <div class="stat"><b id="sDays">0</b><span>days checked in</span></div>
+    <div class="stat"><b id="sDays">0</b><span>days submitted</span></div>
     <div class="stat"><b id="sHours">0</b><span>hours studied</span></div>
   </section>
 
   <div class="grid">
-    <section class="card">
-      <div class="dayhead">
-        <div>
-          <div class="date" id="dayTitle"></div>
-          <div class="sub" id="daySub"></div>
+    <div class="col">
+      <section class="card">
+        <div class="dayhead">
+          <div>
+            <div class="date" id="dayTitle"></div>
+            <div class="sub" id="daySub"></div>
+          </div>
+          <div class="nav">
+            <button class="icon-btn" id="prevDay" type="button" title="Previous day" aria-label="Previous day">‹</button>
+            <button class="btn small" id="toToday" type="button">Today</button>
+            <button class="icon-btn" id="nextDay" type="button" title="Next day" aria-label="Next day">›</button>
+          </div>
         </div>
-        <div class="nav">
-          <button class="icon-btn" id="prevDay" title="Previous day">‹</button>
-          <button class="btn small" id="toToday">Today</button>
-          <button class="icon-btn" id="nextDay" title="Next day">›</button>
+
+        <div class="section">
+          <h2>Plan</h2>
+          <form class="row add" id="addForm">
+            <input type="text" id="taskText" placeholder="e.g. Learn 30 new words" maxlength="200" autocomplete="off" aria-label="New task">
+            <input type="number" id="taskMin" placeholder="min" min="0" max="600" aria-label="Planned minutes">
+            <button class="btn primary" type="submit">Add</button>
+          </form>
+          <div class="chips" id="cats"></div>
+          <div class="progress"><div id="bar"></div></div>
+          <ul class="plan" id="plan"></ul>
+          <div class="row">
+            <button class="btn small" id="copyPrev" type="button">Copy plan from previous day</button>
+          </div>
         </div>
-      </div>
 
-      <h2>Plan</h2>
-      <form class="add" id="addForm">
-        <input type="text" id="taskText" placeholder="e.g. Learn 30 new words, watch one TED talk…" maxlength="200" autocomplete="off">
-        <input type="number" id="taskMin" placeholder="min" min="0" max="600" title="Planned minutes">
-        <button class="btn primary" type="submit">Add</button>
-      </form>
-      <div class="chips" id="cats"></div>
+        <div class="section" id="progressSection">
+          <h2>Daily progress</h2>
+          <label class="lbl" for="minutes">Minutes studied</label>
+          <div class="row">
+            <input type="number" id="minutes" min="0" max="1440" placeholder="0">
+            <span class="hint" id="minutesHint"></span>
+          </div>
+          <label class="lbl">How did it go?</label>
+          <div class="rating" id="rating"></div>
+          <label class="lbl" for="note">What did you do and learn? New words, sentences, problems</label>
+          <textarea id="note" placeholder="Finished Unit 4 listening. New words: reluctant, commute, take over…"></textarea>
+          <div class="submit-row" id="submitRow">
+            <button class="btn primary" id="submitBtn" type="button">Submit progress</button>
+            <span class="hint" id="submitHint"></span>
+          </div>
+          <div class="submitted" id="submitted" hidden>
+            <span id="submittedText"></span>
+            <button class="linkbtn" id="undoBtn" type="button">Undo check-in</button>
+          </div>
+        </div>
+      </section>
+    </div>
 
-      <div class="progress"><div id="bar"></div></div>
-      <ul class="plan" id="plan"></ul>
-      <div class="add" style="margin-top:-4px">
-        <button class="btn small" id="copyPrev" type="button">Copy plan from previous day</button>
-      </div>
+    <aside class="col">
+      <section class="card" id="scanCard">
+        <h2>Plan from a photo</h2>
+        <div class="sub" style="margin-bottom:10px">Take a photo of your paper weekly or monthly plan. Claude reads it and puts each task on the right day. You check the list before anything is added.</div>
+        <div id="scanUnavailable" class="hint" hidden>Photo reading works when this page is opened on claude.ai. In this copy, type your plan in by hand.</div>
+        <div id="scanBody">
+          <div class="drop" id="drop">
+            <div>Drop photos here, or</div>
+            <div style="margin-top:6px"><button class="btn small" id="pickBtn" type="button">Choose photos</button></div>
+            <input type="file" id="photoFile" accept="image/*" multiple hidden>
+            <div class="thumbs" id="thumbs"></div>
+          </div>
+          <label class="lbl" for="rangeSel">This plan is for</label>
+          <select id="rangeSel" style="width:100%">
+            <option value="thisWeek">This week</option>
+            <option value="nextWeek">Next week</option>
+            <option value="thisMonth">This month</option>
+            <option value="nextMonth">Next month</option>
+            <option value="custom">Custom dates</option>
+          </select>
+          <div class="range">
+            <label>From<input type="date" id="rangeStart"></label>
+            <label>To<input type="date" id="rangeEnd"></label>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn primary" id="readBtn" type="button" disabled>Read plan</button>
+            <button class="btn" id="stopBtn" type="button" hidden>Stop</button>
+          </div>
+          <div class="status" id="scanStatus" hidden></div>
+          <div id="previewWrap" hidden>
+            <div class="preview" id="preview"></div>
+            <div class="row" style="margin-top:10px">
+              <button class="btn good" id="applyBtn" type="button">Add tasks</button>
+              <button class="btn" id="discardBtn" type="button">Discard</button>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      <label class="lbl" for="note">Notes — new words, sentences, what you learned</label>
-      <textarea id="note" placeholder="serendipity — finding something good by chance…"></textarea>
-
-      <div class="checkin">
-        <button class="btn primary" id="checkBtn">Check in</button>
-        <span class="note" id="checkNote"></span>
-      </div>
-    </section>
-
-    <aside>
       <section class="card">
         <div class="cal-head">
-          <button class="icon-btn" id="prevMonth" title="Previous month">‹</button>
+          <button class="icon-btn" id="prevMonth" type="button" title="Previous month" aria-label="Previous month">‹</button>
           <b id="monthTitle"></b>
-          <button class="icon-btn" id="nextMonth" title="Next month">›</button>
+          <button class="icon-btn" id="nextMonth" type="button" title="Next month" aria-label="Next month">›</button>
         </div>
         <div class="cal" id="cal"></div>
         <div class="legend">
-          <span><i style="background:var(--good-soft);border:1px solid var(--good)"></i>Checked in</span>
-          <span><i style="background:var(--part-soft)"></i>Planned only</span>
+          <span><i style="background:var(--good-soft);border:1px solid var(--good)"></i>Progress submitted</span>
+          <span><i style="background:var(--part-soft)"></i>Planned</span>
           <span><i style="border:1px solid var(--accent)"></i>Today</span>
         </div>
       </section>
 
       <section class="card history">
-        <h2>Recent check-ins</h2>
+        <h2>Recent progress</h2>
         <div id="history"></div>
         <div class="tools">
-          <button class="btn small" id="exportBtn">Export backup</button>
-          <button class="btn small" id="importBtn">Import backup</button>
+          <button class="btn small" id="exportBtn" type="button">Export backup</button>
+          <button class="btn small" id="importBtn" type="button">Import backup</button>
           <input type="file" id="importFile" accept="application/json,.json" hidden>
         </div>
-        <div class="sub" style="font-size:12px;margin-top:8px">Data is saved in this browser only. Export a backup now and then.</div>
+        <div class="banner" id="importBanner" hidden>
+          <span id="importText"></span>
+          <div class="row">
+            <button class="btn small primary" id="importYes" type="button">Merge backup</button>
+            <button class="btn small" id="importNo" type="button">Cancel</button>
+          </div>
+        </div>
+        <div class="hint" id="storageNote" style="font-size:12px;margin-top:8px"></div>
       </section>
     </aside>
   </div>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status"></div>
 
 <script>
 (() => {
   const KEY = 'english-checkin-v1';
   const CATS = ['Vocabulary', 'Listening', 'Speaking', 'Reading', 'Writing', 'Grammar'];
+  const RATINGS = ['Hard', 'OK', 'Good', 'Great'];
   const $ = (id) => document.getElementById(id);
-
-  // ---------- storage ----------
-  function load() {
-    try {
-      const d = JSON.parse(localStorage.getItem(KEY));
-      if (d && d.days) return d;
-    } catch (e) {}
-    return { days: {} };
-  }
-  let db = load();
-  function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(db)); }
-    catch (e) { toast('Could not save — browser storage is unavailable'); }
-  }
+  const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
   // ---------- dates ----------
   const pad = (n) => String(n).padStart(2, '0');
@@ -229,27 +335,120 @@
   const parse = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
   const addDays = (k, n) => { const d = parse(k); d.setDate(d.getDate() + n); return keyOf(d); };
   const todayKey = () => keyOf(new Date());
+  const weekday = (k) => parse(k).toLocaleDateString('en-US', { weekday: 'long' });
+  const fmtLong = (k) => parse(k).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const fmtShort = (k) => parse(k).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+  // ---------- state ----------
+  const state = { days: {} };
   let sel = todayKey();
   let viewMonth = parse(sel); viewMonth.setDate(1);
   let cat = '';
+  let editing = null;
 
-  const day = (k) => db.days[k] || { plan: [], note: '', checked: false };
-  function ensure(k) {
-    if (!db.days[k]) db.days[k] = { plan: [], note: '', checked: false };
-    return db.days[k];
+  const blank = () => ({ plan: [], note: '', minutes: null, rating: null, checked: false });
+  const day = (k) => state.days[k] || blank();
+  function ensure(k) { if (!state.days[k]) state.days[k] = blank(); return state.days[k]; }
+  const isEmpty = (d) => !d.plan.length && !(d.note || '').trim() && !d.checked && d.minutes == null && d.rating == null;
+  const taskMinutes = (d) => d.plan.filter(t => t.done).reduce((s, t) => s + (t.min || 0), 0);
+  const studied = (d) => d.minutes != null ? d.minutes : taskMinutes(d);
+  function clean(d) {
+    return {
+      plan: Array.isArray(d.plan) ? d.plan.filter(t => t && typeof t.text === 'string').map(t => ({
+        id: String(t.id || uid()), text: t.text.slice(0, 300), cat: CATS.includes(t.cat) ? t.cat : '',
+        min: Math.max(0, Math.min(600, Number(t.min) || 0)), done: !!t.done })) : [],
+      note: typeof d.note === 'string' ? d.note : '',
+      minutes: Number.isFinite(d.minutes) ? d.minutes : null,
+      rating: Number.isInteger(d.rating) && d.rating >= 0 && d.rating < RATINGS.length ? d.rating : null,
+      checked: !!d.checked,
+      ...(d.checkedAt ? { checkedAt: String(d.checkedAt) } : {}),
+    };
   }
-  function prune(k) {
-    const d = db.days[k];
-    if (d && !d.plan.length && !d.note.trim() && !d.checked) delete db.days[k];
+
+  // ---------- storage: claude.ai account store when available, else this browser ----------
+  const store = { mode: 'local', db: null, uid: null, dirty: new Set(), inflight: new Set(), timer: null };
+
+  function loadLocal() {
+    try {
+      const d = JSON.parse(localStorage.getItem(KEY));
+      if (d && d.days) for (const k of Object.keys(d.days)) if (DAY_RE.test(k)) state.days[k] = clean(d.days[k]);
+    } catch (e) {}
   }
-  const minutesOf = (d) => d.plan.filter(t => t.done).reduce((s, t) => s + (t.min || 0), 0);
+  function saveLocal() {
+    try { localStorage.setItem(KEY, JSON.stringify({ days: state.days })); }
+    catch (e) { toast('Could not save. This browser is blocking storage.'); }
+  }
+
+  function save(k) {
+    const d = state.days[k];
+    if (d && isEmpty(d)) delete state.days[k];
+    if (store.mode === 'local') { saveLocal(); return; }
+    store.dirty.add(k);
+    clearTimeout(store.timer);
+    store.timer = setTimeout(flush, 400);
+    setSync('Saving…');
+  }
+  async function flush() {
+    for (const k of [...store.dirty]) {
+      if (store.inflight.has(k)) continue;
+      store.dirty.delete(k); store.inflight.add(k);
+      const ref = store.db.collection('data/users/' + store.uid).doc(k);
+      try {
+        const d = state.days[k];
+        if (d) await ref.set(clean(d)); else await ref.delete();
+      } catch (e) {
+        if (e && e.code === 'unavailable') store.dirty.add(k);
+        else if (e && e.code === 'quota_exceeded') toast('Storage is full. Export a backup and remove old days.');
+        else toast('Could not save this change. Check your connection.');
+      } finally {
+        store.inflight.delete(k);
+      }
+    }
+    if (store.dirty.size) { clearTimeout(store.timer); store.timer = setTimeout(flush, 1500); }
+    else setSync('Saved to your Claude account');
+  }
+
+  async function connect() {
+    if (!window.claude || typeof window.claude.use !== 'function') return startLocal();
+    let dbx = null, user = null;
+    try { [dbx, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) {}
+    const id = user ? await user.id().catch(() => null) : null;
+    if (!dbx || !id) return startLocal();
+    store.mode = 'cloud'; store.db = dbx; store.uid = id;
+    $('storageNote').textContent = 'Saved to your Claude account. It follows you to any device where you open this page signed in.';
+    setSync('Loading…');
+    let first = true;
+    dbx.collection('data/users/' + id).onSnapshot((snap) => {
+      const seen = new Set();
+      snap.docs.forEach(doc => {
+        if (!DAY_RE.test(doc.id)) return;
+        seen.add(doc.id);
+        if (store.dirty.has(doc.id) || store.inflight.has(doc.id)) return;   // keep local edits not yet saved
+        state.days[doc.id] = clean(doc.data() || {});
+      });
+      for (const k of Object.keys(state.days)) {
+        if (!seen.has(k) && !store.dirty.has(k) && !store.inflight.has(k)) delete state.days[k];
+      }
+      if (first) { first = false; setSync('Saved to your Claude account'); }
+      renderAll();
+    }, () => {
+      setSync('Offline. Reload the page to reconnect.');
+    });
+  }
+  function startLocal() {
+    store.mode = 'local';
+    loadLocal();
+    $('storageNote').textContent = 'Saved in this browser only. Export a backup now and then.';
+    renderAll();
+  }
+  const setSync = (t) => { $('sync').textContent = t; };
 
   // ---------- stats ----------
   function streaks() {
-    const checked = new Set(Object.keys(db.days).filter(k => db.days[k].checked));
+    const checked = new Set(Object.keys(state.days).filter(k => state.days[k].checked));
     let cur = 0, k = todayKey();
-    if (!checked.has(k)) k = addDays(k, -1);      // today not done yet still keeps the streak
+    if (!checked.has(k)) k = addDays(k, -1);   // today not submitted yet still keeps the streak alive
     while (checked.has(k)) { cur++; k = addDays(k, -1); }
     let best = 0, run = 0, prev = null;
     [...checked].sort().forEach(k2 => {
@@ -257,14 +456,11 @@
       best = Math.max(best, run); prev = k2;
     });
     let mins = 0;
-    Object.values(db.days).forEach(d => { mins += minutesOf(d); });
+    Object.values(state.days).forEach(d => { if (d.checked) mins += studied(d); });
     return { cur, best, days: checked.size, hours: Math.round(mins / 6) / 10 };
   }
 
   // ---------- render ----------
-  const fmtLong = (k) => parse(k).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  const fmtShort = (k) => parse(k).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-
   function renderStats() {
     const s = streaks();
     $('sStreak').textContent = s.cur;
@@ -272,9 +468,9 @@
     $('sDays').textContent = s.days;
     $('sHours').textContent = s.hours;
     const t = day(todayKey());
-    $('greeting').textContent = t.checked
-      ? 'Checked in today — nice work. Keep it going tomorrow.'
-      : s.cur ? `You're on a ${s.cur}-day streak. Check in today to keep it.` : 'Write today\'s plan, do it, then check in.';
+    $('greeting').textContent = t.checked ? 'Today\'s progress is in. See you tomorrow.'
+      : s.cur ? `You're on a ${s.cur}-day streak. Submit today's progress to keep it.`
+      : 'Write today\'s plan, study, then submit your progress.';
   }
 
   function renderCats() {
@@ -282,55 +478,95 @@
     CATS.forEach(c => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'chip' + (cat === c ? ' on' : ''); b.textContent = c;
+      b.setAttribute('aria-pressed', cat === c);
       b.onclick = () => { cat = cat === c ? '' : c; renderCats(); $('taskText').focus(); };
       $('cats').appendChild(b);
     });
   }
 
-  function renderDay() {
-    const d = day(sel), t = todayKey();
-    $('dayTitle').textContent = sel === t ? 'Today' : sel === addDays(t, -1) ? 'Yesterday' : sel === addDays(t, 1) ? 'Tomorrow' : fmtShort(sel);
-    $('daySub').textContent = fmtLong(sel);
-    $('toToday').style.visibility = sel === t ? 'hidden' : 'visible';
-
+  function renderPlan() {
+    const d = day(sel);
     const ul = $('plan'); ul.innerHTML = '';
     if (!d.plan.length) {
-      ul.innerHTML = '<li class="empty" style="border:0">No plan yet. Add what you\'ll study today.</li>';
+      const li = document.createElement('li'); li.className = 'empty'; li.style.border = '0';
+      li.textContent = 'No plan for this day yet. Add a task above, or read one from a photo of your paper plan.';
+      ul.appendChild(li);
     }
     d.plan.forEach(item => {
       const li = document.createElement('li'); if (item.done) li.className = 'done';
       const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!item.done;
-      cb.onchange = () => { item.done = cb.checked; save(); renderAll(); };
-      const txt = document.createElement('span'); txt.className = 'txt'; txt.textContent = item.text;
-      txt.title = 'Double-click to edit';
-      txt.ondblclick = () => {
-        const v = prompt('Edit task', item.text);
-        if (v && v.trim()) { item.text = v.trim(); save(); renderDay(); }
-      };
-      li.append(cb, txt);
+      cb.setAttribute('aria-label', 'Done: ' + item.text);
+      cb.onchange = () => { item.done = cb.checked; save(sel); renderAll(); };
+      li.append(cb);
+      if (editing === item.id) {
+        const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'edit'; inp.value = item.text; inp.maxLength = 300;
+        const finish = (keep) => {
+          if (editing !== item.id) return;
+          editing = null;
+          const v = inp.value.trim();
+          if (keep && v && v !== item.text) { item.text = v; save(sel); }
+          renderPlan();
+        };
+        inp.onkeydown = (e) => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+        inp.onblur = () => finish(true);
+        li.append(inp);
+        setTimeout(() => { inp.focus(); inp.select(); }, 0);
+      } else {
+        const txt = document.createElement('span'); txt.className = 'txt'; txt.textContent = item.text; txt.title = 'Click to edit';
+        txt.onclick = () => { editing = item.id; renderPlan(); };
+        li.append(txt);
+      }
       if (item.cat) { const tg = document.createElement('span'); tg.className = 'tag'; tg.textContent = item.cat; li.append(tg); }
       if (item.min) { const m = document.createElement('span'); m.className = 'mins'; m.textContent = item.min + ' min'; li.append(m); }
-      const del = document.createElement('button'); del.className = 'del'; del.textContent = '×'; del.title = 'Remove';
-      del.onclick = () => { d.plan = d.plan.filter(x => x !== item); prune(sel); save(); renderAll(); };
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
+      del.title = 'Remove'; del.setAttribute('aria-label', 'Remove ' + item.text);
+      del.onclick = () => { d.plan = d.plan.filter(x => x !== item); save(sel); renderAll(); };
       li.append(del);
       ul.appendChild(li);
     });
-
     const done = d.plan.filter(x => x.done).length;
     $('bar').style.width = d.plan.length ? (done / d.plan.length * 100) + '%' : '0';
+    $('copyPrev').hidden = d.plan.length > 0;
+  }
 
+  function renderProgress() {
+    const d = day(sel), t = todayKey(), future = sel > t;
+    $('progressSection').hidden = future;
+    if (future) return;
     if (document.activeElement !== $('note')) $('note').value = d.note || '';
+    if (document.activeElement !== $('minutes')) $('minutes').value = d.minutes != null ? d.minutes : '';
+    const tm = taskMinutes(d);
+    $('minutes').placeholder = tm ? String(tm) : '0';
+    $('minutesHint').textContent = tm && d.minutes == null ? `${tm} min from finished tasks` : '';
+    const r = $('rating'); r.innerHTML = '';
+    RATINGS.forEach((label, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+      b.className = d.rating === i ? 'on' : ''; b.setAttribute('aria-pressed', d.rating === i);
+      b.onclick = () => { ensure(sel).rating = d.rating === i ? null : i; save(sel); renderAll(); };
+      r.appendChild(b);
+    });
+    const done = d.plan.filter(x => x.done).length;
+    $('submitRow').hidden = d.checked;
+    $('submitted').hidden = !d.checked;
+    if (d.checked) {
+      const when = d.checkedAt ? new Date(d.checkedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+      const bits = [`<b>Progress submitted</b>${when ? ' at ' + when : ''}`];
+      if (d.plan.length) bits.push(`${done}/${d.plan.length} tasks`);
+      if (studied(d)) bits.push(`${studied(d)} min`);
+      if (d.rating != null) bits.push(RATINGS[d.rating]);
+      $('submittedText').innerHTML = bits.join(' · ');
+    } else {
+      $('submitHint').textContent = d.plan.length ? `${done} of ${d.plan.length} tasks done` : '';
+    }
+  }
 
-    const btn = $('checkBtn'), isFuture = sel > t;
-    btn.disabled = isFuture;
-    btn.style.opacity = isFuture ? .5 : 1;
-    btn.classList.toggle('done', !!d.checked);
-    btn.textContent = d.checked ? '✓ Checked in' : 'Check in';
-    const mins = minutesOf(d);
-    $('checkNote').textContent = isFuture ? 'You can plan ahead, but check in on the day.'
-      : d.checked ? `${done}/${d.plan.length} tasks done${mins ? ` · ${mins} min` : ''} · click to undo`
-      : d.plan.length ? `${done}/${d.plan.length} tasks done` : '';
-    $('copyPrev').style.display = d.plan.length ? 'none' : '';
+  function renderDay() {
+    const t = todayKey();
+    $('dayTitle').textContent = sel === t ? 'Today' : sel === addDays(t, -1) ? 'Yesterday' : sel === addDays(t, 1) ? 'Tomorrow' : fmtShort(sel);
+    $('daySub').textContent = fmtLong(sel);
+    $('toToday').style.visibility = sel === t ? 'hidden' : 'visible';
+    renderPlan();
+    renderProgress();
   }
 
   function renderCal() {
@@ -344,37 +580,40 @@
     for (let i = 0; i < lead; i++) { const e = document.createElement('div'); e.className = 'd out'; cal.appendChild(e); }
     const n = new Date(y, m + 1, 0).getDate(), t = todayKey();
     for (let i = 1; i <= n; i++) {
-      const k = `${y}-${pad(m + 1)}-${pad(i)}`, d = db.days[k];
-      const b = document.createElement('button'); b.className = 'd'; b.textContent = i;
+      const k = `${y}-${pad(m + 1)}-${pad(i)}`, d = state.days[k];
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'd'; b.textContent = i;
       if (d && d.checked) b.classList.add('checked'); else if (d && d.plan.length) b.classList.add('plan');
       if (k === t) b.classList.add('today');
       if (k > t) b.classList.add('future');
       if (k === sel) b.classList.add('sel');
-      b.title = fmtLong(k) + (d && d.checked ? ' — checked in' : '');
-      b.onclick = () => { sel = k; renderAll(); };
+      b.title = fmtLong(k) + (d && d.checked ? ', progress submitted' : d && d.plan.length ? `, ${d.plan.length} tasks planned` : '');
+      b.onclick = () => { sel = k; editing = null; renderAll(); };
       cal.appendChild(b);
     }
   }
 
   function renderHistory() {
-    const keys = Object.keys(db.days).filter(k => db.days[k].checked).sort().reverse().slice(0, 7);
+    const keys = Object.keys(state.days).filter(k => state.days[k].checked).sort().reverse().slice(0, 7);
     const h = $('history'); h.innerHTML = '';
-    if (!keys.length) { h.innerHTML = '<div class="empty">Your check-ins will show up here.</div>'; return; }
+    if (!keys.length) { h.innerHTML = '<div class="empty">Each day you submit progress shows up here.</div>'; return; }
     keys.forEach(k => {
-      const d = db.days[k], done = d.plan.filter(x => x.done).length, mins = minutesOf(d);
-      const r = document.createElement('div'); r.className = 'row';
+      const d = state.days[k], done = d.plan.filter(x => x.done).length, mins = studied(d);
+      const r = document.createElement('button'); r.type = 'button'; r.className = 'hrow';
       const a = document.createElement('span'); a.textContent = fmtShort(k);
-      const b = document.createElement('span'); b.textContent = `${done}/${d.plan.length} tasks${mins ? ' · ' + mins + ' min' : ''}`;
-      r.append(a, b); r.onclick = () => { sel = k; viewMonth = parse(k); viewMonth.setDate(1); renderAll(); };
+      const b = document.createElement('span'); b.className = 'meta';
+      b.textContent = [d.plan.length ? `${done}/${d.plan.length} tasks` : '', mins ? mins + ' min' : '', d.rating != null ? RATINGS[d.rating] : ''].filter(Boolean).join(' · ');
+      r.append(a, b);
+      if ((d.note || '').trim()) { const c = document.createElement('span'); c.className = 'rep'; c.textContent = d.note.trim().split('\n')[0]; r.append(c); }
+      r.onclick = () => go(k);
       h.appendChild(r);
     });
   }
 
   function renderAll() { renderStats(); renderDay(); renderCal(); renderHistory(); }
 
-  // ---------- actions ----------
+  // ---------- day actions ----------
   function go(k) {
-    sel = k;
+    sel = k; editing = null;
     const d = parse(k);
     if (d.getMonth() !== viewMonth.getMonth() || d.getFullYear() !== viewMonth.getFullYear()) { viewMonth = d; viewMonth.setDate(1); }
     renderAll();
@@ -385,8 +624,8 @@
     const text = $('taskText').value.trim();
     if (!text) { $('taskText').focus(); return; }
     const min = Math.max(0, Math.min(600, parseInt($('taskMin').value, 10) || 0));
-    ensure(sel).plan.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text, cat, min, done: false });
-    save();
+    ensure(sel).plan.push({ id: uid(), text, cat, min, done: false });
+    save(sel);
     $('taskText').value = ''; $('taskMin').value = ''; $('taskText').focus();
     renderAll();
   };
@@ -394,30 +633,39 @@
   $('copyPrev').onclick = () => {
     let k = addDays(sel, -1);
     for (let i = 0; i < 60; i++, k = addDays(k, -1)) {
-      const d = db.days[k];
+      const d = state.days[k];
       if (d && d.plan.length) {
-        ensure(sel).plan = d.plan.map(x => ({ ...x, id: x.id + 'c' + Date.now().toString(36), done: false }));
-        save(); renderAll(); toast('Copied plan from ' + fmtShort(k)); return;
+        ensure(sel).plan = d.plan.map(x => ({ ...x, id: uid(), done: false }));
+        save(sel); renderAll(); toast('Copied the plan from ' + fmtShort(k)); return;
       }
     }
-    toast('No earlier plan found');
+    toast('No plan found in the last 60 days');
   };
 
   let noteTimer;
-  $('note').oninput = () => {
-    clearTimeout(noteTimer);
-    noteTimer = setTimeout(() => { ensure(sel).note = $('note').value; prune(sel); save(); renderCal(); }, 300);
+  const commitNote = () => { clearTimeout(noteTimer); const d = ensure(sel); if (d.note !== $('note').value) { d.note = $('note').value; save(sel); } };
+  $('note').oninput = () => { clearTimeout(noteTimer); noteTimer = setTimeout(() => { commitNote(); renderCal(); }, 500); };
+  $('note').onblur = () => { commitNote(); renderAll(); };
+  const commitMinutes = () => {
+    const raw = $('minutes').value.trim();
+    const v = raw === '' ? null : Math.max(0, Math.min(1440, parseInt(raw, 10) || 0));
+    const d = ensure(sel); if (d.minutes !== v) { d.minutes = v; save(sel); }
   };
-  $('note').onblur = () => { clearTimeout(noteTimer); ensure(sel).note = $('note').value; prune(sel); save(); renderCal(); };
+  $('minutes').onchange = () => { commitMinutes(); renderAll(); };
 
-  $('checkBtn').onclick = () => {
+  $('submitBtn').onclick = () => {
     if (sel > todayKey()) return;
+    commitNote(); commitMinutes();
     const d = ensure(sel);
-    d.note = $('note').value;
-    d.checked = !d.checked;
-    d.checkedAt = d.checked ? new Date().toISOString() : undefined;
-    prune(sel); save(); renderAll();
-    if (d.checked) toast(streaks().cur > 1 ? `Checked in! ${streaks().cur}-day streak 🔥` : 'Checked in! 🎉');
+    if (d.minutes == null && taskMinutes(d)) d.minutes = taskMinutes(d);
+    d.checked = true; d.checkedAt = new Date().toISOString();
+    save(sel); renderAll();
+    const s = streaks().cur;
+    toast(sel === todayKey() && s > 1 ? `Progress submitted. ${s}-day streak!` : 'Progress submitted');
+  };
+  $('undoBtn').onclick = () => {
+    const d = ensure(sel); d.checked = false; delete d.checkedAt;
+    save(sel); renderAll(); toast('Check-in undone. Your notes are kept.');
   };
 
   $('prevDay').onclick = () => go(addDays(sel, -1));
@@ -426,28 +674,202 @@
   $('prevMonth').onclick = () => { viewMonth.setMonth(viewMonth.getMonth() - 1); renderCal(); };
   $('nextMonth').onclick = () => { viewMonth.setMonth(viewMonth.getMonth() + 1); renderCal(); };
 
-  $('exportBtn').onclick = () => {
-    const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  // ---------- backup ----------
+  $('exportBtn').onclick = async () => {
+    const data = JSON.stringify({ days: state.days }, null, 2);
+    const filename = `english-checkin-${todayKey()}.json`;
+    const dl = window.claude && window.claude.use ? await window.claude.use('downloads').catch(() => null) : null;
+    if (dl) {
+      try { const r = await dl.save({ filename, data }); if (r && r.status === 'saved') toast('Backup saved'); }
+      catch (e) { if (e && e.code !== 'cancelled' && e.code !== 'declined') toast('Could not save the backup file'); }
+      return;
+    }
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = `english-checkin-${todayKey()}.json`;
+    a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' })); a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
+  let pendingImport = null;
   $('importBtn').onclick = () => $('importFile').click();
   $('importFile').onchange = async (e) => {
-    const f = e.target.files[0]; if (!f) return;
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     try {
       const data = JSON.parse(await f.text());
       if (!data || typeof data.days !== 'object') throw new Error();
-      if (!confirm('Merge this backup into your current records? Days in the backup replace the same days here.')) return;
-      Object.assign(db.days, data.days); save(); renderAll(); toast('Backup imported');
-    } catch (err) { toast('That file is not a valid backup'); }
-    e.target.value = '';
+      const keys = Object.keys(data.days).filter(k => DAY_RE.test(k));
+      if (!keys.length) throw new Error();
+      pendingImport = { data, keys };
+      $('importText').textContent = `This backup has ${keys.length} day${keys.length > 1 ? 's' : ''}. Days that are already here will be replaced by the backup's version.`;
+      $('importBanner').hidden = false;
+    } catch (err) { toast('That file is not an English Check-in backup'); }
+  };
+  $('importNo').onclick = () => { pendingImport = null; $('importBanner').hidden = true; };
+  $('importYes').onclick = () => {
+    if (!pendingImport) return;
+    pendingImport.keys.forEach(k => { state.days[k] = clean(pendingImport.data.days[k] || {}); save(k); });
+    toast(`Imported ${pendingImport.keys.length} days`);
+    pendingImport = null; $('importBanner').hidden = true; renderAll();
   };
 
-  // theme
+  // ---------- plan from a photo ----------
+  let sample = null, photos = [], scanCtl = null, preview = [];
+  const scanStatus = (msg, err) => { const s = $('scanStatus'); s.hidden = !msg; s.textContent = msg || ''; s.classList.toggle('err', !!err); };
+
+  function rangeFor(v) {
+    const t = parse(todayKey());
+    if (v === 'thisWeek' || v === 'nextWeek') {
+      const mon = new Date(t); mon.setDate(t.getDate() - (t.getDay() + 6) % 7 + (v === 'nextWeek' ? 7 : 0));
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      return [keyOf(mon), keyOf(sun)];
+    }
+    const off = v === 'nextMonth' ? 1 : 0;
+    return [keyOf(new Date(t.getFullYear(), t.getMonth() + off, 1)), keyOf(new Date(t.getFullYear(), t.getMonth() + off + 1, 0))];
+  }
+  function applyRange() {
+    const v = $('rangeSel').value;
+    if (v === 'custom') return;
+    const [a, b] = rangeFor(v); $('rangeStart').value = a; $('rangeEnd').value = b;
+  }
+  $('rangeSel').onchange = applyRange;
+  $('rangeStart').onchange = $('rangeEnd').onchange = () => { $('rangeSel').value = 'custom'; };
+  applyRange();
+
+  async function setupScan() {
+    sample = window.claude && window.claude.use ? await window.claude.use('sample').catch(() => null) : null;
+    const lim = sample ? await sample.limits().catch(() => null) : null;
+    if (!lim || !lim.images) { sample = null; $('scanBody').hidden = true; $('scanUnavailable').hidden = false; return; }
+    $('photoFile').accept = lim.images.mediaTypes.join(',');
+    $('scanBody').dataset.max = lim.images.maxCount;
+  }
+
+  function setPhotos(list) {
+    const max = Number($('scanBody').dataset.max) || 4;
+    const imgs = [...list].filter(f => /^image\//.test(f.type));
+    if (!imgs.length) { scanStatus('Choose a photo file (JPEG, PNG or WebP).', true); return; }
+    photos = imgs.slice(0, max);
+    const th = $('thumbs'); th.innerHTML = '';
+    photos.forEach(f => { const im = document.createElement('img'); im.alt = 'Plan photo'; im.src = URL.createObjectURL(f); th.appendChild(im); });
+    $('readBtn').disabled = false;
+    scanStatus(imgs.length > max ? `Using the first ${max} photos.` : '');
+  }
+  $('pickBtn').onclick = () => $('photoFile').click();
+  $('photoFile').onchange = (e) => { setPhotos(e.target.files); e.target.value = ''; };
+  const drop = $('drop');
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); setPhotos(e.dataTransfer.files); };
+
+  function buildPrompt(start, end) {
+    const t = todayKey();
+    return `These photos show a paper study plan for learning English, handwritten or printed, possibly mixing English and Chinese.
+Today is ${t} (${weekday(t)}). The plan covers ${start} (${weekday(start)}) to ${end} (${weekday(end)}).
+
+Turn the plan into individual tasks, each on one date.
+- A day named by weekday (Mon, Monday, 周一, 星期一) or by date goes on that date inside the range. If the paper writes explicit dates, use them.
+- A task for every day (daily, every day, 每天) repeats on every date in the range. "Weekdays" means Monday to Friday; "weekends" means Saturday and Sunday.
+- A frequency without days ("3 times a week") is spread evenly across each week of the range.
+- A goal for the whole week with no day (for example "finish Unit 3") goes on the last date of that week inside the range, with text starting "Week goal: ".
+- A goal for the whole month goes on the last date of the range, with text starting "Month goal: ".
+- cat is one of: Vocabulary, Listening, Speaking, Reading, Writing, Grammar. Use "" if none fits.
+- min is the planned minutes if written (convert hours to minutes), otherwise 0.
+- Keep each text short and in the language it was written in. Copy book names, units and page numbers exactly. Fix obvious handwriting misreadings. If a word is illegible, give your best guess followed by "(?)".
+- Skip crossed-out items and decorations.
+
+Reply with only JSON in this shape:
+{"items":[{"date":"YYYY-MM-DD","text":"Learn 30 new words","cat":"Vocabulary","min":20}],"notes":"one short sentence about anything you could not read or place, or empty"}`;
+  }
+
+  $('readBtn').onclick = async () => {
+    if (!sample || !photos.length) return;
+    let start = $('rangeStart').value, end = $('rangeEnd').value;
+    if (!DAY_RE.test(start) || !DAY_RE.test(end)) { scanStatus('Set the first and last day the plan covers.', true); return; }
+    if (end < start) [start, end] = [end, start];
+    scanCtl = new AbortController();
+    $('readBtn').disabled = true; $('stopBtn').hidden = false; $('previewWrap').hidden = true;
+    scanStatus('Reading your plan… this can take up to a minute.');
+    try {
+      const res = await sample.json(buildPrompt(start, end), { images: photos, signal: scanCtl.signal, modelTier: 'default' });
+      const items = (res && Array.isArray(res.items) ? res.items : []).filter(it => it && DAY_RE.test(String(it.date)) && String(it.text || '').trim())
+        .map(it => ({ id: uid(), date: String(it.date), text: String(it.text).trim().slice(0, 300), cat: CATS.includes(it.cat) ? it.cat : '',
+          min: Math.max(0, Math.min(600, Math.round(Number(it.min) || 0))), keep: true }));
+      if (!items.length) { scanStatus('No tasks found in the photo. Try a sharper, closer photo with good light.', true); return; }
+      preview = items.sort((a, b) => a.date.localeCompare(b.date));
+      const note = res && typeof res.notes === 'string' && res.notes.trim() ? ' Note from Claude: ' + res.notes.trim() : '';
+      scanStatus(`Found ${items.length} tasks. Check them, fix anything misread, then add them.${note}`);
+      renderPreview();
+    } catch (e) {
+      const code = e && e.code;
+      const msg = {
+        cancelled: '',
+        not_granted: 'Claude was not allowed for this page, so photos cannot be read. Type your plan in by hand.',
+        sampling_disabled: 'Claude is not available on this account, so photos cannot be read.',
+        images_unavailable: 'This view cannot send photos to Claude.',
+        rate_limited: 'Too many requests right now. Wait a few minutes and try again.',
+        image_rejected: 'That photo could not be used. Try a JPEG or PNG under 20 MB.',
+        invalid_json: 'Claude\'s answer could not be turned into tasks. Press Read plan to try again.',
+        refused: 'Claude could not read this photo. Try a different photo.',
+        session_expired: 'Your claude.ai session expired. Sign in again and reload.',
+      }[code];
+      if (code === 'not_granted' || code === 'sampling_disabled' || code === 'images_unavailable') { $('scanBody').hidden = true; $('scanUnavailable').hidden = false; }
+      scanStatus(msg != null ? msg : 'Something went wrong while reading the photo. Try again.', !!msg || msg == null);
+    } finally {
+      scanCtl = null; $('readBtn').disabled = !photos.length; $('stopBtn').hidden = true;
+    }
+  };
+  $('stopBtn').onclick = () => { if (scanCtl) scanCtl.abort(); };
+
+  function renderPreview() {
+    const box = $('preview'); box.innerHTML = '';
+    const kept = preview.filter(p => p.keep);
+    $('previewWrap').hidden = !preview.length;
+    $('applyBtn').textContent = `Add ${kept.length} task${kept.length === 1 ? '' : 's'}`;
+    $('applyBtn').disabled = !kept.length;
+    let last = null;
+    preview.forEach(p => {
+      if (!p.keep) return;
+      if (p.date !== last) {
+        last = p.date;
+        const h = document.createElement('div'); h.className = 'pday'; h.textContent = fmtShort(p.date); box.appendChild(h);
+      }
+      const row = document.createElement('div'); row.className = 'pitem';
+      const tx = document.createElement('input'); tx.type = 'text'; tx.value = p.text; tx.maxLength = 300; tx.setAttribute('aria-label', 'Task');
+      tx.oninput = () => { p.text = tx.value; };
+      const mn = document.createElement('input'); mn.type = 'number'; mn.min = 0; mn.max = 600; mn.value = p.min || ''; mn.placeholder = 'min';
+      mn.setAttribute('aria-label', 'Minutes'); mn.oninput = () => { p.min = Math.max(0, Math.min(600, parseInt(mn.value, 10) || 0)); };
+      const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'del'; rm.textContent = '×'; rm.title = 'Leave out';
+      rm.setAttribute('aria-label', 'Leave out ' + p.text);
+      rm.onclick = () => { p.keep = false; renderPreview(); };
+      const meta = document.createElement('div'); meta.className = 'pmeta';
+      const dt = document.createElement('input'); dt.type = 'date'; dt.value = p.date; dt.setAttribute('aria-label', 'Date');
+      dt.onchange = () => { if (DAY_RE.test(dt.value)) { p.date = dt.value; preview.sort((a, b) => a.date.localeCompare(b.date)); renderPreview(); } };
+      const cs = document.createElement('select'); cs.setAttribute('aria-label', 'Category');
+      ['', ...CATS].forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c || 'No tag'; cs.appendChild(o); });
+      cs.value = p.cat; cs.onchange = () => { p.cat = cs.value; };
+      meta.append(dt, cs);
+      row.append(tx, mn, rm, meta);
+      box.appendChild(row);
+    });
+  }
+  $('discardBtn').onclick = () => { preview = []; $('previewWrap').hidden = true; scanStatus(''); };
+  $('applyBtn').onclick = () => {
+    const kept = preview.filter(p => p.keep && p.text.trim());
+    const touched = new Set(); let added = 0;
+    kept.forEach(p => {
+      const d = ensure(p.date);
+      if (d.plan.some(x => x.text.trim().toLowerCase() === p.text.trim().toLowerCase())) return;   // already planned
+      d.plan.push({ id: uid(), text: p.text.trim(), cat: p.cat, min: p.min, done: false });
+      touched.add(p.date); added++;
+    });
+    touched.forEach(k => save(k));
+    preview = []; $('previewWrap').hidden = true;
+    photos = []; $('thumbs').innerHTML = ''; $('readBtn').disabled = true;
+    scanStatus(added ? `Added ${added} tasks across ${touched.size} days.` : 'All of these tasks were already in your plan.');
+    if (kept.length) go(kept[0].date); else renderAll();
+  };
+
+  // ---------- theme ----------
   const root = document.documentElement;
-  try { const th = localStorage.getItem(KEY + '-theme'); if (th) root.dataset.theme = th; } catch (e) {}
+  try { const th = localStorage.getItem(KEY + '-theme'); if (th === 'light' || th === 'dark') root.dataset.theme = th; } catch (e) {}
   $('themeBtn').onclick = () => {
     const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
     root.dataset.theme = dark ? 'light' : 'dark';
@@ -457,7 +879,7 @@
   let toastTimer;
   function toast(msg) {
     const t = $('toast'); t.textContent = msg; t.classList.add('show');
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
   }
 
   // roll over to the new day if the page stays open past midnight
@@ -466,6 +888,8 @@
 
   renderCats();
   renderAll();
+  connect();
+  setupScan();
 })();
 </script>
 </body>
