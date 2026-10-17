@@ -153,6 +153,8 @@ def setup_collections():
     coll("WH_Roof_Removable", COLL["GuangtouQiang_Warehouse"])
     coll("WH_Interior", COLL["GuangtouQiang_Warehouse"])
     coll("Bears_TreeHome", COLL["Forest_Trees"])
+    for n in ("Lake_Water", "Lake_Bottom", "Lake_Shore"):
+        coll(n, COLL["River_and_Rocks"])
     coll("Inferred_Models", COLL["Reference_Notes"])
     coll("Prototypes_Hidden", COLL["Reference_Notes"])
     for n in ["Characters_XiongDa", "Characters_XiongEr", "Characters_GuangtouQiang",
@@ -692,6 +694,23 @@ def _base_height(x, y):
 
 
 _CLEAR_H = None
+LAKE_DEPTH = dict(shelf=1.4, basin=5.0, cliff_extra=2.5)  # 推测：按熊大身高 2 m 估算，第 30 集没有可用画面
+
+
+def lake_bed(x, y, e=None, a=None):
+    """湖底高度（推测，等待《湖底历险记》截图核对）。
+    东南沙滩一侧是缓坡浅滩（约 1.4 m），往里有一道陡坎，湖心盆地约 5 m，靠西北石崖一侧最深约 7.5 m。"""
+    e = lake_e(x, y) if e is None else e
+    a = lake_angle(x, y) if a is None else a
+    c = max(0.0, math.cos(a - CLIFF["fall"])) ** 2  # 1 = 朝石崖方向，0 = 朝沙滩方向
+    c = lerp(0.35, c, smooth(0.0, 0.6, e))  # 湖心附近方向没有意义，平滑过渡，避免出现台阶
+    D = LAKE_DEPTH
+    r_out = lerp(0.8, 0.96, c)
+    r_in = r_out - lerp(0.32, 0.14, c)
+    d = D["shelf"] * (1 - smooth(0.8, 1.0, e))
+    d += (D["basin"] + D["cliff_extra"] * c - D["shelf"]) * (1 - smooth(r_in, r_out, e))
+    d += 0.55 * fbm(x * 0.07, y * 0.07, 3, 13.0) * (1 - smooth(0.6, 0.9, e))
+    return LAKE["level"] - 0.3 - d
 
 
 def ground(x, y):
@@ -713,7 +732,7 @@ def ground(x, y):
         k = smooth(0.8, 0.0, max(0.0, max(CLIFF["a0"] - a, a - CLIFF["a1"])))
         h = max(h, lerp(h, LAKE["level"] + CLIFF["height"] + 0.5, k * smooth(1.05, 1.3, e) * (1 - smooth(1.9, 3.4, e))))
     # 湖盆与沙滩
-    bed = LAKE["level"] - 0.4 - 1.6 * (1 - min(1.0, e) ** 2)
+    bed = lake_bed(x, y, e, a)
     shore = lerp(bed, h, smooth(0.92, 1.45, e))
     if e < 1.45:
         h = min(h, shore) if not (in_cliff_arc(a, 0.05) and e > 1.0) else h
@@ -737,6 +756,9 @@ def build_terrain():
         for i in range(nx):
             x = -W / 2 + i * step
             z = ground(x, y)
+            le = lake_e(x, y)
+            if le < 1.0:  # 湖底细网格 Lake_Bottom_Terrain 盖在上面；这里稍微压低，避免两层重叠闪烁
+                z -= 0.05 + 0.35 * (1 - smooth(0.9, 0.99, le))
             verts.append((x, y, z))
             # 颜色
             n1 = fbm(x * 0.07, y * 0.07, 3, 21.0) * 0.5 + 0.5
@@ -815,6 +837,49 @@ def build_terrain():
 # 阶段 3：湖、沙滩、石崖、瀑布、岩石
 
 
+def build_lake_bottom():
+    """可编辑的湖底细网格（0.4 m 网格），高度来自 lake_bed() 加细小起伏；颜色按水深从浅滩沙色过渡到深处的淤泥色。
+    整个湖底形状为推测：第 30 集《湖底历险记》的画面没能读取（见 LAKE_AUDIT.md）。"""
+    LB = COLL["Lake_Bottom"]
+    step = 0.4
+    x0, x1 = LAKE["x"] - LAKE["rx"], LAKE["x"] + LAKE["rx"]
+    y0, y1 = LAKE["y"] - LAKE["ry"], LAKE["y"] + LAKE["ry"]
+    nx, ny = int((x1 - x0) / step) + 1, int((y1 - y0) / step) + 1
+    bm = bmesh.new()
+    col = bm.loops.layers.color.new("Col")
+    grid = {}
+    C = {k: Vector(srgb(v)[:3]) for k, v in dict(sand="#c9a565", mid="#8f7d56", silt="#5e5c46", dark="#47483a", algae="#5d6e3c").items()}
+    vcol = {}
+    for j in range(ny):
+        for i in range(nx):
+            x, y = x0 + i * step, y0 + j * step
+            e = lake_e(x, y)
+            if e > 1.0:
+                continue
+            k = 1 - smooth(0.85, 0.99, e)
+            z = ground(x, y) + k * (0.12 * noise.noise(Vector((x * 0.6, y * 0.6, 3.1))) + 0.04 * noise.noise(Vector((x * 2.5, y * 2.5, 7.7))))
+            grid[(i, j)] = bm.verts.new((x, y, z))
+            depth = LAKE["level"] - z
+            c = C["sand"].lerp(C["mid"], smooth(0.8, 2.0, depth)).lerp(C["silt"], smooth(2.5, 5.0, depth)).lerp(C["dark"], smooth(5.5, 7.5, depth))
+            c = c.lerp(C["algae"], 0.35 * smooth(0.2, 0.6, fbm(x * 0.15, y * 0.15, 2, 4.0)) * smooth(1.0, 2.5, depth))
+            vcol[(i, j)] = c
+    for (i, j), v in grid.items():
+        q = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)]
+        if all(k in grid for k in q):
+            f = bm.faces.new([grid[k] for k in q])
+            for loop, k in zip(f.loops, q):
+                c = vcol[k]
+                loop[col] = (c.x, c.y, c.z, 1.0)
+    ob = new_obj("Lake_Bottom_Terrain", bm, LB, [mat_vertex_color("Lake_Bed_Silt_VertexColor", rough=0.95, bump=0.3)], smooth_shade=True,
+                 props=dict(cn="湖底地形（浅滩、陡坎、湖心盆地）", status="inferred",
+                            note="形状与深度为推测：浅滩约 1.4 m，湖心约 5 m，石崖下最深约 7.5 m；等待第 30 集截图核对"))
+    ob["max_depth_m"] = round(LAKE["level"] - min(v.co.z for v in ob.data.vertices), 2)
+    # 入水点（推测）：从空地来的小路到达东南沙滩的位置
+    ex, ey = lake_point(math.radians(-50), 1.0)
+    empty("Lake_Entry_Point_Inferred", COLL["Lake_Shore"], (ex, ey, ground(ex, ey)), size=1.2,
+          props=dict(cn="角色入水点（推测）", status="inferred", note="剧中入水地点没有画面；暂放在小路到达的沙滩"))
+
+
 def build_lake_and_rocks():
     C = COLL["River_and_Rocks"]
     # 湖面
@@ -828,8 +893,9 @@ def build_lake_and_rocks():
         ring.append(bm.verts.new((x, y, LAKE["level"])))
     for k in range(seg):
         bm.faces.new((center, ring[k], ring[(k + 1) % seg]))
-    new_obj("Lake_Water", bm, C, [mat_water("Water_Lake", "#4f8fc0", "#2d6a96")], recalc=False,
-            props=dict(cn="林中大湖", status="observed", note="U1：大湖；湖的完整轮廓为推测"))
+    new_obj("Lake_Water_Surface", bm, COLL["Lake_Water"], [mat_water("Water_Lake", "#4f8fc0", "#2d6a96")], recalc=False,
+            props=dict(cn="湖面", status="observed", note="U1：大湖；湖的完整轮廓为推测"))
+    build_lake_bottom()
 
     # 石崖：成排的深灰色多棱柱状岩体，前面陡直、顶部参差（U1）
     bm = bmesh.new()
@@ -842,16 +908,17 @@ def build_lake_and_rocks():
                 continue  # 瀑布的缺口
             x, y = lake_point(a + rnd.uniform(-0.015, 0.015), 1.08 + layer * 0.09 + rnd.uniform(-0.02, 0.02))
             k = 0.55 + 0.45 * math.sin((i + 0.5) / (n + 1) * math.pi)
-            hgt = CLIFF["height"] * k * (0.85 + 0.25 * layer) * rnd.uniform(0.85, 1.1) + 1.0
+            z_base = min(LAKE["level"] - 1.0, ground(*lake_point(a, 0.96)) - 0.6)  # 柱体伸到湖底（水下崖壁为推测）
+            hgt = CLIFF["height"] * k * (0.85 + 0.25 * layer) * rnd.uniform(0.85, 1.1) + (LAKE["level"] - z_base)
             r = rnd.uniform(1.6, 2.6)
             ret = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=rnd.choice((5, 6, 7)),
                                         radius1=r, radius2=r * rnd.uniform(0.7, 0.9), depth=hgt,
-                                        matrix=trs((x, y, LAKE["level"] - 1.0 + hgt / 2), (rnd.uniform(-0.04, 0.04), rnd.uniform(-0.04, 0.04), rnd.uniform(0, 6.3))))
+                                        matrix=trs((x, y, z_base + hgt / 2), (rnd.uniform(-0.04, 0.04), rnd.uniform(-0.04, 0.04), rnd.uniform(0, 6.3))))
             for v in ret["verts"]:
                 v.co += Vector((noise.noise(v.co * 0.4) * 0.35, noise.noise(v.co * 0.4 + Vector((5, 1, 2))) * 0.35, 0))
             _mi(_faces(ret), rnd.randrange(2))
             # 顶上的碎石帽
-            bm_ico(bm, r * 0.9, loc=(x, y, LAKE["level"] - 1.0 + hgt), scale=(1, 1, 0.45), subdiv=1, rough=0.2, seed=i + layer, mi=rnd.randrange(2))
+            bm_ico(bm, r * 0.9, loc=(x, y, z_base + hgt), scale=(1, 1, 0.45), subdiv=1, rough=0.2, seed=i + layer, mi=rnd.randrange(2))
     ob = new_obj("Lake_Cliff_Rock", bm, C, [mat_noise("Rock_Cliff_Dark", "#3c3b40", "#57565c", scale=1.2, bump=0.5),
                                             mat_noise("Rock_Cliff_Darker", "#2f2e33", "#47464c", scale=1.5, bump=0.5)],
                  props=dict(cn="湖边石崖", status="observed", note="U1：深灰色大石崖；背面与高度为推测"))
@@ -3532,6 +3599,45 @@ def build_check_cameras():
     build_acceptance_cameras()
 
 
+def build_lake_cameras():
+    """湖泊初步检查相机（render_acceptance.py 的第 5 个参数传 Lake_Check_Cameras 渲染）：鸟瞰、隐藏水面的湖底俯视、
+    沙滩到石崖的剖面（相机裁剪面正好切在剖面上）、隐藏水面的湖底斜视。"""
+    LCC = coll("Lake_Check_Cameras", COLL["Lights_and_Cameras"])
+    cx, cy, lv = LAKE["x"], LAKE["y"], LAKE["level"]
+    hide_wf = "Lake_Water,Forest_Trees,Forest_Plants,Characters"
+
+    def cam(name, cn, loc, tgt, lens=30, hide="", res="1600x1000", ortho=None, clip=0.5, rot=None):
+        cd = bpy.data.cameras.new(name)
+        cd.lens = lens
+        cd.clip_start, cd.clip_end = clip, 2000
+        co = bpy.data.objects.new(name, cd)
+        LCC.objects.link(co)
+        co.location = loc
+        if ortho:
+            cd.type = "ORTHO"
+            cd.ortho_scale = ortho
+        if rot is not None:
+            co.rotation_euler = rot
+        else:
+            look_at(co, tgt)
+        co["name_cn"] = cn
+        co["hide_collections"] = hide
+        co["acc_res"] = res
+        return co
+    cam("Lake_01_Aerial_With_Forest", "湖泊与周围森林鸟瞰", (cx + 30, cy - 42, 46), (cx, cy + 2, 0), lens=30)
+    cam("Lake_02_Bottom_Top_NoWater", "隐藏水面后的湖底俯视（正交）", (cx, cy, 60), None, ortho=50, hide=hide_wf, res="1600x1100", rot=(0, 0, 0))
+    # 剖面：沿“沙滩—湖心—石崖”方向的竖直面；相机在剖面一侧，clip_start 正好落在剖面上
+    ux, uy = math.cos(CLIFF["fall"]) * LAKE["rx"], math.sin(CLIFF["fall"]) * LAKE["ry"]
+    L = math.hypot(ux, uy)
+    ux, uy = ux / L, uy / L
+    nx_, ny_ = uy, -ux  # 剖面法线
+    D = 80.0
+    co = cam("Lake_03_Section_Beach_Center_Cliff", "湖底剖面：沙滩—湖心—石崖（相机裁剪面切在剖面上）",
+             (cx - nx_ * D, cy - ny_ * D, lv - 1.5), (cx, cy, lv - 1.5), ortho=56, hide=hide_wf, res="1600x800", clip=D)
+    co["section_axis"] = (ux, uy)
+    cam("Lake_04_Bottom_Oblique_NoWater", "隐藏水面后的湖底斜视", (cx + 26, cy - 30, 20), (cx - 2, cy + 1, lv - 4), lens=28, hide=hide_wf)
+
+
 def build_acceptance_cameras():
     """验收相机（render_acceptance.py 渲染）：木屋四面、屋顶近景、室内俯视、三个房间、仓库四面、仓库内部、储物细节、院子全景。
     hide_collections 里的集合在渲染这台相机时隐藏（例如拆掉屋顶看室内）。室外相机的 clip_start 用来切掉挡在前面的树和另一栋建筑。"""
@@ -3583,6 +3689,7 @@ def build_acceptance_cameras():
     cam("Acc_14_Warehouse_Interior", "仓库内部（从大门往里看）", wr, (0.5, 3.6, Bw + 1.7), (-0.5, -2.5, Bw + 0.9), lens=14)
     cam("Acc_15_Warehouse_Storage_Detail", "仓库储物细节（木料架）", wr, (0.2, 0.6, Bw + 1.6), (2.3, -1.6, Bw + 1.1), lens=20)
     cam("Acc_16_Warehouse_Interior_Top", "仓库室内俯视（拆掉屋顶）", wr, (0.0, 0.0, 12.0), None, hide=roof_w, res="1200x1400", ortho=9.6)
+    build_lake_cameras()
     cam("Acc_17_Yard_Overview", "院子全景（木屋、仓库、小路、栅栏、院门）", hr, (-14.0, 26.0, 17.0), (5.5, -1.0, 1.0), lens=28, clip=2.0)
 
 

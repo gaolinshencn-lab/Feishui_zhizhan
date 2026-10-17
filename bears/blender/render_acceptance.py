@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """渲染验收图（Lights_and_Cameras/Acceptance_Cameras 里的相机）。
 
-用法：blender -b boonie_bears_forest_map.blend -P render_acceptance.py -- <输出目录> [采样数] [分辨率百分比] [相机名关键字,...]
+用法：blender -b boonie_bears_forest_map.blend -P render_acceptance.py -- <输出目录> [采样数] [分辨率百分比] [相机名关键字,...] [相机集合]
+相机集合默认是 Acceptance_Cameras；湖泊检查图用 Lake_Check_Cameras。
 每台相机的 hide_collections 属性列出渲染时要隐藏的集合（例如拆掉屋顶看室内），渲染完恢复；acc_res 是分辨率。
 """
 import bpy
@@ -14,6 +15,7 @@ out = os.path.abspath(argv[0] if argv else "acceptance")
 samples = int(argv[1]) if len(argv) > 1 else 32
 pct = int(argv[2]) if len(argv) > 2 else 100
 only = argv[3].split(",") if len(argv) > 3 and argv[3] else []
+cam_coll = argv[4] if len(argv) > 4 else "Acceptance_Cameras"
 os.makedirs(out, exist_ok=True)
 sc = bpy.context.scene
 sc.cycles.samples = samples
@@ -54,7 +56,7 @@ def clear_trees(cam, hidden):
     return out
 
 
-cams = sorted(bpy.data.collections["Acceptance_Cameras"].objects, key=lambda o: o.name)
+cams = sorted(bpy.data.collections[cam_coll].objects, key=lambda o: o.name)
 for cam in cams:
     if only and not any(k in cam.name for k in only):
         continue
