@@ -358,6 +358,97 @@ def mat_water(name, color, deep, rough=0.04):
     return m
 
 
+def mat_water_depth(name, shallow, deep, rough=0.04):
+    """湖面：顶点色 DepthFac（0 = 岸边浅水，1 = 深水）控制浅绿到深蓝绿；两层噪声凹凸，大的是水面起伏，小的是细波纹。"""
+    if name in MATS:
+        return MATS[name]
+    m = _new_mat(name)
+    nodes, links = _nodes(m)
+    b = nodes.get("Principled BSDF")
+    vc = nodes.new("ShaderNodeVertexColor")
+    vc.layer_name = "DepthFac"
+    cr = nodes.new("ShaderNodeValToRGB")
+    cr.color_ramp.elements[0].color = srgb(shallow)
+    cr.color_ramp.elements[1].color = srgb(deep)
+    links.new(vc.outputs["Color"], cr.inputs["Fac"])
+    links.new(cr.outputs["Color"], b.inputs["Base Color"])
+    _set(b, "Roughness", rough)
+    _set(b, "IOR", 1.33)
+    _set(b, ["Transmission Weight", "Transmission"], 0.5)
+    tc = nodes.new("ShaderNodeTexCoord")
+    prev = None
+    for sc_, st in ((0.35, 0.08), (3.5, 0.035)):
+        nz = nodes.new("ShaderNodeTexNoise")
+        nz.inputs["Scale"].default_value = sc_
+        nz.inputs["Detail"].default_value = 3.0
+        links.new(tc.outputs["Object"], nz.inputs["Vector"])
+        bp = nodes.new("ShaderNodeBump")
+        bp.inputs["Strength"].default_value = st
+        links.new(nz.outputs["Fac"], bp.inputs["Height"])
+        if prev:
+            links.new(prev.outputs["Normal"], bp.inputs["Normal"])
+        prev = bp
+    links.new(prev.outputs["Normal"], b.inputs["Normal"])
+    m.diffuse_color = srgb(deep)
+    MATS[name] = m
+    return m
+
+
+def mat_cliff_strata(name, c_dark, c_mid, c_light):
+    """石崖：沿高度的层理条带（波纹纹理 + 扭曲），Voronoi 边线做竖向裂缝（压暗 + 凹凸）。"""
+    if name in MATS:
+        return MATS[name]
+    m = _new_mat(name)
+    nodes, links = _nodes(m)
+    b = nodes.get("Principled BSDF")
+    tc = nodes.new("ShaderNodeTexCoord")
+    wv = nodes.new("ShaderNodeTexWave")
+    wv.wave_type = "BANDS"
+    wv.bands_direction = "Z"
+    wv.inputs["Scale"].default_value = 0.45
+    wv.inputs["Distortion"].default_value = 1.2
+    wv.inputs["Detail"].default_value = 3.0
+    links.new(tc.outputs["Object"], wv.inputs["Vector"])
+    cr = nodes.new("ShaderNodeValToRGB")
+    cr.color_ramp.elements[0].color = srgb(c_dark)
+    cr.color_ramp.elements[1].color = srgb(c_light)
+    el = cr.color_ramp.elements.new(0.5)
+    el.color = srgb(c_mid)
+    links.new(wv.outputs["Fac"], cr.inputs["Fac"])
+    mp = nodes.new("ShaderNodeMapping")
+    mp.inputs["Scale"].default_value = (1.0, 1.0, 0.22)  # 竖向拉长：裂缝多是竖的
+    links.new(tc.outputs["Object"], mp.inputs["Vector"])
+    vo = nodes.new("ShaderNodeTexVoronoi")
+    vo.feature = "DISTANCE_TO_EDGE"
+    vo.inputs["Scale"].default_value = 0.9
+    links.new(mp.outputs["Vector"], vo.inputs["Vector"])
+    ck = nodes.new("ShaderNodeMapRange")
+    ck.inputs["From Min"].default_value = 0.0
+    ck.inputs["From Max"].default_value = 0.06
+    ck.inputs["To Min"].default_value = 0.35
+    ck.inputs["To Max"].default_value = 1.0
+    links.new(vo.outputs["Distance"], ck.inputs["Value"])
+    mx = nodes.new("ShaderNodeMix")
+    mx.data_type = "RGBA"
+    mx.blend_type = "MULTIPLY"
+    mx.inputs[0].default_value = 1.0
+    links.new(cr.outputs["Color"], mx.inputs[6])
+    links.new(ck.outputs["Result"], mx.inputs[7])
+    links.new(mx.outputs[2], b.inputs["Base Color"])
+    _set(b, "Roughness", 0.9)
+    b1 = nodes.new("ShaderNodeBump")
+    b1.inputs["Strength"].default_value = 0.25
+    links.new(wv.outputs["Fac"], b1.inputs["Height"])
+    b2 = nodes.new("ShaderNodeBump")
+    b2.inputs["Strength"].default_value = 0.6
+    links.new(ck.outputs["Result"], b2.inputs["Height"])
+    links.new(b1.outputs["Normal"], b2.inputs["Normal"])
+    links.new(b2.outputs["Normal"], b.inputs["Normal"])
+    m.diffuse_color = srgb(c_mid)
+    MATS[name] = m
+    return m
+
+
 def mat_waterfall():
     name = "Water_Waterfall"
     if name in MATS:
@@ -689,8 +780,15 @@ CLEARINGS = [(MEADOW[0], MEADOW[1], MEADOW[2]), (YARD[0], YARD[1], YARD[2]), (LO
              (MONKEYCAVE["x"], MONKEYCAVE["y"], 10.0), (SQUIRRELTREE["x"], SQUIRRELTREE["y"], 5.0)]
 
 
+def lake_shape(a):
+    """湖岸不规则程度：椭圆半径按角度乘这个系数，做出凹湾和凸岬（推测：U1 只看到一段湖岸，完整轮廓没有画面）。
+    lake_e 和 lake_point 都用它，所以湖底、湖面、水体、石崖、树木避让都跟着同一条岸线。"""
+    return 1.0 + 0.075 * math.sin(3 * a + 0.6) + 0.045 * math.sin(5 * a + 2.2) + 0.025 * math.sin(9 * a + 1.0)
+
+
 def lake_e(x, y):
-    return math.hypot((x - LAKE["x"]) / LAKE["rx"], (y - LAKE["y"]) / LAKE["ry"])
+    u, v = (x - LAKE["x"]) / LAKE["rx"], (y - LAKE["y"]) / LAKE["ry"]
+    return math.hypot(u, v) / lake_shape(math.atan2(v, u))
 
 
 def lake_angle(x, y):
@@ -698,7 +796,21 @@ def lake_angle(x, y):
 
 
 def lake_point(a, e=1.0):
+    e *= lake_shape(a)
     return (LAKE["x"] + math.cos(a) * LAKE["rx"] * e, LAKE["y"] + math.sin(a) * LAKE["ry"] * e)
+
+
+_CREEK = None
+
+
+def creek_pts():
+    """瀑布上游的小溪（推测）：从石崖后高地上的泉眼流到崖口。U1 只看到瀑布从崖顶落下，没看到上游；
+    这里补一条小溪，让瀑布的水有来处。"""
+    global _CREEK
+    if _CREEK is None:
+        f = CLIFF["fall"]
+        _CREEK = [lake_point(f + 0.17, 2.2), lake_point(f + 0.1, 1.9), lake_point(f + 0.03, 1.6), lake_point(f, 1.33), lake_point(f, 1.2)]
+    return _CREEK
 
 
 def in_cliff_arc(a, pad=0.0):
@@ -772,6 +884,8 @@ def ground(x, y):
     if in_cliff_arc(a, 0.8):
         k = smooth(0.8, 0.0, max(0.0, max(CLIFF["a0"] - a, a - CLIFF["a1"])))
         h = max(h, lerp(h, LAKE["level"] + CLIFF["height"] + 0.5, k * smooth(1.05, 1.3, e) * (1 - smooth(1.9, 3.4, e))))
+        if 1.15 < e < 2.5:  # 小溪冲出的浅沟
+            h -= 0.5 * (1 - smooth(0.9, 2.6, dist_to_polyline(x, y, creek_pts()))) * smooth(1.15, 1.35, e)
     # 湖盆与沙滩
     bed = lake_bed(x, y, e, a)
     shore = lerp(bed, h, smooth(0.92, 1.45, e))
@@ -888,8 +1002,8 @@ def build_lake_bottom():
     整个湖底形状为推测：第 30 集《湖底历险记》的画面没能读取（见 LAKE_AUDIT.md）。"""
     LB = COLL["Lake_Bottom"]
     step = 0.4
-    x0, x1 = LAKE["x"] - LAKE["rx"], LAKE["x"] + LAKE["rx"]
-    y0, y1 = LAKE["y"] - LAKE["ry"], LAKE["y"] + LAKE["ry"]
+    x0, x1 = LAKE["x"] - LAKE["rx"] * 1.16, LAKE["x"] + LAKE["rx"] * 1.16  # 1.16 ≥ lake_shape 的最大值
+    y0, y1 = LAKE["y"] - LAKE["ry"] * 1.16, LAKE["y"] + LAKE["ry"] * 1.16
     nx, ny = int((x1 - x0) / step) + 1, int((y1 - y0) / step) + 1
     bm = bmesh.new()
     col = bm.loops.layers.color.new("Col")
@@ -1365,17 +1479,27 @@ def build_lake_and_rocks():
     C = COLL["River_and_Rocks"]
     # 湖面
     bm = bmesh.new()
-    seg = 72
+    seg, nr = 144, 14
+    dcol = bm.loops.layers.color.new("DepthFac")
     center = bm.verts.new((LAKE["x"], LAKE["y"], LAKE["level"]))
-    ring = []
-    for k in range(seg):
-        a = 2 * math.pi * k / seg
-        x, y = lake_point(a, 1.08)
-        ring.append(bm.verts.new((x, y, LAKE["level"])))
-    for k in range(seg):
-        bm.faces.new((center, ring[k], ring[(k + 1) % seg]))
-    new_obj("Lake_Water_Surface", bm, COLL["LW_Surface"], [mat_water("Water_Lake", "#3dbdb6", "#1f8f94")], recalc=False,
-            props=dict(cn="湖面", status="observed", note="U1：大湖；第 30 集小帧、第 41 集 056s/072s：湖水是青绿色；湖的完整轮廓为推测"))
+    rings = [[bm.verts.new((*lake_point(2 * math.pi * k / seg, 1.08 * (j / nr) ** 0.8), LAKE["level"])) for k in range(seg)]
+             for j in range(1, nr + 1)]
+    faces = [bm.faces.new((center, rings[0][k], rings[0][(k + 1) % seg])) for k in range(seg)]
+    for j in range(nr - 1):
+        for k in range(seg):
+            k2 = (k + 1) % seg
+            faces.append(bm.faces.new((rings[j][k], rings[j + 1][k], rings[j + 1][k2], rings[j][k2])))
+    depth = {}
+    for v in bm.verts:
+        d = LAKE["level"] - ground(v.co.x, v.co.y)
+        depth[v.index] = max(0.0, min(1.0, d / 4.5)) ** 0.6
+    for f in faces:
+        for lp in f.loops:
+            t = depth[lp.vert.index]
+            lp[dcol] = (t, t, t, 1.0)
+    new_obj("Lake_Water_Surface", bm, COLL["LW_Surface"], [mat_water_depth("Water_Lake_Depth", "#a6e6c8", "#105f7c")], recalc=False,
+            props=dict(cn="湖面（浅水浅绿、深水深蓝绿）", status="observed",
+                       note="U1：大湖；第 30 集小帧、第 41 集 056s/072s：湖水是青绿色；按水深变色和湖的完整轮廓为推测"))
     build_lake_bottom()
     build_lake_rocks()
     build_lake_water_volume()
@@ -1404,9 +1528,21 @@ def build_lake_and_rocks():
             _mi(_faces(ret), rnd.randrange(2))
             # 顶上的碎石帽
             bm_ico(bm, r * 0.9, loc=(x, y, z_base + hgt), scale=(1, 1, 0.45), subdiv=1, rough=0.2, seed=i + layer, mi=rnd.randrange(2))
-    ob = new_obj("Lake_Cliff_Rock", bm, C, [mat_noise("Rock_Cliff_Dark", "#3c3b40", "#57565c", scale=1.2, bump=0.5),
-                                            mat_noise("Rock_Cliff_Darker", "#2f2e33", "#47464c", scale=1.5, bump=0.5)],
-                 props=dict(cn="湖边石崖", status="observed", note="U1：深灰色大石崖；背面与高度为推测"))
+    ob = new_obj("Lake_Cliff_Rock", bm, C, [mat_cliff_strata("Rock_Cliff_Strata", "#36353a", "#424147", "#504f55"),
+                                            mat_cliff_strata("Rock_Cliff_Strata_Dark", "#2b2a2f", "#35343a", "#414046")],
+                 props=dict(cn="湖边石崖（层理、竖向裂缝）", status="observed",
+                            note="U1：深灰色柱状大石崖；层理条带、裂缝、背面与高度为推测"))
+    # 崖脚的崩落碎石（风化、侵蚀的结果；推测）
+    bm = bmesh.new()
+    for i in range(70):
+        a = rnd.uniform(CLIFF["a0"], CLIFF["a1"])
+        if abs(a - CLIFF["fall"]) < 0.06:
+            continue
+        x, y = lake_point(a, rnd.uniform(0.95, 1.05))
+        r = rnd.uniform(0.3, 1.3)
+        bm_ico(bm, r, loc=(x, y, ground(x, y) + r * 0.15), scale=(1.25, 1.0, 0.65), subdiv=1, rough=0.3, seed=i * 1.7, mi=rnd.randrange(2))
+    new_obj("Lake_Cliff_Talus", bm, C, [MATS["Rock_Cliff_Strata"], MATS["Rock_Cliff_Strata_Dark"]],
+            props=dict(cn="崖脚崩落的碎石", status="inferred", note="石崖风化崩落的石块，沿崖脚堆在水边和浅水里；没有画面"))
     # 瀑布：从崖顶落入湖中（U1）
     bm = bmesh.new()
     tx, ty = lake_point(CLIFF["fall"], 1.2)
@@ -1431,8 +1567,87 @@ def build_lake_and_rocks():
     for k in range(9):
         bm_ico(bm, rnd.uniform(0.5, 1.0), loc=(bx + rnd.uniform(-1.5, 1.5), by + rnd.uniform(-1.2, 1.2), LAKE["level"] + 0.1),
                scale=(1, 1, 0.45), subdiv=1, rough=0.2, seed=k)
+    for k in range(14):  # 落水点一圈更碎的水花
+        a = rnd.uniform(0, 6.283)
+        rr = rnd.uniform(1.4, 3.0)
+        bm_ico(bm, rnd.uniform(0.25, 0.55), loc=(bx + math.cos(a) * rr, by + math.sin(a) * rr, LAKE["level"] + 0.05),
+               scale=(1.3, 1, 0.3), subdiv=1, rough=0.25, seed=30 + k)
     new_obj("Lake_Waterfall_Foam", bm, C, [mat("Water_Foam", "#f2f6fa", rough=0.6)], smooth_shade=True,
             props=dict(cn="瀑布水花", status="inferred"))
+    # 落水点向外扩散的波纹（半透明白圈）
+    bm = bmesh.new()
+    for k, R_ in enumerate((3.4, 4.8, 6.4)):
+        bm_torus(bm, R_, 0.09 + 0.03 * k, loc=(bx, by, LAKE["level"] + 0.02), seg=48, rseg=4, scale=(1, 1, 0.25))
+    new_obj("Lake_Waterfall_Ripples", bm, C, [mat("Water_Ripple_White", "#e8f4f4", rough=0.4, alpha=0.45)], smooth_shade=True,
+            props=dict(cn="落水点的波纹", status="inferred"))
+    # 水雾：落水点上方的一团低密度体积
+    bm = bmesh.new()
+    bm_ico(bm, 3.2, loc=(bx, by, LAKE["level"] + 1.6), scale=(1.3, 1.3, 0.75), subdiv=2)
+    mm = _new_mat("Waterfall_Mist_Volume")
+    nodes, links = _nodes(mm)
+    nodes.remove(nodes.get("Principled BSDF"))
+    pv = nodes.new("ShaderNodeVolumePrincipled")
+    pv.inputs["Color"].default_value = (0.95, 0.98, 1.0, 1.0)
+    pv.inputs["Density"].default_value = 0.09
+    links.new(pv.outputs["Volume"], nodes.get("Material Output").inputs["Volume"])
+    mm.diffuse_color = (0.9, 0.95, 1.0, 0.3)
+    MATS[mm.name] = mm
+    new_obj("Lake_Waterfall_Mist", bm, C, [mm], smooth_shade=True, props=dict(cn="瀑布水雾（体积）", status="inferred"))
+    # 上游小溪：泉眼 → 高地上的浅沟 → 崖口
+    pts = creek_pts()
+    samp = []
+    for (x0_, y0_), (x1_, y1_) in zip(pts, pts[1:]):
+        n_ = max(1, int(math.hypot(x1_ - x0_, y1_ - y0_) / 0.7))
+        samp += [(lerp(x0_, x1_, i / n_), lerp(y0_, y1_, i / n_)) for i in range(n_)]
+    samp.append(pts[-1])
+    z_end = LAKE["level"] + CLIFF["height"] + 0.2
+    zs, zprev = [], 1e9
+    for i, (x, y) in enumerate(samp):
+        z = min(zprev, ground(x, y) + 0.12)
+        zs.append(z)
+        zprev = z
+    # 最后一段平滑接到瀑布顶
+    n_tail = 4
+    z0_ = zs[-n_tail - 1]
+    for i in range(n_tail):
+        zs[len(samp) - n_tail + i] = lerp(z0_, min(z_end, z0_), (i + 1) / n_tail)
+    bm = bmesh.new()
+    rows = []
+    for i, (x, y) in enumerate(samp):
+        x2, y2 = samp[min(i + 1, len(samp) - 1)]
+        x1_, y1_ = samp[max(i - 1, 0)]
+        dx, dy = x2 - x1_, y2 - y1_
+        L_ = math.hypot(dx, dy) or 1.0
+        px, py = -dy / L_, dx / L_
+        w = lerp(0.6, 1.0, i / len(samp)) + 0.12 * math.sin(i * 1.3)
+        rows.append([bm.verts.new((x + px * w * s_, y + py * w * s_, zs[i])) for s_ in (-1, 0, 1)])
+    for i in range(len(rows) - 1):
+        for k in range(2):
+            bm.faces.new((rows[i][k], rows[i][k + 1], rows[i + 1][k + 1], rows[i + 1][k]))
+    new_obj("Lake_Waterfall_Source_Creek", bm, C, [mat_water("Water_Creek", "#6fd0c4", "#2a98a0")],
+            props=dict(cn="瀑布上游的小溪", status="inferred", note="U1 只看到瀑布从崖顶落下；上游小溪和泉眼是为了让水有来处补的推测"))
+    sx, sy = pts[0]
+    bm = bmesh.new()
+    bm_cyl(bm, 1.5, 1.5, 0.04, loc=(sx, sy, zs[0] + 0.01), seg=20)
+    new_obj("Lake_Waterfall_Spring_Pool", bm, C, [MATS["Water_Creek"]], props=dict(cn="泉眼小水潭", status="inferred"))
+    bm = bmesh.new()
+    for i in range(0, len(samp), 2):  # 两岸的石头
+        x, y = samp[i]
+        for s_ in (-1, 1):
+            x2, y2 = samp[min(i + 1, len(samp) - 1)]
+            dx, dy = x2 - x, y2 - y
+            L_ = math.hypot(dx, dy) or 1.0
+            ox, oy = -dy / L_ * s_ * rnd.uniform(1.1, 1.6), dx / L_ * s_ * rnd.uniform(1.1, 1.6)
+            r = rnd.uniform(0.2, 0.55)
+            bm_ico(bm, r, loc=(x + ox, y + oy, ground(x + ox, y + oy) + r * 0.2), scale=(1.2, 1, 0.6), subdiv=1, rough=0.3, seed=i + s_ * 0.5)
+    for k in range(9):
+        a = 2 * math.pi * k / 9
+        bm_ico(bm, rnd.uniform(0.4, 0.75), loc=(sx + math.cos(a) * 1.75, sy + math.sin(a) * 1.75, zs[0]), scale=(1.2, 1, 0.7), subdiv=1, rough=0.3, seed=50 + k)
+    tx_, ty_ = pts[-1]
+    lip_z = ground(tx_, ty_)
+    if z_end - 0.15 > lip_z:  # 崖口：水从一块平顶石台上漫下去
+        bm_cube(bm, (3.2, 2.6, z_end - 0.15 - lip_z + 0.6), loc=(tx_, ty_, (z_end - 0.15 + lip_z - 0.6) / 2))
+    new_obj("Lake_Creek_Bank_Rocks", bm, C, [MATS["Rock_Cliff_Strata"]], props=dict(cn="小溪两岸和泉眼的石头、崖口石台", status="inferred"))
 
     # 岩石原型 + 散布
     protos = []
@@ -1614,6 +1829,11 @@ def build_forest():
               enumerate((mat_noise("Plant_Bush", "#3d7a32", "#559a40", scale=3), foliage_dark, foliage_green))]
     ferns = [fern_proto(f"Proto_Fern_{i}", 120 + i) for i in range(2)]
     ferns.append(leafy_plant_proto("Proto_BigLeaf_Plant", 140))
+    young = [spruce_proto(f"Proto_Spruce_Young_{i}", h, 200 + i) for i, h in enumerate((4.5, 6.5))]
+    snag = snag_proto("Proto_Snag", 300)
+    stumps = [stump_proto(f"Proto_Stump_{i}", 310 + i) for i in range(2)]
+    mushrooms = [mushroom_proto("Proto_Mushroom_Red", 320, "#c8452f", "#f4e9d8"),
+                 mushroom_proto("Proto_Mushroom_Brown", 321, "#8a5a32", "#efe2c8")]
 
     rnd = random.Random(5)
     W, H = TERRAIN
@@ -1724,12 +1944,157 @@ def build_forest():
                      props=dict(cn="倒木", status="inferred"))
         ob.location = (x, y, ground(x, y) + r * 0.6)
         ob.rotation_euler = (0, 0, rnd.uniform(0, 6.3))
+    n_trees += build_forest_floor(rnd, young, snag, stumps, mushrooms)
     return n_trees
+
+
+def ok_forest_spot(x, y, path_pad=2.2, clear_k=1.05, lake_pad=1.5, house_pad=12.0):
+    if lake_e(x, y) < lake_pad or path_dist(x, y) < path_pad:
+        return False
+    if any(math.hypot(x - cx, y - cy) < r * clear_k for cx, cy, r in CLEARINGS):
+        return False
+    return math.hypot(x - HOUSE["x"], y - HOUSE["y"]) >= house_pad
+
+
+def build_forest_floor(rnd, young, snag, stumps, mushrooms):
+    """P3 森林细节（全部推测，卡通风格）：小云杉、枯立木、树桩、蘑菇丛、长苔藓的石头、落叶、枯枝。
+    第一季截图里林下有倒木、蘑菇和落叶；具体位置都是随机摆放。"""
+    T, P = COLL["Forest_Trees"], COLL["Forest_Plants"]
+    n = 0
+    for i in range(500):
+        x, y = rnd.uniform(-100, 100), rnd.uniform(-80, 80)
+        if not ok_forest_spot(x, y):
+            continue
+        if rnd.random() < 0.85:
+            linked(rnd.choice(young), f"FOREST_Spruce_Young_{n:03d}", T, (x, y, ground(x, y) - 0.1), (0, 0, rnd.uniform(0, 6.3)),
+                   rnd.uniform(0.8, 1.2), props=dict(cn="小云杉", status="inferred"))
+        else:
+            linked(snag, f"FOREST_Snag_{n:03d}", T, (x, y, ground(x, y) - 0.1), (0, 0, rnd.uniform(0, 6.3)), rnd.uniform(0.8, 1.2),
+                   props=dict(cn="枯立木（断顶的死树）", status="inferred"))
+        n += 1
+        if n >= 160:
+            break
+    k = 0
+    for i in range(600):
+        x, y = rnd.uniform(-100, 100), rnd.uniform(-80, 80)
+        if not ok_forest_spot(x, y, path_pad=1.6, clear_k=0.95, lake_pad=1.35, house_pad=9.0):
+            continue
+        linked(rnd.choice(stumps), f"FOREST_Stump_{k:03d}", P, (x, y, ground(x, y) - 0.05), (0, 0, rnd.uniform(0, 6.3)), rnd.uniform(0.7, 1.3),
+               props=dict(cn="树桩", status="inferred"))
+        k += 1
+        if k >= 45:
+            break
+    k = 0
+    for i in range(3000):
+        x, y = rnd.uniform(-100, 100), rnd.uniform(-80, 80)
+        if not ok_forest_spot(x, y, path_pad=1.0, clear_k=0.9, lake_pad=1.35, house_pad=7.0):
+            continue
+        linked(rnd.choice(mushrooms), f"FOREST_Mushrooms_{k:03d}", P, (x, y, ground(x, y) - 0.02), (0, 0, rnd.uniform(0, 6.3)),
+               rnd.uniform(1.2, 2.2), props=dict(cn="蘑菇丛", status="inferred"))
+        k += 1
+        if k >= 220:
+            break
+    rocks = [o for o in (bpy.data.objects.get(f"Proto_Rock_{i}") for i in range(3)) if o]
+    k = 0
+    for i in range(2000):
+        x, y = rnd.uniform(-100, 100), rnd.uniform(-80, 80)
+        if not rocks or not ok_forest_spot(x, y, path_pad=1.2, clear_k=0.95, lake_pad=1.4, house_pad=8.0):
+            continue
+        s_ = rnd.uniform(0.3, 0.9)
+        linked(rnd.choice(rocks), f"FOREST_Moss_Rock_{k:03d}", P, (x, y, ground(x, y) - s_ * 0.3), (0, 0, rnd.uniform(0, 6.3)), s_,
+               props=dict(cn="长苔藓的石头", status="inferred"))
+        k += 1
+        if k >= 160:
+            break
+    # 落叶和枯枝：围着树撒，按 40 m 分块合并
+    leaf_ms = [mat("Leaf_Litter_Orange", "#d27a2c", rough=0.8), mat("Leaf_Litter_Yellow", "#e2b23a", rough=0.8),
+               mat("Leaf_Litter_Brown", "#8a5a30", rough=0.85), mat_noise("Twig_Dead", "#5a3f2b", "#6f4f36", scale=8)]
+    tiles = {}
+    trees = [o for o in T.objects if o.name.startswith(("Tree_Broadleaf", "Tree_Birch", "Tree_Spruce"))]
+    for o in trees:
+        tx, ty = o.location.x, o.location.y
+        nleaf = 40 if "Spruce" not in o.name else 12
+        for j in range(nleaf):
+            a, rr = rnd.uniform(0, 6.283), rnd.uniform(0.6, 4.5) ** 1.0
+            x, y = tx + math.cos(a) * rr, ty + math.sin(a) * rr
+            if path_dist(x, y) < 0.5 or lake_e(x, y) < 1.3:
+                continue
+            bm = tiles.setdefault((int((x + 120) // 40), int((y + 100) // 40)), bmesh.new())
+            z = ground(x, y) + 0.03
+            r_ = rnd.uniform(0.13, 0.24)  # 卡通比例：叶子画得比实际大
+            rot = rnd.uniform(0, 6.283)
+            vs = [bm.verts.new((x + math.cos(rot + q * 1.5708) * r_ * (1.0 if q % 2 == 0 else 0.55),
+                                y + math.sin(rot + q * 1.5708) * r_ * (1.0 if q % 2 == 0 else 0.55), z + (0.015 if q % 2 else 0))) for q in range(4)]
+            f = bm.faces.new(vs)
+            f.material_index = rnd.choice((0, 0, 1, 2))
+        if rnd.random() < 0.35:
+            a = rnd.uniform(0, 6.283)
+            x, y = tx + math.cos(a) * rnd.uniform(1.0, 3.5), ty + math.sin(a) * rnd.uniform(1.0, 3.5)
+            if path_dist(x, y) < 0.8:
+                continue
+            bm = tiles.setdefault((int((x + 120) // 40), int((y + 100) // 40)), bmesh.new())
+            z = ground(x, y) + 0.04
+            L_ = rnd.uniform(0.6, 1.6)
+            b_ = rnd.uniform(0, 6.283)
+            ex, ey = x + math.cos(b_) * L_, y + math.sin(b_) * L_
+            bm_tube(bm, [(x, y, z), ((x + ex) / 2, (y + ey) / 2, z + 0.05), (ex, ey, ground(ex, ey) + 0.03)], [0.035, 0.028, 0.015], seg=5, mi=3)
+            bm_tube(bm, [((x + ex) / 2, (y + ey) / 2, z + 0.05), ((x + ex) / 2 + 0.3, (y + ey) / 2 + 0.25, z + 0.12)], [0.018, 0.008], seg=4, mi=3)
+    for (i, j), bm in tiles.items():
+        new_obj(f"FOREST_Litter_Twigs_{i}_{j}", bm, P, leaf_ms, recalc=False, props=dict(cn="落叶和枯枝（秋季）", status="inferred"))
+    return n
+
+
+def snag_proto(name, seed):
+    """枯立木：断顶、树皮发灰，几根光秃的断枝。"""
+    rnd = random.Random(seed)
+    bm = bmesh.new()
+    h = 7.0
+    bm_tube(bm, [(0, 0, -0.2), (0.1, 0, h * 0.4), (0.0, 0.12, h * 0.8), (0.05, 0.1, h)], [0.4, 0.32, 0.26, 0.2], seg=8)
+    for k in range(5):
+        z = rnd.uniform(2.5, h * 0.9)
+        a = rnd.uniform(0, 6.283)
+        L_ = rnd.uniform(0.8, 1.8)
+        bm_tube(bm, [(0, 0, z), (math.cos(a) * L_, math.sin(a) * L_, z + L_ * 0.4)], [0.09, 0.025], seg=5)
+    for k in range(4):  # 断口的尖碴
+        a = 2 * math.pi * k / 4 + rnd.uniform(-0.3, 0.3)
+        bm_cyl(bm, 0.07, 0.0, rnd.uniform(0.3, 0.6), loc=(0.05 + math.cos(a) * 0.12, 0.1 + math.sin(a) * 0.12, h + 0.15), seg=4)
+    return new_obj(name, bm, COLL["Prototypes_Hidden"], [mat_noise("Bark_Dead_Grey", "#6d655d", "#8a8178", scale=6, bump=0.5, stretch=(3.0, 3.0, 0.35))],
+                   smooth_shade=True, recalc=False)
+
+
+def stump_proto(name, seed):
+    rnd = random.Random(seed)
+    bm = bmesh.new()
+    r = rnd.uniform(0.35, 0.5)
+    hgt = rnd.uniform(0.35, 0.6)
+    bm_cyl(bm, r * 1.15, r, hgt, loc=(0, 0, hgt / 2), seg=12, mi=0, caps=False)
+    bm_cyl(bm, r * 0.98, r * 0.98, 0.03, loc=(0, 0, hgt), seg=12, mi=1)
+    for k in range(4):
+        a = 2 * math.pi * k / 4 + rnd.uniform(-0.3, 0.3)
+        bm_tube(bm, [(math.cos(a) * r * 0.6, math.sin(a) * r * 0.6, 0.2), (math.cos(a) * r * 1.5, math.sin(a) * r * 1.5, 0.02)], [0.14, 0.05], seg=6, mi=0)
+    return new_obj(name, bm, COLL["Prototypes_Hidden"], [mat_noise("Bark_Log", "#5d3f2a", "#7b573c", scale=6, bump=0.3),
+                                                         mat_noise("Wood_Cut_End", "#d7b07a", "#e6c696", scale=12, bump=0.1)],
+                   smooth_shade=True, recalc=False)
+
+
+def mushroom_proto(name, seed, cap, stem):
+    """一丛 3–5 个卡通蘑菇。"""
+    rnd = random.Random(seed)
+    bm = bmesh.new()
+    for k in range(rnd.randint(3, 5)):
+        a, rr = rnd.uniform(0, 6.283), rnd.uniform(0.0, 0.2)
+        x, y = math.cos(a) * rr, math.sin(a) * rr
+        h = rnd.uniform(0.08, 0.2)
+        bm_cyl(bm, 0.022, 0.018, h, loc=(x, y, h / 2), seg=6, mi=1)
+        cr = rnd.uniform(0.05, 0.1)
+        bm_sphere(bm, (cr, cr, cr * 0.6), loc=(x, y, h), seg=10, rings=6, mi=0)
+    return new_obj(name, bm, COLL["Prototypes_Hidden"], [mat_noise(name + "_Cap", cap, cap, scale=5, bump=0.05), mat("Mushroom_Stem", stem, rough=0.6)],
+                   smooth_shade=True, recalc=False)
 
 
 # ------------------------------------------------------------------------------------------------
 # 阶段 4：光头强的木屋（四季篇改版：红棕色木墙、蓝灰色木板屋顶）和独立仓库。逐项依据见 HOUSE_WAREHOUSE_AUDIT.md。
-# 木屋局部坐标：+Y 为正面（北），+X 为东（站在门前看在左手边），原点在主屋中心、四角地面最高点的高度。
+# 木屋局部坐标：+Y 为正面，+X 一侧在地图上叫“东”（只是模型约定，原作没有方位证据；从院子正对木屋时 +X 在画面左侧），原点在主屋中心、四角地面最高点的高度。
 # 布局：主屋 = 客厅/厨房/餐厅（西）+ 卧室（东，隔墙 PART_X）；卫生间是西侧单独的一翼（站在门前看在右手边）。
 
 W_HOUSE, D_HOUSE, H_WALL, FOUND = 9.0, 6.0, 3.0, 1.0
@@ -3769,7 +4134,7 @@ def build_monkey_cave():
                     [bm_sphere(bm, (0.08, 0.08, 0.18), loc=(0.2 + i * 0.12, 0.1, 0.22), rot=(0, 0.6, 0), seg=10, rings=6, mi=1) for i in range(3)]),
         (0.4, 4.3, 0))
     li = bpy.data.lights.new("MonkeyCave_Light", "POINT")
-    li.energy = 120
+    li.energy = 260  # 比例测试 ST06：洞室太暗，看不清座位和睡窝
     li.color = (1.0, 0.86, 0.66)
     lo = bpy.data.objects.new("MonkeyCave_Light", li)
     INT.objects.link(lo)
@@ -4564,6 +4929,20 @@ def build_lake_cameras():
     cam("Lake_10_Waterweed_Closeup", "水草近景（隐藏水体）", R - f * 2.0 - r * 3.2 + up * (zf + 0.9), R - f * 1.0 - r * 7.0 + up * (zf + 0.4), lens=24, hide=hide_wf)
     ex, ey = lake_point(math.radians(-50), 1.12)
     cam("Lake_12_Shore_Front", "湖岸正面：从沙滩入水点看湖面、石崖和瀑布", (ex, ey, ground(ex, ey) + 1.7), (cx - 4, cy + 6, lv + 3.0), lens=24, hide="Characters")
+    fl = CLIFF["fall"]
+    wx, wy = lake_point(fl, 0.5)
+    fx, fy = lake_point(fl, 1.12)
+    cam("Lake_13_Top_With_Water", "湖面俯视（不规则湖岸、浅水深水颜色；隐藏树木）", (cx, cy, 70), None, ortho=58, hide="Forest_Trees,Characters", res="1600x1100", rot=(0, 0, 0))
+    cam("Lake_14_Waterfall_Closeup", "瀑布近景（水花、水雾、波纹）", (wx, wy, lv + 2.2), (fx, fy, lv + 6.0), lens=24, hide="Characters")
+    c1, c2 = creek_pts()[0], creek_pts()[2]
+    sx_, sy_ = lake_point(fl + 0.45, 2.7)
+    cam("Lake_15_Waterfall_Source_Creek", "瀑布上游：高地上的泉眼和小溪流到崖口", (sx_, sy_, ground(sx_, sy_) + 9.0), ((c1[0] + c2[0]) / 2, (c1[1] + c2[1]) / 2, ground(*c2)), lens=24, hide="Characters,Forest_Trees")
+    qx, qy = lake_point(fl - 0.32, 0.45)
+    gx_, gy_ = lake_point(fl - 0.3, 1.08)
+    cam("Lake_16_Cliff_Strata", "石崖近景（层理、裂缝、崖脚碎石）", (qx, qy, lv + 2.5), (gx_, gy_, lv + 4.5), lens=30, hide="Characters")
+    cam("Forest_01_Long_View", "森林远景：从北面山坡看空地和林子", (-26.0, 58.0, 34.0), (18.0, -6.0, 2.0), lens=22, hide="Characters")
+    cam("Forest_02_Floor_Closeup", "林下近景（倒木、树桩、蘑菇、落叶、苔藓石头）", (-30.0, 10.0, ground(-30.0, 10.0) + 1.5), (-22.0, 14.0, ground(-22.0, 14.0) + 0.3), lens=22, hide="Characters")
+    cam("Forest_03_Long_View_From_Lake", "森林远景：从湖边沙滩看东北方向", (*lake_point(math.radians(-40), 1.15), 3.0), (10.0, 20.0, 6.0), lens=24, hide="Characters")
     co = cam("Lake_11_Cutaway_With_Water", "整体剖视：湖面、水下、岸边（相机裁剪面切在剖面上）",
              (cx - nx_ * D, cy - ny_ * D, lv - 1.5), (cx, cy, lv - 1.5), ortho=56, hide="Forest_Trees,Forest_Plants,Characters", res="1600x800", clip=D)
 
@@ -4653,7 +5032,7 @@ def build_acceptance_cameras():
     cam("Acc_16_Warehouse_Interior_Top", "仓库室内俯视（拆掉屋顶）", wr, (0.0, 0.0, 12.0), None, hide=roof_w, res="1200x1400", ortho=9.6)
     build_lake_cameras()
     build_still_match_cameras()
-    cam("Acc_17_Yard_Overview", "院子全景（木屋、仓库、小路、栅栏、院门）", hr, (18.0, 30.0, 20.0), (1.0, -7.0, 1.0), lens=26, clip=2.0)
+    cam("Acc_17_Yard_Overview", "院子全景（木屋、仓库、小路、栅栏、院门）", hr, (18.0, 30.0, 20.0), (1.0, -7.0, 1.0), lens=26, clip=2.0, clear=True)
     tr, mc, sq = (bpy.data.objects[n] for n in ("Bears_TreeHome_Root", "MonkeyCave_Root", "SquirrelNest_Tree_Root"))
     cam("Acc_18_TreeHome_Exterior", "熊洞外观（大树树干、前洞口、树根）", tr, (5.0, -15.0, 3.2), (0.0, 0.0, 3.4), lens=24, clear=True)
     cam("Acc_19_TreeHome_Interior", "熊洞室内（石板床、树叶铺、后壁圆洞）", tr, (-1.7, -1.5, 1.7), (0.9, 2.1, 1.0), lens=14)
