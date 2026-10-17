@@ -1756,7 +1756,7 @@ def build_house():
     under = mat_noise("Wood_Ceiling_Underside", "#6e5a4a", "#7d6957", scale=8, stretch=(0.3, 1.0, 1.0))
     bm = bmesh.new()
     for side in (-1, 1):
-        surf_box(bm, lambda u, xx, side=side: S(xx, side, u) - Vector((0, 0, 0.03)), 0.0, 1.0, x0m, x1m, 0.04, nu=6, nv=12, mi=0)
+        surf_box(bm, lambda u, xx, side=side: S(xx, side, u) - Vector((0, 0, 0.1)), 0.0, 1.0, x0m, x1m, 0.04, nu=16, nv=40, mi=0)
     # 檩条：顺屋脊方向的圆木，伸出山墙，端头露在上翘的屋檐下（R2、R8-a41/a42）
     for side in (-1, 1):
         for u in ((0.0, 0.33, 0.66, 0.95) if side > 0 else (0.33, 0.66, 0.95)):
@@ -1779,7 +1779,7 @@ def build_house():
     roof_boards(bm, Sw, x0w, x1w, rnd, len(roof_m), tiers=2)
     for side in (-1, 1):
         surf_box(bm, lambda u, xx, side=side: Sw(xx, side, u) + Vector((0, 0, 0.12)), 0.0, 0.08, x0w - 0.1, x1w, 0.05, nu=1, nv=6, mi=2)
-        surf_box(bm, lambda u, xx, side=side: Sw(xx, side, u) - Vector((0, 0, 0.03)), 0.0, 1.0, x0w, x1w, 0.04, nu=4, nv=6, mi=len(roof_m))
+        surf_box(bm, lambda u, xx, side=side: Sw(xx, side, u) - Vector((0, 0, 0.1)), 0.0, 1.0, x0w, x1w, 0.04, nu=16, nv=16, mi=len(roof_m))
     for side, u in ((1, 0.0), (1, 0.5), (-1, 0.5), (1, 0.95), (-1, 0.95)):
         p = Sw(-6.0, side, u)
         bm_cyl(bm, 0.12, 0.12, x1w - x0w + 0.3, loc=((x0w + x1w) / 2 - 0.15, p.y, p.z - 0.15), rot=(0, math.pi / 2, 0), seg=10, mi=len(roof_m) + 1)
@@ -2428,7 +2428,7 @@ def build_warehouse():
     roof_boards(bm, Sr, x0r, x1r, rnd, len(roof_m), tiers=3)
     for side in (-1, 1):
         surf_box(bm, lambda u, xx, side=side: Sr(xx, side, u) + Vector((0, 0, 0.15)), 0.0, 0.07, x0r - 0.1, x1r + 0.1, 0.05, nu=1, nv=10, mi=1)
-        surf_box(bm, lambda u, xx, side=side: Sr(xx, side, u) - Vector((0, 0, 0.03)), 0.0, 1.0, x0r, x1r, 0.04, nu=4, nv=10, mi=len(roof_m))
+        surf_box(bm, lambda u, xx, side=side: Sr(xx, side, u) - Vector((0, 0, 0.1)), 0.0, 1.0, x0r, x1r, 0.04, nu=16, nv=36, mi=len(roof_m))
     for side, u in ((1, 0.0), (1, 0.5), (-1, 0.5)):
         p = Sr(0.0, side, u)
         bm_cyl(bm, 0.12, 0.12, x1r - x0r, loc=(0, p.y, p.z - 0.15), rot=(0, math.pi / 2, 0), seg=10, mi=len(roof_m) + 1)
@@ -3574,7 +3574,8 @@ def build_acceptance_cameras():
     cam("Acc_06_House_Interior_Top", "木屋室内俯视（拆掉屋顶）", hr, (-1.2, 0.4, 13.0), None, hide=roof_h, res="1500x1000", ortho=13.6)
     cam("Acc_07_Kitchen_Dining", "客厅/厨房/餐厅", hr, (0.95, 2.45, B + 1.7), (-2.6, -2.3, B + 0.9), lens=14)
     cam("Acc_08_Bedroom", "卧室", hr, (1.75, -1.6, B + 1.7), (3.6, 1.5, B + 0.8), lens=14)
-    cam("Acc_09_Bathroom", "卫生间", hr, (-4.62, -0.35, B + 1.65), (-6.4, -1.9, B + 0.7), lens=13)
+    cam("Acc_09_Bathroom", "卫生间（从洗手池一角看马桶、木柜、门）", hr, (-6.25, 1.35, B + 1.7), (-5.2, -2.4, B + 0.6), lens=13)
+    cam("Acc_09b_Bathroom_Sink", "卫生间（看洗手池、镜子、毛巾）", hr, (-5.0, -2.1, B + 1.7), (-6.6, 1.2, B + 1.0), lens=14)
     cam("Acc_10_Warehouse_Front", "仓库正面（大门朝向木屋；渲染时隐藏木屋）", wr, (0.0, 17.0, 3.6), (0.0, 0.0, 2.6), hide=house, clear=True)
     cam("Acc_11_Warehouse_Back", "仓库背面", wr, (0.0, -17.0, 3.6), (0.0, 0.0, 2.6), clear=True)
     cam("Acc_12_Warehouse_East", "仓库东侧", wr, (16.0, 0.0, 3.6), (0.0, 0.0, 2.4), clear=True)
@@ -3701,6 +3702,8 @@ def finalize_and_save():
         lc = _layer(bpy.context.view_layer.layer_collection, n)
         if lc:
             lc.exclude = True
+    import json
+    sc["door_passages_json"] = json.dumps(DOOR_PASSAGES, ensure_ascii=False)  # reopen_check.py 用
     os.makedirs(os.path.dirname(os.path.abspath(OUT_BLEND)), exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(OUT_BLEND), compress=True)
     print("SAVED", OUT_BLEND)

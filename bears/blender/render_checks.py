@@ -25,20 +25,20 @@ for cam in cams:
     sc.camera = cam
     interior = "Interior_Plan" in cam.name
     roof.hide_render = interior
-    for o in roof.all_objects:
+    for o in [o for o in roof.all_objects if o is not None]:
         o.hide_render = interior
     if interior:
         # 室内平面图的家具标注：每个家具在画面里的位置（0–1）和中文名
         labels = []
-        for o in bpy.data.collections["GuangtouQiang_House_Interior"].objects:
-            if o.type == "MESH" and o.get("name_cn") and "Wall" not in o.name and "Floor" not in o.name:
+        for o in bpy.data.collections["GuangtouQiang_House_Interior"].all_objects:
+            if o.type == "MESH" and o.get("name_cn") and not any(k in o.name for k in ("Wall", "Floor", "Partition", "Door", "Lamp", "Chili", "Corn")):
                 p = world_to_camera_view(sc, cam, o.matrix_world.translation)
                 labels.append(dict(name=o.name, cn=o["name_cn"], x=p.x, y=p.y, status=o.get("position_status", o.get("ref_status", ""))))
         json.dump(labels, open(os.path.join(out, cam.name + ".labels.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     sc.render.filepath = os.path.join(out, cam.name + ".png")
     bpy.ops.render.render(write_still=True)
     roof.hide_render = False
-    for o in roof.all_objects:
+    for o in [o for o in roof.all_objects if o is not None]:
         o.hide_render = False
     print("RENDERED", cam.name, flush=True)
 sc.camera = bpy.data.objects["Cam_Map_Overview"]
