@@ -1,0 +1,19 @@
+{
+  "name": "boonie-bears-four-seasons-map",
+  "version": "1.0.0",
+  "private": true,
+  "description": "熊出没 · 四季狗熊岭 3D 地图 — fan-made four-seasons 3D map of Bear Ridge",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --outDir docs"
+  },
+  "dependencies": {
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "vite": "^7.3.0",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}

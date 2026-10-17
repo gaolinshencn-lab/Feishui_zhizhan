@@ -1,0 +1,50 @@
+{
+ "HOUSE_and_WAREHOUSE": {
+  "file": "HOUSE_and_WAREHOUSE.glb",
+  "objects": 204,
+  "mb": 6.01,
+  "triangles": 133036
+ },
+ "BEAR_HOME": {
+  "file": "BEAR_HOME.glb",
+  "objects": 12,
+  "mb": 0.62,
+  "triangles": 26012
+ },
+ "MONKEY_CAVE": {
+  "file": "MONKEY_CAVE.glb",
+  "objects": 17,
+  "mb": 0.3,
+  "triangles": 8094
+ },
+ "SQUIRREL_NEST": {
+  "file": "SQUIRREL_NEST.glb",
+  "objects": 7,
+  "mb": 0.18,
+  "triangles": 2930
+ },
+ "LAKE": {
+  "file": "LAKE.glb",
+  "objects": 170,
+  "mb": 1.92,
+  "triangles": 56194
+ },
+ "TERRAIN": {
+  "file": "TERRAIN.glb",
+  "objects": 3,
+  "mb": 2.43,
+  "triangles": 96290
+ },
+ "FOREST": {
+  "file": "FOREST.glb",
+  "objects": 2049,
+  "mb": 6.26,
+  "triangles": 1238842
+ },
+ "CHARACTERS": {
+  "file": "CHARACTERS.glb",
+  "objects": 138,
+  "mb": 3.77,
+  "triangles": 236084
+ }
+}

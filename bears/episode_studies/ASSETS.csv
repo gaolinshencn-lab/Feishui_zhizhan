@@ -1,0 +1,12 @@
+﻿asset_id,name,layer,blender_root,blender_collection,dossier,evidence_summary
+ASSET_HOUSE_GTQ,光头强木屋和院子,WORLD_BASE,HOUSE_Root,GuangtouQiang_House_Exterior / GuangtouQiang_House_Interior / Props,assets/ASSET_HOUSE_GTQ.md,"R1–R4、A45、A65（A，季别待核验）；E41/H2 旧版屋顶冲突"
+ASSET_WAREHOUSE_GTQ,光头强仓库,WORLD_BASE,WAREHOUSE_Root,GuangtouQiang_Warehouse,assets/ASSET_WAREHOUSE_GTQ.md,"没有原作画面；用户提供“在湖边”（待验证）"
+ASSET_BEAR_HOME,熊大熊二树洞,WORLD_BASE,BEAR_HOME_Root,Bears_TreeHome,assets/ASSET_BEAR_HOME.md,B1（B）室内；外观没有原作画面
+ASSET_MONKEY_CAVE,吉吉毛毛山洞,WORLD_BASE,MONKEY_CAVE_Root,MonkeyCave,assets/ASSET_MONKEY_CAVE.md,M1（B）外观；内部没有画面
+ASSET_SQUIRREL_NEST,蹦蹦的松鼠窝,WORLD_BASE,SQUIRREL_NEST_Tree_Root,SquirrelNest,assets/ASSET_SQUIRREL_NEST.md,S1（B，冬季）粗树枝和竖缝
+ASSET_HONEY_TREE,蜂蜜树和蜂巢,WORLD_BASE,FOREST_Tree_HoneyTree,Forest_Trees / Props,assets/ASSET_HONEY_TREE.md,第一季片头（B）
+ASSET_LAKE,湖和湖底,WORLD_BASE,LAKE_Water_Surface,River_and_Rocks,assets/ASSET_LAKE.md,"U1、U2、L1（A）；E41-056s"
+ASSET_CLIFF_WATERFALL,湖边石崖和瀑布,WORLD_BASE,LAKE_Cliff_Rock,River_and_Rocks,assets/ASSET_CLIFF_WATERFALL.md,U1（A）；E41-072s 版本差异
+ASSET_FOREST_PATHS,林间道路和空地,WORLD_BASE,TERRAIN_Ground,Terrain,assets/ASSET_FOREST_PATHS.md,全部推测
+ASSET_FOREST_VEG,森林植被（分季节）,WORLD_BASE + SEASON_*,—,Forest_Trees / Forest_Plants / SEASON_*,assets/ASSET_FOREST_VEG.md,第一季截图（B）、U1；季节版本待画面
+EP_S1E01_BLOSSOM_TREE,S1E01 开紫红色花的大树,EPISODE_OVERRIDES,EP_S1E01_Blossom_Tree_Root,EP_S1E01_赏花大会,../S1_CRDDP/E01_赏花大会/model_changes.md,S1E01 缩略图 T1、T2（太小）+ 剧情文字
