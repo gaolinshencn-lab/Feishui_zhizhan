@@ -55,7 +55,10 @@ EVIDENCE = [
 LABEL_AT = {("house", "gate"): (330, 150), ("house", "deck"): (660, 290), ("deck", "tires"): (840, 178), ("house", "fence"): (330, 420),
             ("lake", "beach"): (1010, 110), ("lake", "cliff"): (1350, 255), ("cliff", "fall"): (1560, 400)}
 UNKNOWN = ["warehouse"]  # 没有任何画面
-TEXT_ONLY = [("cave", "bearhome", "熊大熊二把一个山洞分给吉吉毛毛住（萌娘百科文字，不是画面）")]
+# 用户提供、还没有画面验证的线索；以及只有文字的说法。都画成虚线，不算证据。
+USER_CLAIMS = [("warehouse", "lake", "用户提供：仓库位于湖边（待画面验证）")]
+TEXT_ONLY = [("cave", "bearhome", "熊大熊二把一个山洞分给吉吉毛毛住（萌娘百科文字，不是画面）"),
+             ("warehouse", "house", "网易文章：变形记里仓库建在家门口（其他系列，文字）")]
 
 if mode == "sample":
     import importlib.util
@@ -68,7 +71,7 @@ if mode == "sample":
     def hw(lx, ly):
         return (H["x"] + c * lx - s_ * ly, H["y"] + s_ * lx + c * ly)
     places = {
-        "house": (H["x"], H["y"]), "gate": hw(6.6, 9.0), "warehouse": hw(W["lx"], W["ly"]),
+        "house": (H["x"], H["y"]), "gate": hw(6.6, 9.0), "warehouse": m.warehouse_site()[:2], "warehouse_alt": hw(2.0, -15.0),
         "pickup": (H["x"] + 22.0, H["y"] + 13.6), "meadow": m.MEADOW[:2],
         "bearhome": (m.BEARHOME["x"], m.BEARHOME["y"]), "honeytree": m.HONEYTREE,
         "cave": (m.MONKEYCAVE["x"], m.MONKEYCAVE["y"]), "squirrel": (m.SQUIRRELTREE["x"], m.SQUIRRELTREE["y"]),
@@ -96,7 +99,7 @@ def font(size):
 
 
 F, FS, FB = font(22), font(17), font(32)
-COL = {"A": (30, 120, 50), "A/B": (40, 110, 140), "B": (40, 90, 190), "text": (150, 150, 150), "inferred": (215, 110, 20)}
+COL = {"user": (150, 60, 170), "A": (30, 120, 50), "A/B": (40, 110, 140), "B": (40, 90, 190), "text": (150, 150, 150), "inferred": (215, 110, 20)}
 
 
 def evidence_map():
@@ -127,7 +130,13 @@ def evidence_map():
         n = 24
         for k in range(0, n, 2):
             dr.line((x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n, x1 + (x2 - x1) * (k + 1) / n, y1 + (y2 - y1) * (k + 1) / n), fill=COL["text"], width=3)
-        dr.text((420, 790), "文字：" + rel, fill=COL["text"], font=FS)
+        dr.text({("cave", "bearhome"): (420, 790), ("warehouse", "house"): (180, 580)}[(a, b)], "文字：" + rel, fill=COL["text"], font=FS)
+    for a, b, rel in USER_CLAIMS:
+        (x1, y1), (x2, y2) = pos[a], pos[b]
+        n = 30
+        for k in range(0, n, 2):
+            dr.line((x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n, x1 + (x2 - x1) * (k + 1) / n, y1 + (y2 - y1) * (k + 1) / n), fill=COL["user"], width=4)
+        dr.text((760, 470), rel, fill=COL["user"], font=FS)
     for k, (x, y) in pos.items():
         t = NODES[k]
         w = dr.textlength(t, font=F)
@@ -137,8 +146,9 @@ def evidence_map():
         dr.text((x - w / 2, y - 13), t, fill=(0, 0, 0), font=F)
     dr.text((pos["warehouse"][0] - 130, pos["warehouse"][1] + 26), "没有任何原作画面", fill=COL["inferred"], font=FS)
     y = Hd - 60
-    for lv, t in (("A", "A：四季篇画面（R1–R4 季别仍待核验）"), ("A/B", "A/B：A 和其他版本都有"), ("B", "B：其他系列或季别未核验"), ("text", "虚线：只有文字资料")):
-        x = 30 + ("A", "A/B", "B", "text").index(lv) * 440
+    for lv, t in (("A", "A：四季篇画面（R1–R4 季别待核验）"), ("A/B", "A/B：A 和其他版本都有"), ("B", "B：其他系列或季别未核验"),
+                  ("text", "灰虚线：只有文字"), ("user", "紫虚线：用户提供，待画面验证")):
+        x = 30 + ("A", "A/B", "B", "text", "user").index(lv) * 355
         dr.line((x, y + 10, x + 40, y + 10), fill=COL[lv], width=4)
         dr.text((x + 50, y), t, fill=COL[lv], font=FS)
     im.save(os.path.join(out, "EVIDENCE_MAP.png"))
@@ -161,7 +171,8 @@ def playable_map(d):
     # (键, 标签, 地点本身的等级, 在地图上的位置是否有证据)
     items = [
         ("house", "光头强木屋", "A", "推测"), ("gate", "院门（画面左侧：R1）", "A", "相对木屋：R1；世界方位：约定"),
-        ("warehouse", "仓库", "D", "推测（屋后：避开 R1 画面）"), ("pickup", "皮卡", "B", "推测"), ("meadow", "空地", "D", "推测"),
+        ("warehouse", "仓库（湖边候选）", "D", "用户提供“在湖边”，待画面验证；离湖多远是推测"),
+        ("warehouse_alt", "旧候选：屋后（已撤销）", "D", "R1 推断不成立，只作对照"), ("pickup", "皮卡", "B", "推测"), ("meadow", "空地", "D", "推测"),
         ("bearhome", "熊洞", "B", "推测"), ("honeytree", "蜂蜜树", "B", "推测"), ("cave", "猴洞", "B", "推测"),
         ("squirrel", "松鼠窝", "B", "推测"), ("fall", "瀑布", "A", "相对湖：U1"), ("beach", "沙滩", "A", "相对湖：U1"), ("logyard", "原木堆场", "D", "推测"),
     ]

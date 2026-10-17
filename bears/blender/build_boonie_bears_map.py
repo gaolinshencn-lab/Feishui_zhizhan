@@ -164,6 +164,11 @@ def setup_collections():
     for n in ["Characters_XiongDa", "Characters_XiongEr", "Characters_GuangtouQiang",
               "Characters_TuTu", "Characters_LuoBoTou", "Characters_BengBeng"]:
         coll(n, COLL["Characters"])
+    # 逐集学习的图层（见 ../episode_studies/README.md）：上面这些集合合起来就是 WORLD_BASE（跨集共同的场景）；
+    # 季节差异放 SEASON_*，只在某一集出现的东西放 EPISODE_OVERRIDES/EP_<季><集>（默认隐藏，需要时打开）。
+    for n in ("SEASON_SPRING", "SEASON_SUMMER", "SEASON_AUTUMN", "SEASON_WINTER", "EPISODE_OVERRIDES"):
+        coll(n)
+    coll("EP_S1E01_赏花大会", COLL["EPISODE_OVERRIDES"])
 
 
 # ------------------------------------------------------------------------------------------------
@@ -771,12 +776,11 @@ PATHS = [
     dict(name="Path_Meadow_LakeBeach", w=1.8, pts=[(6, -6), (-6, -14), (-18, -24), (-31, -32)]),
     dict(name="Path_Meadow_MonkeyCave", w=1.4, pts=[(8, 2), (4, 14), (-4, 28), (-10.3, 34.6)]),
     dict(name="Path_To_SquirrelTree", w=1.0, pts=[(4, 14), (4.5, 20), (4.2, 25.6)]),
-    dict(name="Path_House_Warehouse", w=1.5, pts=[(34.0, -20.6), (40.5, -23.0), (41.6, -32.0), (37.0, -37.5)]),
     dict(name="Road_House_East", w=3.6, pts=[(46.8, -14.5), (52, -15.0), (64, -13), (82, -11), (125, -9)]),
 ]
 CLEARINGS = [(MEADOW[0], MEADOW[1], MEADOW[2]), (YARD[0], YARD[1], YARD[2]), (LOGYARD[0], LOGYARD[1], LOGYARD[2]),
              (BEARHOME["x"], BEARHOME["y"], 7.5), (HONEYTREE[0], HONEYTREE[1], 4.5),
-             (36.0, -43.0, 9.0), (55.0, -15.0, 6.0),  # 屋后仓库、院外皮卡
+             (55.0, -15.0, 6.0),  # 院外皮卡（仓库的空地按选定的候选位置在下面追加）
              (MONKEYCAVE["x"], MONKEYCAVE["y"], 10.0), (SQUIRRELTREE["x"], SQUIRRELTREE["y"], 5.0)]
 
 
@@ -801,6 +805,36 @@ def lake_point(a, e=1.0):
 
 
 _CREEK = None
+
+
+WAREHOUSE_SITE = _arg("--warehouse-site") or "lakeside"
+# 仓库位置的候选（都没有原作画面）：
+#   lakeside     —— 默认。用户提供的信息：“仓库位于湖边”（待画面验证）。放在湖东北岸、湖边小路旁；离湖岸多远、门朝哪边都是推测。
+#   behind_house —— 上一轮的做法（R1 院门一侧看不到仓库 → 放到屋后）。用户指出这个推断不成立，只作为对照保留。
+WAREHOUSE_LAKE_JUNCTION = (-18.0, -24.0)  # 湖边小路（Path_Meadow_LakeBeach）上的岔口
+
+
+def warehouse_site():
+    """返回仓库根物体的世界坐标和朝向 (x, y, rot)；局部 +Y 是大门。"""
+    if WAREHOUSE_SITE == "behind_house":
+        lx, ly = 2.0, -15.0
+        c, s_ = math.cos(HOUSE["rot"]), math.sin(HOUSE["rot"])
+        return HOUSE["x"] + c * lx - s_ * ly, HOUSE["y"] + s_ * lx + c * ly, HOUSE["rot"]
+    x, y = lake_point(math.radians(22), 1.5)
+    jx, jy = WAREHOUSE_LAKE_JUNCTION
+    return x, y, math.atan2(jy - y, jx - x) - math.pi / 2  # 大门朝湖边小路的岔口（推测）
+
+
+def _add_warehouse_site():
+    x, y, rot = warehouse_site()
+    if WAREHOUSE_SITE == "behind_house":
+        PATHS.append(dict(name="Path_House_Warehouse", w=1.5, pts=[(34.0, -20.6), (40.5, -23.0), (41.6, -32.0), (37.0, -37.5)]))
+        CLEARINGS.append((x, y, 9.0))
+    else:
+        d = WAREHOUSE["D"] / 2 + 1.5
+        fx, fy = x - math.sin(rot) * d, y + math.cos(rot) * d
+        PATHS.append(dict(name="Path_Lake_Warehouse", w=1.5, pts=[(fx, fy), WAREHOUSE_LAKE_JUNCTION]))
+        CLEARINGS.append((x, y, 8.0))
 
 
 def creek_pts():
@@ -2040,7 +2074,7 @@ def build_forest_floor(rnd, young, snag, stumps, mushrooms):
             bm_tube(bm, [(x, y, z), ((x + ex) / 2, (y + ey) / 2, z + 0.05), (ex, ey, ground(ex, ey) + 0.03)], [0.035, 0.028, 0.015], seg=5, mi=3)
             bm_tube(bm, [((x + ex) / 2, (y + ey) / 2, z + 0.05), ((x + ex) / 2 + 0.3, (y + ey) / 2 + 0.25, z + 0.12)], [0.018, 0.008], seg=4, mi=3)
     for (i, j), bm in tiles.items():
-        new_obj(f"FOREST_Litter_Twigs_{i}_{j}", bm, P, leaf_ms, recalc=False, props=dict(cn="落叶和枯枝（秋季）", status="inferred"))
+        new_obj(f"FOREST_Litter_Twigs_{i}_{j}", bm, COLL["SEASON_AUTUMN"], leaf_ms, recalc=False, props=dict(cn="落叶和枯枝（秋季）", status="inferred"))
     return n
 
 
@@ -2109,7 +2143,8 @@ BED_DOOR = (-2.25, -1.35)
 BATH_DOOR = (-0.6, 0.3)
 ROUND_WIN = (-1.6, 1.75, 0.5)
 IN_X, IN_Y = W_HOUSE / 2 - 0.155, D_HOUSE / 2 - 0.155
-WAREHOUSE = dict(lx=2.0, ly=-15.0, rot=0.0, W=6.0, D=8.0, H=3.2, rise=2.0, floor=0.45)  # 屋后（R1、H2 院门一侧没有其他建筑）；位置为推测
+WAREHOUSE = dict(W=6.0, D=8.0, H=3.2, rise=2.0, floor=0.45)  # 位置见 warehouse_site()（默认湖边候选，待画面验证）
+_add_warehouse_site()
 DOOR_PASSAGES = []  # (名称, 根物体名, 局部 AABB (x0, x1, y0, y1, z0, z1))：质量检查时门洞里不能有家具
 
 
@@ -3299,15 +3334,17 @@ def build_warehouse():
     WI = COLL["WH_Interior"]
     P = WAREHOUSE
     W, D, H, rise, Bw = P["W"], P["D"], P["H"], P["rise"], P["floor"]
-    wx, wy = HOUSE["x"] + P["lx"], HOUSE["y"] + P["ly"]
-    c, s = math.cos(P["rot"]), math.sin(P["rot"])
+    wx, wy, wrot = warehouse_site()
+    c, s = math.cos(wrot), math.sin(wrot)
 
     def to_world(x, y):
         return (wx + c * x - s * y, wy + s * x + c * y)
     gz = max(ground(*to_world(x, y)) for x in (-W / 2, W / 2) for y in (-D / 2, D / 2 + 1.0))
-    root = empty("Warehouse_Root", WC, (wx, wy, gz), (0, 0, P["rot"]), size=1.5,
+    root = empty("Warehouse_Root", WC, (wx, wy, gz), (0, 0, wrot), size=1.5,
                  props=dict(cn="光头强的仓库（根，整栋推测）", status="inferred",
-                            note="动画中没有仓库的可用画面；R7 玩家复刻只用于理解结构；外观、门窗位置和内部全部是推测"))
+                            note="动画中没有仓库的可用画面；R7 玩家复刻只用于理解结构；外观、门窗位置和内部全部是推测。"
+                                 "位置：用户提供“仓库位于湖边”（待画面验证），离湖岸的距离和门的朝向是推测"))
+    root["site"] = WAREHOUSE_SITE
     rnd = random.Random(31)
 
     def legs(bm, w, d, h, t=0.05, mi=0):
@@ -3679,7 +3716,7 @@ def build_yard(root, lg, y_stair):
     # 歪斜、高低不一的木板栅栏（R1），正面西段有带蓝色木板小屋顶的院门，东段留出车道
     fence_ms = [mat_noise("Wood_Fence_A", "#9b7650", "#ae8960", scale=8), mat_noise("Wood_Fence_B", "#7e5e3e", "#8e6c4a", scale=8),
                 mat_noise("Wood_Fence_C", "#b08a5e", "#c09a6c", scale=8)]
-    F = dict(x0=-10.0, x1=15.0, y0=-22.0, y1=12.0)  # 一整圈；屋后一段把仓库围在院里（推测）
+    F = dict(x0=-10.0, x1=15.0, y0=-6.0, y1=12.0) if WAREHOUSE_SITE != "behind_house" else dict(x0=-10.0, x1=15.0, y0=-22.0, y1=12.0)  # 一整圈，只围木屋（推测）
     gate = (6.6, 9.0)   # R1、H2：相机对着木屋正面时，带蓝顶的院门在画面左侧（模型里是局部 +X 一侧）
     drive = (11.5, 14.0)
     runs = [((F["x0"], F["y1"]), (gate[0], F["y1"])), ((gate[1], F["y1"]), (drive[0], F["y1"])), ((drive[1], F["y1"]), (F["x1"], F["y1"])),
@@ -4202,6 +4239,70 @@ def build_squirrel_tree():
     empty("SquirrelNest_Candidate_Entrance_B", C, (-0.8, 0.0, 7.2), size=0.4, parent=root,
           props=dict(cn="候选洞口 B（只是标记，没有挖洞）", status="inferred", note="另一个可能的洞口位置，等截图确认"))
     DOOR_PASSAGES.append(("松鼠窝洞口 A", "SquirrelNest_Tree_Root", (0.52, 0.6, -0.3, -0.18, 4.68, 5.05)))
+
+
+def build_episode_overrides():
+    """单集资产（默认隐藏）。
+    S1E01《赏花大会》：剧情（央视网、百度百科文字）是熊大熊二发现一棵开满花的大树；YouTube 官方频道的三张 120×90 自动缩略图里
+    能看到一棵树干很粗的大树和粉色花枝，光头强戴毛皮帽站在树下。缩略图太小，不算审核过的画面：树形、高度、花色深浅和位置都是推测。"""
+    C = COLL["EP_S1E01_赏花大会"]
+    x, y = -2.0, 5.0  # 推测：空地北缘（没有任何画面说明这棵树在哪里）
+    gz = ground(x, y)
+    root = empty("EP_S1E01_Blossom_Tree_Root", C, (x, y, gz), (0, 0, 0.4), size=2.0,
+                 props=dict(cn="S1E01 开满花的大树（单集资产）", status="inferred",
+                            note="依据：剧情文字 + 3 张 120×90 缩略图（粗树干、粉色花枝）。位置、树形、高度都是推测"))
+    rnd = random.Random(101)
+    # 对照缩略图 1（光头强站在树下）改过一次：树干又粗又直、灰绿带苔藓；主枝细长、接近水平；花是沿枝条分布的稀疏紫红色花簇，不是圆团。
+    bark = mat_noise("Bark_Blossom_Tree_Mossy", "#454c3e", "#68705a", scale=4, bump=0.7, stretch=(2.5, 2.5, 0.4))
+    bm = bmesh.new()
+    bm_tube(bm, [(0, 0, -0.3), (0.0, 0.0, 3.0), (0.05, 0.0, 6.5), (0.1, 0.05, 9.0)], [1.05, 0.9, 0.78, 0.5], seg=18)
+    sprays = []
+    for k in range(7):  # 细长、接近水平、略下垂的主枝，每根带两根侧枝
+        a = 2 * math.pi * k / 7 + rnd.uniform(-0.25, 0.25)
+        z0 = rnd.uniform(6.0, 8.6)
+        L = rnd.uniform(5.0, 7.5)
+        ca, sa = math.cos(a), math.sin(a)
+        pts = [(ca * 0.4, sa * 0.4, z0), (ca * L * 0.4, sa * L * 0.4, z0 + 0.6), (ca * L * 0.75, sa * L * 0.75, z0 + 0.5), (ca * L, sa * L, z0 + 0.1)]
+        bm_tube(bm, pts, [0.36, 0.2, 0.11, 0.04], seg=8)
+        sprays += [Vector(p) for p in pts[1:]]
+        for j in (0.45, 0.7):
+            bx, by, bz = ca * L * j, sa * L * j, z0 + 0.55
+            b2 = a + rnd.choice((-1, 1)) * rnd.uniform(0.5, 0.9)
+            L2 = rnd.uniform(1.8, 3.0)
+            e = (bx + math.cos(b2) * L2, by + math.sin(b2) * L2, bz + rnd.uniform(-0.2, 0.6))
+            bm_tube(bm, [(bx, by, bz), e], [0.08, 0.025], seg=6)
+            sprays += [Vector(e), Vector(((bx + e[0]) / 2, (by + e[1]) / 2, (bz + e[2]) / 2))]
+    for k in range(6):  # 外露的树根：低矮、圆钝
+        a = 2 * math.pi * k / 6 + 0.5
+        bm_tube(bm, [(0, 0, 0.45), (math.cos(a) * 1.3, math.sin(a) * 1.3, 0.12), (math.cos(a) * 2.0, math.sin(a) * 2.0, -0.15)], [0.55, 0.35, 0.2], seg=8)
+    new_obj("EP_S1E01_Blossom_Tree_Trunk", bm, C, [bark], smooth_shade=True, parent=root,
+            props=dict(cn="大树树干（很粗、很直，灰绿带苔藓）和细长主枝", status="inferred", note="缩略图 1：粗直的树干、细长的深色枝条"))
+    pinks = [mat_noise("Blossom_Magenta", "#c9578f", "#dd77a8", scale=3, bump=0.2), mat_noise("Blossom_Pink_Light", "#e793bd", "#f2b3d1", scale=3, bump=0.2)]
+    bm = bmesh.new()
+    for p in sprays:  # 沿枝条的稀疏花簇，向下垂
+        for j in range(rnd.randint(5, 9)):
+            r = rnd.uniform(0.18, 0.42)
+            bm_ico(bm, r, loc=(p.x + rnd.uniform(-0.8, 0.8), p.y + rnd.uniform(-0.8, 0.8), p.z - rnd.uniform(0.0, 0.9)), scale=(1, 1, 1.3),
+                   subdiv=2, rough=0.3, seed=p.x + j, mi=0 if rnd.random() < 0.65 else 1)
+    new_obj("EP_S1E01_Blossom_Canopy", bm, C, pinks, smooth_shade=True, parent=root,
+            props=dict(cn="紫红色花簇（沿枝条、稀疏）", status="inferred", note="缩略图 1：紫红色花枝从画面上方垂下；花簇大小和密度是推测"))
+    bm = bmesh.new()  # 地上的落花
+    for k in range(500):
+        a, rr = rnd.uniform(0, 6.283), rnd.uniform(0.5, 7.5) ** 1.0
+        px, py = math.cos(a) * rr, math.sin(a) * rr
+        z = ground(x + px * math.cos(0.4) - py * math.sin(0.4), y + px * math.sin(0.4) + py * math.cos(0.4)) - gz + 0.03
+        q = rnd.uniform(0, 6.283)
+        vs = [bm.verts.new((px + math.cos(q + i * 2.094) * 0.07, py + math.sin(q + i * 2.094) * 0.07, z)) for i in range(3)]
+        bm.faces.new(vs).material_index = rnd.randrange(2)
+    new_obj("EP_S1E01_Fallen_Petals", bm, C, pinks, recalc=False, parent=root, props=dict(cn="地上的落花", status="inferred"))
+    cd = bpy.data.cameras.new("EP_S1E01_Review_Cam")
+    cd.lens = 24
+    co = bpy.data.objects.new("EP_S1E01_Review_Cam", cd)
+    C.objects.link(co)
+    co.location = (x + 2.5, y - 9.0, gz + 1.6)  # 大致按缩略图 1：低机位，树干在画面右侧，枝条从画面上方伸进来
+    look_at(co, (x - 1.8, y, gz + 3.2))
+    COLL["EPISODE_OVERRIDES"].hide_viewport = True  # 默认隐藏；需要时在大纲里打开
+    COLL["EPISODE_OVERRIDES"].hide_render = True
 
 
 def bpy_bm(build):
@@ -5074,7 +5175,7 @@ def quality_checks():
                 report.append(f"可能悬空: {ob.name} dz={ob.location.z - gz:.2f}")
     # 空集合
     for c in bpy.data.collections:
-        if not c.all_objects:
+        if not c.all_objects and not c.name.startswith("SEASON_"):  # 季节图层可以先空着，等有画面证据再放东西
             report.append(f"空集合: {c.name}")
     # 黑色材质
     for m in bpy.data.materials:
@@ -5264,6 +5365,7 @@ def main():
     step("bears home", build_bears_home)
     step("monkey cave", build_monkey_cave)
     step("squirrel tree", build_squirrel_tree)
+    step("episode overrides", build_episode_overrides)
     step("pickup", build_pickup)
     step("characters", build_characters)
     step("lights and cameras", build_lights_cameras)

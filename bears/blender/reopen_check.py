@@ -27,7 +27,7 @@ for k, n in seen.items():
         report.append(f"重复物体（同网格同位置）: {k[0]} ×{n}")
 # 空集合
 for c in bpy.data.collections:
-    if not c.all_objects:
+    if not c.all_objects and not c.name.startswith("SEASON_"):
         report.append(f"空集合: {c.name}")
 
 

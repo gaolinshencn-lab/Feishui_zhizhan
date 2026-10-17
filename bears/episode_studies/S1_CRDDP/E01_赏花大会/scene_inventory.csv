@@ -1,0 +1,5 @@
+﻿item_id,category,name,first_seen,frames,visible_details,asset_id,blender_objects,evidence_level,confidence,notes
+S1E01-01,D 自然环境,开紫红色花的大树,S1E01,"T1,T2（缩略图）",树干极粗、直、灰绿带苔藓；枝条细长深色；花沿枝条稀疏、紫红色,EP_S1E01_BLOSSOM_TREE,EP_S1E01_Blossom_Tree_*,A（画面太小）,低,只有 120×90 缩略图；位置、高度、树冠形状都是推测
+S1E01-02,E 角色,光头强春季服装：棕色毛皮帽、毛皮坎肩,S1E01,"T1,T2,T3（缩略图）",毛皮帽带护耳；深蓝上衣；浅棕毛皮坎肩,CHAR_GTQ,（未建）,A（画面太小）,中,模型里的光头强戴橙色安全帽；春季服装要做成可切换版本
+S1E01-03,E 道具,地上的红色物件,S1E01,T1（缩略图）,红色、小,—,（未建）,—,很低,看不清是什么，不建
+S1E01-04,E 角色,吉吉比毛毛大,S1E01,C（封面）,吉吉头顶菠萝叶、身体大；毛毛小,CHAR_JIJI / CHAR_MAOMAO,（只有比例测试替身）,C（宣传图）,低,封面是合成图，不能当尺寸依据

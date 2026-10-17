@@ -2,8 +2,8 @@
  "HOUSE_and_WAREHOUSE": {
   "file": "HOUSE_and_WAREHOUSE.glb",
   "objects": 204,
-  "mb": 6.16,
-  "triangles": 135752
+  "mb": 6.01,
+  "triangles": 133036
  },
  "BEAR_HOME": {
   "file": "BEAR_HOME.glb",
@@ -26,7 +26,7 @@
  "LAKE": {
   "file": "LAKE.glb",
   "objects": 170,
-  "mb": 1.91,
+  "mb": 1.92,
   "triangles": 56194
  },
  "TERRAIN": {
@@ -37,9 +37,9 @@
  },
  "FOREST": {
   "file": "FOREST.glb",
-  "objects": 2036,
-  "mb": 6.23,
-  "triangles": 1229815
+  "objects": 2049,
+  "mb": 6.26,
+  "triangles": 1238842
  },
  "CHARACTERS": {
   "file": "CHARACTERS.glb",

@@ -42,6 +42,8 @@
 | `evidence/P3_LAKE_FOREST.md`、`lake_checks/` | 湖、瀑布、森林：已确认 / 推测 / 本轮修改；审核图（`Lake_13`–`16`、`Forest_01`–`03` 为本轮新增） |
 | `map_diagrams.py`、`maps/`、`evidence/MAPS.md` | Evidence Map（只画剧照证明的关系）和 Playable Map（模型实际布局，推测都标出） |
 | `export_glb.py`、`glb/` | 按区域导出的 .glb（修改器和布尔开洞已应用；`name_cn`、`ref_status` 等属性在 glTF extras 里） |
+| `render_episode.py`、`episode_renders/` | 渲染单集资产（`EPISODE_OVERRIDES/EP_…`，平时隐藏） |
+| `../episode_studies/` | 逐集学习：208 集队列和状态、每集五个记录文件、跨集资产档案（`assets/`） |
 | `../frame_collection/` | 1000+ 剧照采集的目录、索引格式和脚本（独立任务，目前 0 张，等用户提供视频或截图） |
 
 ## 打开文件
@@ -119,7 +121,7 @@ python3 make_check_sheets.py checks_out checks
 blender -b boonie_bears_forest_map.blend -P render_acceptance.py -- acceptance_out 32
 ```
 
-每台相机的自定义属性 `hide_collections` 写明渲染时要隐藏的集合（例如室内俯视要拆掉屋顶，木屋背面要隐藏屋后的仓库），`clear_trees` 表示渲染时临时隐藏挡在相机和建筑之间的树。
+每台相机的自定义属性 `hide_collections` 写明渲染时要隐藏的集合（例如室内俯视要拆掉屋顶），`clear_trees` 表示渲染时临时隐藏挡在相机和建筑之间的树。
 
 **看木屋内部**：在大纲视图里点掉 `GuangtouQiang_House_Exterior / GQ_House_Roof_Removable` 集合的眼睛图标，主屋顶、侧翼屋顶、烟囱、天线、檩条和室内横梁会一起隐藏。仓库的屋顶在 `GuangtouQiang_Warehouse / WH_Roof_Removable`。三扇室内门和正门、仓库大门都是打开的，可以直接走进去。
 
@@ -159,6 +161,11 @@ blender -b boonie_bears_forest_map.blend -P render_acceptance.py -- acceptance_o
 - **门**：`GQ_Door_Front_Leaf_East/West`、`HOUSE_Bedroom_Door_Leaf_RedLattice`、`HOUSE_Bathroom_Door_Leaf`、`Warehouse_Barn_Door_North/South` 的原点都在铰链上，绕 Z 轴旋转即可开关门。
 - **室内物体的属性**：`room`（所在房间）、`position_status`（位置是剧照可见还是推测）、`floor_item`（落地家具，质量检查会核对它贴地、不互相穿插、不挡门洞）。
 - **角色细化**：角色由多个独立部件组成（头、口鼻、眼睛、耳朵、四肢、手掌、脚掌、衣服、帽子等），部件都带细分修改器。可以把某个角色的部件合并后进入雕刻模式继续塑形，见下文“未完成内容”。
+
+## 仓库位置和图层
+
+- 仓库位置：`build_boonie_bears_map.py -- --warehouse-site lakeside`（默认，湖边候选）或 `behind_house`（旧候选，只作对照）。两种都没有原作画面；审核图 `layout_review/Review_G_Lake_Warehouse_House_labeled.jpg`。
+- 图层：原有集合合起来是 WORLD_BASE；季节差异放 `SEASON_SPRING/SUMMER/AUTUMN/WINTER`（目前只有秋季落叶）；单集特有的东西放 `EPISODE_OVERRIDES/EP_<季><集>_<集名>`，默认隐藏。
 
 ## 命名规范和导出
 
@@ -236,7 +243,7 @@ blender -b boonie_bears_forest_map.blend -P render_acceptance.py -- acceptance_o
 - 厨房吊柜、微波炉、案板、餐桌和暖水瓶、入口小柜和篮子、进门角落的烧水炉、床头柜、相框、猎枪（R8）。
 
 **推测内容（inferred）**
-- **仓库整栋**：动画里没有找到仓库的可用画面。外观（竖木板墙、山墙、对开大门、两侧小窗、木板屋顶）、位置（木屋背后，大门朝向木屋后墙；R1 院门一侧没有第二栋房子，所以从那一侧移走）和内部布置全部是推测。R7 是玩家复刻，只用来理解“高山墙木板仓库、正中一扇门”的结构，没有照搬。
+- **仓库整栋**：动画里没有找到仓库的可用画面。外观（竖木板墙、山墙、对开大门、两侧小窗、木板屋顶）、位置：**湖边候选**（用户提供“仓库位于湖边”，待画面验证；上一轮推断的“木屋背后”已撤销，见 `../episode_studies/assets/ASSET_WAREHOUSE_GTQ.md`）和内部布置全部是推测。R7 是玩家复刻，只用来理解“高山墙木板仓库、正中一扇门”的结构，没有照搬。
 - 木屋背面、局部 +X 一侧（地图约定“东”）的山墙、屋顶背面坡（剧照只看到正面和侧翼）。
 - 卫生间的门、镜子和清洁用品；卧室衣柜和窗帘（剧照里没有，按要求补做）；厨房灶上的铁皮烟罩。
 - 院子栅栏的完整走向（只看到正面一段）、从木屋到仓库的小路。

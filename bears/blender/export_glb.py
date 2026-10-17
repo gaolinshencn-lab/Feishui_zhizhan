@@ -22,7 +22,7 @@ GROUPS = {
     "SQUIRREL_NEST": ["SquirrelNest"],
     "LAKE": ["River_and_Rocks"],
     "TERRAIN": ["Terrain"],
-    "FOREST": ["Forest_Trees", "Forest_Plants"],
+    "FOREST": ["Forest_Trees", "Forest_Plants", "SEASON_AUTUMN"],
     "CHARACTERS": ["Characters"],
 }
 SKIP_COLL = {"Bears_TreeHome"}  # 熊洞在 Forest_Trees 下面，导出森林时跳过它（它有自己的文件）

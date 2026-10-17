@@ -15,8 +15,9 @@ argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
 mode, out = argv[0], os.path.abspath(argv[1])
 os.makedirs(out, exist_ok=True)
 HERE = os.path.dirname(os.path.abspath(__file__))
-COLORS = {"orig": (20, 130, 50), "other": (30, 90, 200), "player": (140, 60, 170), "infer": (215, 110, 0)}
-NAMES = {"orig": "原版截图确认", "other": "其他版本辅助", "player": "玩家复刻参考", "infer": "缺少证据的推测"}
+COLORS = {"orig": (20, 130, 50), "other": (30, 90, 200), "player": (140, 60, 170), "infer": (215, 110, 0), "user": (200, 30, 120)}
+NAMES = {"orig": "原版截图确认", "other": "其他版本辅助", "player": "玩家复刻参考", "infer": "缺少证据的推测", "user": "用户提供，待画面验证"}
+ONLY = argv[3].split(",") if len(argv) > 3 and argv[3] else []  # 只渲染名字里含这些关键字的审核图，例如 G,B
 
 if mode == "render":
     import bpy
@@ -70,6 +71,8 @@ if mode == "render":
             o.hide_render = state
 
     def render(co, res, labels, hide_c=(), lines=None, title=""):
+        if ONLY and not any(k in co.name for k in ONLY):
+            return
         w, h = (int(v) for v in res.split("x"))
         sc.render.resolution_x, sc.render.resolution_y = w, h
         sc.render.resolution_percentage = 100
@@ -99,7 +102,7 @@ if mode == "render":
     paths = [(p["name"], [(x, y, g(x, y) + 0.3) for x, y in p["pts"]]) for p in m.PATHS]
     path_cn = {"Path_House_Meadow": "木屋—空地小路", "Path_Meadow_BearsHome": "空地—熊洞小路", "Path_BearsHome_HoneyTree": "熊洞—蜂蜜树",
                "Path_Meadow_LakeBeach": "空地—湖边沙滩小路", "Path_Meadow_MonkeyCave": "空地—猴洞小路", "Path_To_SquirrelTree": "去松鼠窝的岔路",
-               "Path_House_Warehouse": "木屋—仓库院内小路", "Road_House_East": "皮卡土路（向东）"}
+               "Path_House_Warehouse": "木屋—仓库院内小路", "Path_Lake_Warehouse": "湖边小路—仓库", "Road_House_East": "皮卡土路（向东）"}
     # A：全图俯视
     big = [("光头强木屋和院子", loc("HOUSE_Root"), "infer", True), ("独立仓库", loc("WAREHOUSE_Root"), "infer", True),
            ("森林湖泊", (L["x"], L["y"], 0), "infer", True), ("石崖和瀑布", (cliff[0], cliff[1], 8), "orig", False),
@@ -114,21 +117,39 @@ if mode == "render":
     render(co, res, big, hide_c=("Forest_Trees", "Forest_Plants", "Characters"),
            lines=[(path_cn.get(n, n), pts, "infer") for n, pts in paths], title="E 地形、湖泊和连接道路（隐藏树木）")
     # B：院子俯视
-    F = dict(x0=-10.0, x1=15.0, y0=-22.0, y1=12.0)
+    behind = m.WAREHOUSE_SITE == "behind_house"
+    F = dict(x0=-10.0, x1=15.0, y0=-22.0 if behind else -6.0, y1=12.0)
     yard = [("木屋主屋", hw(0, 0, 5), "orig", True), ("卫生间侧翼", hw(-5.75, -0.6, 4), "orig", False),
             ("正门楼梯", hw(-0.2, 5.6, 1), "orig", False), ("带蓝顶的院门", hw(7.8, 12, 2), "orig", True),
-            ("独立仓库（整栋推测）", loc("WAREHOUSE_Root", 5), "infer", True), ("仓库大门", loc("WAREHOUSE_Barn_Door_North", 1), "infer", False),
+        ] + ([("独立仓库（整栋推测）", loc("WAREHOUSE_Root", 5), "infer", True), ("仓库大门", loc("WAREHOUSE_Barn_Door_North", 1), "infer", False)] if behind else []) + [
             ("轮胎堆", loc("PROPS_Tire_Stack"), "orig", False), ("院里原木堆", loc("PROPS_Log_Pile_Yard"), "orig", False),
             ("铁皮盆、铁桶", loc("PROPS_Washtub_Galvanized"), "other", False), ("木墩和斧头", loc("PROPS_Chopping_Block"), "other", False),
             ("水缸", loc("PROPS_Water_Jar_Clay"), "orig", False), ("木桶", loc("PROPS_Wooden_Barrel"), "other", False),
             ("皮卡", loc("PROPS_Pickup_Root"), "other", False), ("车道缺口", hw(12.75, 12, 0), "infer", False),
             ("栅栏（正面一段 R1 可见）", hw(-3.5, 12.3, 0), "orig", False), ("栅栏（东侧）", hw(15.4, -5, 0), "infer", False),
-            ("栅栏（后面）", hw(5, -22.4, 0), "infer", False), ("栅栏（西侧）", hw(-10.4, 3, 0), "infer", False)]
+            ("栅栏（后面）", hw(5, F["y0"] - 0.4, 0), "infer", False), ("栅栏（西侧）", hw(-10.4, 3, 0), "infer", False)]
     yl = [(path_cn[n], pts, "infer") for n, pts in paths if n in ("Path_House_Meadow", "Path_House_Warehouse", "Road_House_East")]
     yl.append(("栅栏一整圈", [hw(x, y, 0.5) for x, y in ((F["x0"], F["y1"]), (F["x1"], F["y1"]), (F["x1"], F["y0"]), (F["x0"], F["y0"]), (F["x0"], F["y1"]))], "infer"))
-    c = hw(2.5, -5)
-    co, res = cam_top("Review_B_Yard_Top", (c.x, c.y), 46, "1600x1300")
-    render(co, res, yard, hide_c=("Forest_Trees",), lines=yl, title="B 木屋院落俯视：一整圈栅栏、院门、木屋、独立仓库")
+    c = hw(2.5, -5 if behind else 3)
+    co, res = cam_top("Review_B_Yard_Top", (c.x, c.y), 46 if behind else 34, "1600x1300")
+    render(co, res, yard, hide_c=("Forest_Trees",), lines=yl, title="B 木屋院落俯视：一整圈栅栏、院门、木屋" + ("、独立仓库" if behind else "（仓库不在院里，见 G）"))
+    # G：湖—仓库—木屋的空间关系（仓库位置是用户提供的线索，待画面验证）
+    wpos = loc("WAREHOUSE_Root", 4)
+    hpos = loc("HOUSE_Root", 4)
+    alt = hw(2.0, -15.0, 2)
+    dist = math.hypot(wpos[0] - hpos[0], wpos[1] - hpos[1])
+    rel = [("湖（U1、L1 有画面；湖岸形状推测）", (L["x"], L["y"], 0), "orig", True),
+           ("仓库：湖边候选（用户提供“在湖边”）", wpos, "user", True),
+           ("仓库大门朝向（推测）", loc("WAREHOUSE_Barn_Door_North", 1), "infer", False),
+           ("旧候选：木屋背后（已撤销）", alt, "infer", False),
+           ("光头强木屋（位置推测）", hpos, "infer", True),
+           ("石崖和瀑布（U1）", (cliff[0], cliff[1], 8), "orig", False), ("沙滩（U1、U2）", (beach[0], beach[1], 1), "orig", False),
+           ("空地", (m.MEADOW[0], m.MEADOW[1], 0), "infer", False)]
+    gl = [(path_cn.get(n, n), pts, "infer") for n, pts in paths if n in ("Path_Lake_Warehouse", "Path_Meadow_LakeBeach", "Path_House_Meadow")]
+    gl.append(("直线距离（推测）", [(hpos[0], hpos[1], 1), (wpos[0], wpos[1], 1)], "infer"))
+    co, res = cam_top("Review_G_Lake_Warehouse_House", ((L["x"] + hpos[0]) / 2, L["y"] + 2), 125, "1800x1000")
+    render(co, res, rel, hide_c=("Forest_Trees", "Forest_Plants", "Characters"), lines=gl,
+           title=f"G 湖—仓库—木屋：仓库改到湖边候选位置（用户线索，待画面验证）；木屋—仓库直线 {dist:.0f} m 是模型推测，不是原作数据")
     # C：木屋室内俯视（拆屋顶）
     rooms = [("客厅 / 厨房 / 餐厅", hw(-1.6, 1.6, 2), "other", True), ("卧室", hw(2.9, -1.4, 2), "other", True), ("卫生间", hw(-5.75, -1.4, 2), "other", True),
              ("正门", hw(-0.2, 3.0, 1), "orig", False), ("卧室门", hw(1.3, -1.8, 1), "orig", False), ("卫生间门", hw(-4.5, -0.15, 1), "infer", False)]
@@ -229,10 +250,10 @@ for fn in sorted(os.listdir(out)):
         dr.text((tx, ty), lab["text"], fill=col, font=f)
     dr.text((14, H + 10), d["title"], fill=(0, 0, 0), font=Ft)
     lx = 14
-    for k in ("orig", "other", "player", "infer"):
+    for k in ("orig", "other", "player", "infer", "user"):
         dr.ellipse((lx, H + 56, lx + 18, H + 74), fill=COLORS[k])
         dr.text((lx + 24, H + 52), NAMES[k], fill=(0, 0, 0), font=font(20))
-        lx += 210
+        lx += 250
     if d.get("px_per_m"):
         L = 10 if d["px_per_m"] * 10 < W * 0.3 else 1
         while d["px_per_m"] * L < 60:
