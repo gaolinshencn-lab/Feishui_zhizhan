@@ -6,6 +6,16 @@
 
 ![其他相机：木屋正面、院子和皮卡、湖边石崖瀑布、涂涂萝卜头蹦蹦、空地上的熊大熊二](preview_views.jpg)
 
+木屋和仓库验收图（`acceptance/`）：
+
+![木屋正面](acceptance/Acc_01_House_Front.jpg)
+![木屋室内俯视](acceptance/Acc_06_House_Interior_Top.jpg)
+![院落总览](acceptance/Acc_17_Yard_Overview.jpg)
+
+湖底预览（`lake_checks/`，低材质，湖底形状为推测，见 `LAKE_AUDIT.md`）：
+
+![湖底岩石区](lake_checks/Lake_06_Rock_Group_NoWater.jpg)
+
 ## 交付文件
 
 | 文件 | 说明 |
@@ -20,6 +30,8 @@
 | `render_acceptance.py` | 渲染木屋和仓库的验收图（`Acceptance_Cameras` 里的 17 台相机） |
 | `acceptance/` | 验收图：木屋四面、屋顶近景、室内俯视、厨房、卧室、卫生间、仓库四面、仓库内部、储物细节、院落总览 |
 | `HOUSE_WAREHOUSE_AUDIT.md` | 木屋和仓库修正前的参考读取情况、版本冲突和错误对照表 |
+| `reopen_check.py` | 重新打开 .blend 后的完整检查：缺失贴图、重复物体、家具悬空/穿插、门洞被挡 |
+| `LAKE_AUDIT.md`、`lake_layout_diagrams.py`、`lake_checks/` | 湖泊和湖底：原片读取情况、结构草图（平面等深线、剖面）、低材质预览 |
 | `make_check_sheets.py` | 把检查视图拼成检查图（需要 Pillow） |
 | `checks/` | 检查图：人物正侧背、皮卡四视图、木屋四视图、室内平面（带标注）、地图俯视 |
 | `REFERENCE_NOTES.md` | 参考清单、冲突取舍、比例与布局（.blend 里的文本块 `Reference_Notes.md` 也是这份内容） |
