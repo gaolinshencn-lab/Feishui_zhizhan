@@ -678,14 +678,14 @@ PATHS = [
     dict(name="Path_Meadow_BearsHome", w=1.8, pts=[(6, -6), (9, 3), (14, 10), (17.5, 14.5)]),
     dict(name="Path_BearsHome_HoneyTree", w=1.3, pts=[(21, 20), (25, 24), (28, 27)]),
     dict(name="Path_Meadow_LakeBeach", w=1.8, pts=[(6, -6), (-6, -14), (-18, -24), (-31, -32)]),
-    dict(name="Path_Meadow_MonkeyCave", w=1.4, pts=[(8, 2), (4, 14), (-4, 28), (-11.2, 37.4)]),
+    dict(name="Path_Meadow_MonkeyCave", w=1.4, pts=[(8, 2), (4, 14), (-4, 28), (-10.3, 34.6)]),
     dict(name="Path_To_SquirrelTree", w=1.0, pts=[(4, 14), (4.5, 20), (4.2, 25.6)]),
-    dict(name="Path_House_Warehouse", w=1.5, pts=[(33.8, -20.6), (38.5, -22.0), (41.8, -26.2), (43.6, -29.0)]),
-    dict(name="Road_House_East", w=3.6, pts=[(38, -18.5), (50, -16), (64, -13), (82, -11), (125, -9)]),
+    dict(name="Path_House_Warehouse", w=1.5, pts=[(34.0, -20.6), (40.5, -23.0), (41.6, -32.0), (37.0, -37.5)]),
+    dict(name="Road_House_East", w=3.6, pts=[(46.8, -14.5), (52, -15.0), (64, -13), (82, -11), (125, -9)]),
 ]
 CLEARINGS = [(MEADOW[0], MEADOW[1], MEADOW[2]), (YARD[0], YARD[1], YARD[2]), (LOGYARD[0], LOGYARD[1], LOGYARD[2]),
              (BEARHOME["x"], BEARHOME["y"], 7.5), (HONEYTREE[0], HONEYTREE[1], 4.5),
-             (49.0, -29.0, 8.0), (50.0, -18.0, 6.0),  # 仓库、院子东北角
+             (36.0, -43.0, 9.0), (55.0, -15.0, 6.0),  # 屋后仓库、院外皮卡
              (MONKEYCAVE["x"], MONKEYCAVE["y"], 10.0), (SQUIRRELTREE["x"], SQUIRRELTREE["y"], 5.0)]
 
 
@@ -1744,7 +1744,7 @@ BED_DOOR = (-2.25, -1.35)
 BATH_DOOR = (-0.6, 0.3)
 ROUND_WIN = (-1.6, 1.75, 0.5)
 IN_X, IN_Y = W_HOUSE / 2 - 0.155, D_HOUSE / 2 - 0.155
-WAREHOUSE = dict(lx=15.0, ly=-1.0, rot=math.pi / 2, W=6.0, D=8.0, H=3.2, rise=2.0, floor=0.45)
+WAREHOUSE = dict(lx=2.0, ly=-15.0, rot=0.0, W=6.0, D=8.0, H=3.2, rise=2.0, floor=0.45)  # 屋后（R1、H2 院门一侧没有其他建筑）；位置为推测
 DOOR_PASSAGES = []  # (名称, 根物体名, 局部 AABB (x0, x1, y0, y1, z0, z1))：质量检查时门洞里不能有家具
 
 
@@ -1941,14 +1941,28 @@ def paper_cut(bm, y, r=0.17, mi=0):
         bm_sphere(bm, (r * 0.32, 0.006, r * 0.17), loc=(math.cos(a) * r * 0.62, y, math.sin(a) * r * 0.62), rot=(0, -a, 0), seg=8, rings=4, mi=mi)
 
 
-def lattice_window(bm, w, h, depth=0.24, mi_frame=0, mi_paper=1, mi_lat=2, mi_red=3, r=0.22):
-    """圆角方框格子窗（R2、R4）：圆角木框、窗纸、木格、两面红色窗花；窗洞四周有木衬板。中心在原点，XZ 平面。"""
+def lattice_window(bm, w, h, depth=0.24, mi_frame=0, mi_paper=1, mi_lat=2, mi_red=3, r=0.22, parts="all"):
+    """圆角方框格子窗（R2、R4）：圆角木框、窗纸、木格、两面红色窗花；窗洞四周有木衬板。中心在原点，XZ 平面。
+    parts="frame" 只要窗框，"shutter" 只要窗扇（窗纸、木格、窗花），"all" 两者都要。"""
+    if parts == "shutter":
+        bm_cube(bm, (w - 0.12, 0.02, h - 0.12), loc=(0, 0, 0), mi=mi_paper)
+        for t in (-0.25, 0.0, 0.25):
+            bm_cube(bm, (0.035, 0.06, h - 0.1), loc=(t * w, 0, 0), mi=mi_lat)
+        for t in (-0.22, 0.22):
+            bm_cube(bm, (w - 0.1, 0.06, 0.035), loc=(0, 0, t * h), mi=mi_lat)
+        bm_cube(bm, (w - 0.08, 0.07, 0.05), loc=(0, 0, h / 2 - 0.07), mi=mi_lat)
+        bm_cube(bm, (w - 0.08, 0.07, 0.05), loc=(0, 0, -h / 2 + 0.07), mi=mi_lat)
+        for y in (-0.035, 0.035):
+            paper_cut(bm, y, r=min(w, h) * 0.17, mi=mi_red)
+        return
     pts = rounded_rect_path(w, h, r)
     for y in (-depth / 2 + 0.02, depth / 2 - 0.02):
         bm_tube(bm, [(p[0], y, p[2]) for p in pts], [0.065] * len(pts), seg=6, mi=mi_frame, caps=False)
     for sx, sz, px, pz in ((w + 0.12, 0.06, 0, h / 2 + 0.03), (w + 0.12, 0.06, 0, -h / 2 - 0.03),
                            (0.06, h + 0.12, w / 2 + 0.03, 0), (0.06, h + 0.12, -w / 2 - 0.03, 0)):
         bm_cube(bm, (sx, depth, sz), loc=(px, 0, pz), mi=mi_frame)
+    if parts == "frame":
+        return
     bm_cube(bm, (w - 0.12, 0.02, h - 0.12), loc=(0, 0, 0), mi=mi_paper)
     for t in (-0.25, 0.0, 0.25):
         bm_cube(bm, (0.035, 0.06, h - 0.1), loc=(t * w, 0, 0), mi=mi_lat)
@@ -2183,10 +2197,20 @@ def build_house():
     # ---- 正面两扇圆角格子窗，贴红窗花（R2）；卫生间小格子窗（R8-a42）
     for nm, (x0, x1) in zip(("West_LivingRoom", "East_Bedroom"), WIN_FRONT):
         bm = bmesh.new()
-        lattice_window(bm, x1 - x0, WIN_Z[1] - WIN_Z[0], depth=0.34)
+        ww, wh = x1 - x0, WIN_Z[1] - WIN_Z[0]
+        lattice_window(bm, ww, wh, depth=0.34, parts="frame")
         bmesh.ops.transform(bm, matrix=Matrix.Translation(((x0 + x1) / 2, D / 2, B + (WIN_Z[0] + WIN_Z[1]) / 2)), verts=bm.verts[:])
         new_obj(f"GQ_Window_Front_{nm}", bm, EXT, [frame_tan, paper, lat_m, red_paper], parent=root,
-                props=dict(cn="圆角方框格子窗（贴红窗花）", status="observed", note="R2：门两侧各一扇"))
+                props=dict(cn="圆角方框窗框", status="observed", note="R2：门两侧各一扇"))
+        # 窗扇单独一个物体，原点在上沿的铰链：R2 里是关着的；A45 里窗扇向外上翻、用弧形木撑撑住（绕 X 轴转 +35° 即打开）
+        bm = bmesh.new()
+        lattice_window(bm, ww, wh, parts="shutter")
+        bmesh.ops.transform(bm, matrix=Matrix.Translation((0, -0.06, -wh / 2)), verts=bm.verts[:])
+        sh = new_obj(f"GQ_Window_Front_{nm}_Shutter", bm, EXT, [frame_tan, paper, lat_m, red_paper], parent=root,
+                     props=dict(cn="格子窗扇（贴红窗花，上沿铰链，可向外上翻）", status="observed",
+                                note="R2：关着；A45：向外上翻打开。绕局部 X 轴旋转 +35° 打开"))
+        sh.location = ((x0 + x1) / 2, D / 2 + 0.06, B + WIN_Z[1])
+        sh["open_rotation_x_deg"] = 35.0
     bm = bmesh.new()
     lattice_window(bm, 0.7, 0.7, r=0.14)
     bmesh.ops.transform(bm, matrix=Matrix.Translation((WING["x0"], -0.65, B + 1.55)) @ Matrix.Rotation(math.pi / 2, 4, "Z"), verts=bm.verts[:])
@@ -2211,15 +2235,19 @@ def build_house():
     new_obj("GQ_Front_Deck_Logs", bm, EXT, [log_m, cut_m], parent=root,
             props=dict(cn="门前原木露台（前沿露出原木端头）", status="observed", note="R2"))
     bm = bmesh.new()
-    for x0, x1 in ((-W / 2 + 0.1, DOOR_X[0] - 0.4), (DOOR_X[1] + 0.4, W / 2 - 0.1)):
-        n = int((x1 - x0) / 0.42)
-        for i in range(n):
-            for rrow in range(2):
-                xx = x0 + (i + 0.5 + 0.5 * (rrow % 2)) * (x1 - x0) / (n + 0.5)
-                bm_ico(bm, rnd.uniform(0.2, 0.26), loc=(xx, D / 2 + 0.36, B + 0.18 + rrow * 0.33), scale=(1.05, 0.6, 0.72), subdiv=1, rough=0.2,
+    mortar = mat_noise("Stone_Mortar_Grey", "#566262", "#606c6c", scale=6)
+    for x0, x1 in ((-W / 2 + 0.25, DOOR_X[0] - 0.35), (DOOR_X[1] + 0.35, W / 2 - 0.25)):
+        bm_cube(bm, (x1 - x0, 0.36, WIN_Z[0] - 0.02), loc=((x0 + x1) / 2, D / 2 + 0.3, B + (WIN_Z[0] - 0.02) / 2), mi=2)
+        n = max(2, int((x1 - x0) / 0.62))
+        for rrow in range(2):
+            for i in range(n + (rrow % 2)):
+                xx = x0 + (i + (0.5 if rrow % 2 == 0 else 0.0)) * (x1 - x0) / n
+                if not (x0 + 0.1 < xx < x1 - 0.1):
+                    continue
+                bm_ico(bm, rnd.uniform(0.27, 0.33), loc=(xx, D / 2 + 0.44, B + 0.24 + rrow * 0.44), scale=(1.15, 0.45, 0.75), subdiv=2, rough=0.12,
                        seed=i + 10 * rrow, mi=rnd.randrange(2))
-    new_obj("GQ_Front_Stone_Planters", bm, EXT, stone_ms, parent=root,
-            props=dict(cn="窗下石头矮墙", status="observed", note="R2：门两侧窗下、栏杆后面是一排青灰色石头"))
+    new_obj("GQ_Front_Stone_Planters", bm, EXT, stone_ms + [mortar], parent=root, smooth_shade=True,
+            props=dict(cn="窗下青灰色大圆石矮墙（从露台到窗台）", status="observed", note="R2、A45：窗下是一道大圆石砌的矮墙，顶面和窗台齐平"))
 
     # ---- 中间木楼梯 + 树枝扶手（R1、R2）
     sx0, sx1 = DOOR_X[0] - 0.1, DOOR_X[1] + 0.1
@@ -2311,11 +2339,11 @@ def build_house():
         surf_box(bm, lambda u, xx, side=side: S(xx, side, u) - Vector((0, 0, 0.1)), 0.0, 1.0, x0m, x1m, 0.04, nu=16, nv=40, mi=0)
     # 檩条：顺屋脊方向的圆木，伸出山墙，端头露在上翘的屋檐下（R2、R8-a41/a42）
     for side in (-1, 1):
-        for u in ((0.0, 0.33, 0.66, 0.95) if side > 0 else (0.33, 0.66, 0.95)):
+        for u in ((0.0, 0.17, 0.34, 0.51, 0.68, 0.86) if side > 0 else (0.17, 0.34, 0.51, 0.68, 0.86)):  # R2：山墙上一排粗圆木端头
             p = S(0.0, side, u)
-            r = rnd.uniform(0.13, 0.16)
+            r = rnd.uniform(0.2, 0.26)
             bm_cyl(bm, r, r, x1m - x0m + 0.5, loc=(0, p.y, p.z - r - 0.03), rot=(0, math.pi / 2, 0), seg=12, mi=1)
-            for ex in (x0m - 0.25, x1m + 0.25):
+            for ex in (x0m - 0.25, x1m + 0.25 + rnd.uniform(0.0, 0.35)):
                 bm_cyl(bm, r * 0.95, r * 0.95, 0.01, loc=(ex + math.copysign(0.005, ex), p.y, p.z - r - 0.03), rot=(0, math.pi / 2, 0), seg=12, mi=2)
     # 室内横梁（R4：屋里看得到横梁）
     for x in (-3.0, -0.9, 3.0):
@@ -2446,8 +2474,12 @@ def build_house_interior(root, gz):
                 y += w
     floor_wood = [mat_noise(f"Wood_Floor_Plank_{i}", c1, c2, scale=8, stretch=(1.0, 0.25, 1.0)) for i, (c1, c2) in enumerate(
         (("#8a6c50", "#98795a"), ("#7c5f45", "#8b6c50"), ("#977a5c", "#a68869")))]
-    obj("Kitchen", "GQ_Kitchen_Floor_Planks", "客厅/厨房木地板", floor_wood, lambda bm: planks(bm, kx0, kx1, -IN_Y, IN_Y),
-        note="R3：厨房地面是旧木地板（四季篇）；R8 积木为浅木色")
+    obj("Kitchen", "GQ_Kitchen_Floor_Cement", "客厅/厨房灰色水泥地面", [mat_noise("Floor_Cement_Grey_Beige", "#a8a397", "#b6b1a5", scale=3, bump=0.05)],
+        lambda bm: bm_cube(bm, (kx1 - kx0, 2 * IN_Y, 0.05), loc=((kx0 + kx1) / 2, 0, -0.025)), note="R3：厨房地面是灰米色、比较平整的地面，散落纸屑")
+    rnd_p = random.Random(13)
+    obj("Kitchen", "GQ_Kitchen_Paper_Scraps", "地上的纸屑", [mat("Paper_Scrap", "#e8e4da", rough=0.9)],
+        lambda bm: [bm_cube(bm, (rnd_p.uniform(0.06, 0.14), rnd_p.uniform(0.04, 0.1), 0.003), loc=(rnd_p.uniform(-1.6, 1.0), rnd_p.uniform(-2.2, 0.0), 0.0015),
+                            rot=(0, 0, rnd_p.uniform(0, 3))) for _ in range(14)], loc=(0, 0, 0), note="R3")
     # 冰箱（R3、U5）：薄荷绿双门、上冷冻下冷藏、白把手、门上纸条，顶上放纸箱
     fx, fy = 0.78, -IN_Y + 0.33
 
@@ -2598,10 +2630,15 @@ def build_house_interior(root, gz):
                     bm_cyl(bm, 0.07, 0.07, 0.18, loc=(-0.25, 0, 0.09), seg=10, mi=1), bm_cyl(bm, 0.08, 0.03, 0.06, loc=(-0.25, 0, 0.21), seg=10, mi=0)),
         loc=(PART_X - 0.09, -1.0, 1.6), note="R3：卧室门洞左边挂马灯")
     pump = mat("Pumpkin_Orange", "#d9822b", rough=0.6)
+    obj("Kitchen", "GQ_Kitchen_Log_Slice_Table", "树墩切片矮桌（上面一个南瓜）", [MATS.get("Bark_Log") or mat_noise("Bark_Log", "#5d3f2a", "#7b573c", scale=6),
+                                                                      MATS["Wood_Cut_End"], pump],
+        lambda bm: (bm_cyl(bm, 0.5, 0.52, 0.42, loc=(0, 0, 0.21), seg=20, mi=0), bm_cyl(bm, 0.49, 0.49, 0.01, loc=(0, 0, 0.425), seg=20, mi=1),
+                    bm_sphere(bm, (0.17, 0.17, 0.13), loc=(-0.1, 0.05, 0.55), seg=14, rings=8, mi=2)),
+        loc=(0.65, 0.1, 0), floor=True, pos="inferred", note="R3：画面左前方一块树墩切片当桌子，上面放南瓜")
     obj("Kitchen", "GQ_Kitchen_Pumpkins", "南瓜", [pump, mat("Pumpkin_Stem", "#5a6a2a")],
         lambda bm: (bm_sphere(bm, (0.2, 0.2, 0.15), loc=(0, 0, 0.15), seg=14, rings=8), bm_cyl(bm, 0.02, 0.02, 0.06, loc=(0, 0, 0.32), seg=6, mi=1),
                     bm_sphere(bm, (0.14, 0.14, 0.11), loc=(0.3, 0.2, 0.11), seg=14, rings=8)),
-        loc=(0.75, -0.55, 0), smooth_shade=True, floor=True, note="R3：地上南瓜")
+        loc=(0.6, -0.95, 0), smooth_shade=True, floor=True, note="R3：地上南瓜")
     # 西北角烧水炉 + 柴火（R8 文字：客厅进门角落有烧水炉）；西墙碗柜（U4）；西墙碗架（U7）
     obj("Kitchen", "GQ_Living_Kettle_Stove", "烧水炉（铁炉、水壶、烟管）", [iron, steel],
         lambda bm: (bm_cyl(bm, 0.27, 0.27, 0.62, loc=(0, 0, 0.36), seg=16, mi=0), legs(bm, 0.4, 0.4, 0.06, 0.05, 0),
@@ -2752,22 +2789,65 @@ def build_house_interior(root, gz):
     obj("Bedroom", "GQ_Bedroom_Chest_Red", "红棕色木箱", [mat_noise("Wood_Chest_Red", "#7a3328", "#8c3e30", scale=8), steel],
         lambda bm: (bm_cube(bm, (0.7, 0.42, 0.48), loc=(0, 0, 0.24), mi=0), bm_cube(bm, (0.08, 0.02, 0.06), loc=(0, 0.22, 0.38), mi=1)),
         loc=(IN_X - 0.24, -IN_Y + 0.5, 0), rot=(0, 0, math.pi / 2), floor=True, pos="inferred", note="E44：红棕色木箱；R4 左下角也有红箱子")
-    # 隔墙一侧：书桌、飞镖靶、相框、猎枪（R4、R8-a66/a67）
-    obj("Bedroom", "GQ_Bedroom_Desk", "靠墙书桌", [wood_furn, mat("Toolbox_Red", "#9a3a2c", rough=0.5)],
-        lambda bm: (bm_cube(bm, (0.5, 1.0, 0.04), loc=(0, 0, 0.74), mi=0), legs(bm, 0.5, 1.0, 0.72, 0.05, 0),
-                    bm_cube(bm, (0.25, 0.35, 0.18), loc=(0, 0.2, 0.85), mi=1)),
-        loc=(bx0 + 0.27, 0.65, 0), floor=True, pos="inferred", note="R4：画面左边桌子和工具箱")
+    # 隔墙一侧（A65：带抽屉的书桌，桌上两根支架托着老式喇叭口火枪，旁边子弹、红书、小马灯；墙上弓、相框、旧报纸；
+    # 绿沙发背后玻璃门书柜。R4：书桌在画面左前方，飞镖靶在左墙更靠里）
+    def desk(bm):
+        bm_cube(bm, (0.5, 1.1, 0.05), loc=(0, 0, 0.745), mi=0)
+        for yy in (-0.53, 0.53):
+            bm_cube(bm, (0.46, 0.04, 0.72), loc=(0, yy, 0.36), mi=0)
+        bm_cube(bm, (0.04, 1.02, 0.6), loc=(-0.22, 0, 0.42), mi=0)
+        for yy in (-0.26, 0.26):
+            bm_cube(bm, (0.03, 0.48, 0.2), loc=(0.24, yy, 0.6), mi=1)
+            bm_sphere(bm, (0.025, 0.025, 0.025), loc=(0.265, yy, 0.6), seg=8, rings=4, mi=2)
+        bm_cube(bm, (0.03, 1.02, 0.04), loc=(0.24, 0, 0.12), mi=0)
+    obj("Bedroom", "GQ_Bedroom_Desk_Drawers", "带抽屉的木书桌", [wood_furn, mat_noise("Wood_Desk_Drawer", "#7d5236", "#8d603f", scale=8), MATS["Steel_Pot"]],
+        desk, loc=(bx0 + 0.25, -0.05, 0), floor=True, pos="inferred", note="A65：带两个抽屉的木书桌，旁边是绿沙发；靠哪面墙依据 R4 左前方的桌子推测")
+
+    def gun(bm):
+        for yy in (-0.22, 0.18):
+            bm_cyl(bm, 0.05, 0.06, 0.01, loc=(0, yy, 0.005), seg=10, mi=1)
+            bm_cyl(bm, 0.012, 0.012, 0.26, loc=(0, yy, 0.135), seg=6, mi=1)
+            bm_cube(bm, (0.05, 0.02, 0.03), loc=(0, yy, 0.27), mi=1)
+        bm_tube(bm, [(0, -0.48, 0.25), (0, -0.3, 0.29), (0, -0.12, 0.3)], [0.045, 0.035, 0.03], seg=8, mi=0)
+        bm_tube(bm, [(0, -0.12, 0.3), (0, 0.3, 0.3), (0, 0.42, 0.3)], [0.022, 0.024, 0.028], seg=10, mi=1)
+        bm_cyl(bm, 0.028, 0.06, 0.1, loc=(0, 0.47, 0.3), rot=(-math.pi / 2, 0, 0), seg=14, mi=1)
+        bm_torus(bm, 0.03, 0.008, loc=(0, -0.2, 0.25), rot=(0, math.pi / 2, 0), seg=10, rseg=4, mi=1)
+    obj("Bedroom", "GQ_Bedroom_Blunderbuss_On_Stands", "书桌上支架托着的老式喇叭口火枪", [mat_noise("Wood_Gun_Stock", "#7a3f26", "#8c4a2e", scale=10), MATS["Steel_Pot"]],
+        gun, loc=(bx0 + 0.3, -0.05, 0.77), note="A65：枪托红棕色木头、枪管银灰色、枪口喇叭形，架在两根金属支架上")
+    brass = mat("Brass_Cartridge", "#d0a040", metal=0.8, rough=0.3)
+    obj("Bedroom", "GQ_Bedroom_Desk_Items", "书桌上的子弹、红书、小马灯", [brass, mat("Book_Red_Cover", "#a8302a", rough=0.6), mat("Paper_Book_Edge", "#efe6d0"),
+                                                               MATS["Lantern_Metal"], MATS["Lantern_Glow"]],
+        lambda bm: ([bm_cyl(bm, 0.012, 0.012, 0.07, loc=(0.05 + (k % 2) * 0.03, -0.42 + k * 0.035, 0.035), seg=8, mi=0) for k in range(4)],
+                    bm_cube(bm, (0.2, 0.28, 0.035), loc=(0.02, 0.3, 0.018), rot=(0, 0, 0.1), mi=1), bm_cube(bm, (0.19, 0.26, 0.035), loc=(0.03, 0.31, 0.053), rot=(0, 0, -0.05), mi=1),
+                    bm_cube(bm, (0.18, 0.005, 0.03), loc=(0.03, 0.18, 0.053), mi=2),
+                    bm_cyl(bm, 0.05, 0.05, 0.02, loc=(-0.12, -0.55, 0.01), seg=10, mi=3), bm_cyl(bm, 0.04, 0.04, 0.1, loc=(-0.12, -0.55, 0.07), seg=10, mi=4),
+                    bm_cyl(bm, 0.05, 0.015, 0.04, loc=(-0.12, -0.55, 0.14), seg=10, mi=3)),
+        loc=(bx0 + 0.25, -0.05, 0.77), note="A65：铜色子弹、两本红书、桌角小马灯")
+    obj("Bedroom", "GQ_Bedroom_Wall_Bow", "墙上挂的弓", [mat_noise("Wood_Bow", "#c89a5a", "#d8aa6a", scale=10), mat("Bow_String", "#e8e0d0")],
+        lambda bm: (bm_torus(bm, 0.7, 0.018, loc=(0, 0, 0), rot=(0, math.pi / 2, 0), seg=20, rseg=5, mi=0, arc=1.6, scale=(1, 1, 1)),
+                    bm_cyl(bm, 0.003, 0.003, 1.0, loc=(0, 0.0, 0.0), seg=4, mi=1)),
+        loc=(bx0 + 0.04, -0.5, 1.75), rot=(0, 0, 0), note="A65：书桌上方墙上挂着弓")
+    obj("Bedroom", "GQ_Bedroom_Portrait_Frame", "相框", [wood_furn, mat("Photo_Sepia", "#c9a97a")],
+        lambda bm: (bm_cube(bm, (0.03, 0.42, 0.5), loc=(0, 0, 0), mi=0), bm_cube(bm, (0.012, 0.34, 0.42), loc=(0.02, 0, 0), mi=1)),
+        loc=(bx0 + 0.03, 0.05, 1.95), note="A65：书桌上方的相框")
+    obj("Bedroom", "GQ_Bedroom_Wall_Newspaper", "墙上的旧报纸", [mat("Paper_Newspaper", "#cfccc2", rough=0.9)],
+        lambda bm: bm_cube(bm, (0.01, 0.42, 0.55), loc=(0, 0, 0), rot=(0.12, 0, 0)), loc=(bx0 + 0.02, 0.45, 1.55), note="A65：相框右下方贴着旧报纸")
+    glass = mat("Glass_Bookcase", "#cfe2e8", rough=0.05, transmission=0.85)
+
+    def bookcase(bm):
+        bm_cube(bm, (0.4, 0.62, 1.8), loc=(0, 0, 0.9), mi=0)
+        bm_cube(bm, (0.02, 0.52, 1.0), loc=(0.205, 0, 1.25), mi=1)
+        for z in (0.85, 1.25, 1.62):
+            bm_cube(bm, (0.36, 0.56, 0.02), loc=(0.0, 0, z), mi=0)
+        for k in range(8):
+            bm_cube(bm, (0.24, 0.05, rnd_b.uniform(0.22, 0.32)), loc=(0.0, -0.22 + k * 0.06, 0.86 + 0.14), mi=2 + k % 2)
+    rnd_b = random.Random(8)
+    obj("Bedroom", "GQ_Bedroom_Glass_Bookcase", "玻璃门书柜", [wood_light, glass, mat("Book_Grey", "#8a8a90"), mat("Book_Red", "#8a3a2a")], bookcase,
+        loc=(bx0 + 0.2, -0.95, 0), floor=True, pos="inferred", note="A65：绿沙发背后有一个玻璃门书柜")
     obj("Bedroom", "GQ_Bedroom_Dartboard", "飞镖靶", [wood_light, mat("Target_Red", "#b83228"), white],
         lambda bm: (bm_cube(bm, (0.03, 0.42, 0.5), loc=(0, 0, 0), mi=0),
                     [bm_cyl(bm, r, r, 0.012, loc=(0.02 + k * 0.003, 0, 0), rot=(0, math.pi / 2, 0), seg=20, mi=1 + k % 2) for k, r in enumerate((0.17, 0.13, 0.09, 0.05))]),
-        loc=(bx0 + 0.03, -0.45, 1.65), note="R4：墙上的飞镖靶")
-    obj("Bedroom", "GQ_Bedroom_Portrait_Frame", "相框", [wood_furn, mat("Photo_Sepia", "#c9a97a")],
-        lambda bm: (bm_cube(bm, (0.03, 0.4, 0.5), loc=(0, 0, 0), mi=0), bm_cube(bm, (0.012, 0.32, 0.42), loc=(0.02, 0, 0), mi=1)),
-        loc=(bx0 + 0.03, 0.6, 1.7), status="observed", pos="inferred", note="R8-a66 积木相框")
-    obj("Bedroom", "GQ_Bedroom_Hunting_Rifle_Rack", "墙上的猎枪", [wood_furn, iron],
-        lambda bm: (bm_cube(bm, (0.04, 0.05, 0.05), loc=(0, -0.45, 0.0), mi=0), bm_cube(bm, (0.04, 0.05, 0.05), loc=(0, 0.45, 0.0), mi=0),
-                    bm_cube(bm, (0.04, 0.35, 0.09), loc=(0.04, -0.4, 0.04), mi=0), bm_cyl(bm, 0.015, 0.015, 0.75, loc=(0.04, 0.17, 0.05), rot=(math.pi / 2, 0, 0), seg=8, mi=1)),
-        loc=(ew - 0.02, -0.55, 1.95), pos="inferred", note="R8-a67 积木猎枪架；电视上方位置为推测")
+        loc=(bx0 + 0.03, 1.25, 1.6), pos="inferred", note="R4：画面左墙上的飞镖靶，比书桌更靠里")
     obj("Bedroom", "GQ_Bedroom_Hanging_Lamp_Green", "绿色灯罩吊灯", [mat("Lamp_Shade_Green", "#3f7a62", rough=0.4), glow, lamp_metal],
         lambda bm: (bm_cyl(bm, 0.006, 0.006, 0.9, loc=(0, 0, 0.45), seg=4, mi=2),
                     bm_sphere(bm, (0.26, 0.26, 0.12), loc=(0, 0, 0), seg=16, rings=8, mi=0, deform=lambda co: Vector((co.x, co.y, max(co.z, 0.0)))),
@@ -2776,9 +2856,6 @@ def build_house_interior(root, gz):
         lambda bm: (bm_cyl(bm, 0.015, 0.015, 1.7, loc=(0, 0, 0.0), rot=(0, math.pi / 2, 0), seg=6, mi=1),
                     [bm_cyl(bm, 0.035, 0.045, 1.05, loc=(sx * (0.66 + k * 0.06), 0.0, -0.53), seg=8, mi=0) for sx in (-1, 1) for k in range(4)]),
         loc=(sum(WIN_FRONT[1]) / 2, IN_Y - 0.06, WIN_Z[1] + 0.12), smooth_shade=True, status="inferred", note="剧照里没看到窗帘，按要求补做，收在两侧")
-    obj("Bedroom", "GQ_Bedroom_Ceramic_Teapot_Shelf", "隔墙上的小茶壶搁板", [wood_light, white],
-        lambda bm: (bm_cube(bm, (0.25, 0.6, 0.03), loc=(0, 0, 0), mi=0), bm_sphere(bm, (0.08, 0.08, 0.07), loc=(0, -0.15, 0.08), seg=12, rings=6, mi=1),
-                    bm_cyl(bm, 0.03, 0.025, 0.06, loc=(0, 0.12, 0.045), seg=10, mi=1)), loc=(bx0 + 0.13, 1.6, 1.25), pos="inferred")
 
     # =============== C. 卫生间（侧翼，单独的墙和门）依据 R5、R8 文字 ===============
     wx0, wx1, wy0, wy1 = WING["x0"] + 0.155, -W_HOUSE / 2 - 0.155, WING["y0"] + 0.155, WING["y1"] - 0.155
@@ -3237,9 +3314,9 @@ def build_yard(root, lg, y_stair):
     # 歪斜、高低不一的木板栅栏（R1），正面西段有带蓝色木板小屋顶的院门，东段留出车道
     fence_ms = [mat_noise("Wood_Fence_A", "#9b7650", "#ae8960", scale=8), mat_noise("Wood_Fence_B", "#7e5e3e", "#8e6c4a", scale=8),
                 mat_noise("Wood_Fence_C", "#b08a5e", "#c09a6c", scale=8)]
-    F = dict(x0=-10.0, x1=20.0, y0=-6.0, y1=12.0)
-    gate = (6.6, 9.0)   # R1、imgdb：站在院子正前方看，带蓝顶的院门在左手边（东）
-    drive = (13.0, 18.5)
+    F = dict(x0=-10.0, x1=15.0, y0=-22.0, y1=12.0)  # 一整圈；屋后一段把仓库围在院里（推测）
+    gate = (6.6, 9.0)   # R1、H2：相机对着木屋正面时，带蓝顶的院门在画面左侧（模型里是局部 +X 一侧）
+    drive = (11.5, 14.0)
     runs = [((F["x0"], F["y1"]), (gate[0], F["y1"])), ((gate[1], F["y1"]), (drive[0], F["y1"])), ((drive[1], F["y1"]), (F["x1"], F["y1"])),
             ((F["x1"], F["y1"]), (F["x1"], F["y0"])), ((F["x1"], F["y0"]), (F["x0"], F["y0"])), ((F["x0"], F["y0"]), (F["x0"], F["y1"]))]
     for i, ((ax, ay), (bx, by)) in enumerate(runs):
@@ -3434,7 +3511,7 @@ def build_bears_home():
         if math.hypot(c.x, c.y) < 3.0 and c.z > -0.05:
             p.material_index = 1
     add_cutters(hollow, C, [("Front_Entrance", (1.2, 2.2, 1.55), (0, -3.3, 1.05), 0.0),
-                            ("Back_Round_Opening", (0.9, 1.8, 0.8), (0.3, 3.3, 1.95), 0.15)], "Bears_TreeHome")
+                            ("Back_Round_Opening", (1.35, 1.8, 1.05), (0.3, 3.3, 2.05), 0.15)], "Bears_TreeHome")
     DOOR_PASSAGES.append(("熊洞洞口", "Bears_TreeHome_Root", (-0.7, 0.7, -4.6, -1.6, 0.15, 1.9)))
     # ---- 上段树干、树枝、树冠、外面的大树根
     bm = bmesh.new()
@@ -3487,25 +3564,27 @@ def build_bears_home():
             a0 = 2 * math.pi * k / 10 + 0.2
             if abs(math.atan2(math.sin(a0 + math.pi / 2), math.cos(a0 + math.pi / 2))) < 0.5:
                 continue
+            if abs(math.atan2(math.sin(a0 + 0.3 - 1.48), math.cos(a0 + 0.3 - 1.48))) < 0.75:  # B1：后壁圆洞周围不挡
+                continue
             pts = []
             for i in range(9):
                 t = i / 8
                 a = a0 + 0.6 * t
                 rr = 2.6 - 0.15 * math.sin(t * 3) if t < 0.8 else 2.6 - (t - 0.8) * 4.0
                 pts.append((math.cos(a) * rr, math.sin(a) * rr, 4.6 * (1 - t) + 0.05))
-            bm_tube(bm, pts, [0.28 - 0.1 * (i / 8) for i in range(9)], seg=10, mi=0)
+            bm_tube(bm, pts, [0.38 - 0.14 * (i / 8) for i in range(9)], seg=12, mi=0)
     obj("Bears_TreeHome_Inner_Root_Ribs", "内壁上扭曲下垂的树根", [inner], ribs, note="B1：室内一条条扭曲的树根")
 
     def bed(bm):
-        bm_cube(bm, (2.5, 1.1, 0.42), loc=(0, 0, 0.21), mi=0)
-        bm_cube(bm, (2.35, 0.95, 0.08), loc=(0.02, 0.02, 0.45), rot=(0, 0.02, 0), mi=0)
+        bm_cube(bm, (2.9, 1.15, 0.34), loc=(0, 0, 0.17), mi=0)
+        bm_cube(bm, (2.75, 1.0, 0.08), loc=(0.02, 0.02, 0.37), rot=(0, 0.02, 0), mi=0)
     ob = obj("Bears_TreeHome_Stone_Bed", "长条灰色石板床", [mat_noise("Stone_Bed_Grey_Purple", "#8d8a98", "#a4a1ae", scale=3, bump=0.3)], bed,
              loc=(1.0, 1.3, 0), rot=(0, 0, -0.35), floor=True, note="B1：熊大躺在一块长条灰色石板上", smooth_shade=False)
     soft = ob.modifiers.new("Bevel_Soft", "BEVEL")
     soft.width = 0.08
     soft.segments = 2
     obj("Bears_TreeHome_Leaf_Bed_XiongEr", "熊二的树叶铺（推测）", [mat_noise("Leaf_Bed_Green", "#5f8f3a", "#77a64a", scale=8)],
-        lambda bm: bm_ico(bm, 1.0, scale=(1.1, 0.75, 0.18), subdiv=2, rough=0.08, seed=4), loc=(-1.55, 0.9, 0.195), floor=True,
+        lambda bm: bm_ico(bm, 1.0, scale=(1.1, 0.75, 0.18), subdiv=2, rough=0.08, seed=4), loc=(-1.7, 0.4, 0.195), floor=True,
         status="inferred", note="B1 只看到一块石板床；熊二睡哪里没有画面")
     orange = mat_noise("Swirl_Orange", "#e07a28", "#f09238", scale=6)
     spots = [(-2.45, 0.6, 1.4, 0.18), (2.3, -1.2, 2.4, 0.2), (1.2, 2.5, 3.2, 0.22), (-1.6, -2.0, 2.0, 0.16), (2.6, 0.9, 0.9, 0.15), (-2.2, 1.6, 3.4, 0.2)]
@@ -3602,36 +3681,36 @@ def build_monkey_cave():
     ret = bmesh.ops.create_icosphere(bm, subdivisions=4, radius=1.0)
     for v in ret["verts"]:
         k = 1 + 0.18 * noise.noise(v.co * 1.6 + Vector((2.1, 0.3, 1.0))) + 0.06 * noise.noise(v.co * 5)
-        v.co = Vector((v.co.x * 6.2 * k, v.co.y * 5.2 * k + 1.6, v.co.z * 4.6 * k + 0.8))
+        v.co = Vector((v.co.x * 6.8 * k, v.co.y * 6.0 * k + 1.6, v.co.z * 7.2 * k + 1.4))  # M1：高高的石山
     body = new_obj("MonkeyCave_Rock_Mound", bm, C, [rock], smooth_shade=True, parent=root,
                    props=dict(cn="山包主体（洞室和洞口用布尔修改器挖出）", status="observed", note="M1：灰绿色、长苔藓的大石山包"))
-    add_cutters(body, C, [("Chamber", (3.4, 3.2, 2.5), (0, 1.8, 1.2), 0.0), ("Entrance_Tunnel", (1.25, 2.8, 1.45), (0, -2.4, 1.15), 0.0)], "MonkeyCave")
-    DOOR_PASSAGES.append(("猴洞洞口", "MonkeyCave_Root", (-0.6, 0.6, -4.2, -1.0, 0.2, 1.9)))
+    add_cutters(body, C, [("Chamber", (3.4, 3.2, 2.5), (0, 1.8, 1.2), 0.0), ("Entrance_Tunnel", (1.25, 3.1, 1.45), (0, -2.9, 1.15), 0.0)], "MonkeyCave")
+    DOOR_PASSAGES.append(("猴洞洞口", "MonkeyCave_Root", (-0.6, 0.6, -5.4, -1.0, 0.2, 1.9)))
     # 外面堆着的大圆石（避开洞口），洞口两侧和上方的“门框”石
     bm = bmesh.new()
     for k in range(16):
         a = rnd.uniform(0, 2 * math.pi)
-        el = rnd.uniform(0.1, 1.1)
+        el = rnd.uniform(0.1, 1.3)
         if abs(math.atan2(math.sin(a + math.pi / 2), math.cos(a + math.pi / 2))) < 0.5 and el < 0.7:
             continue
         rr = rnd.uniform(1.2, 2.2)
-        px, py, pz = math.cos(a) * math.cos(el) * 6.5, math.sin(a) * math.cos(el) * 5.5 + 1.6, math.sin(el) * 4.6 + 0.6
-        bm_ico(bm, rr, loc=(px, py, pz), scale=(1.2, 1.0, 0.85), subdiv=3, rough=0.25, seed=k * 1.7)
-    for (px, py, pz, rr, sc) in ((-1.9, -3.3, 1.2, 1.15, (0.9, 1.0, 1.4)), (1.9, -3.3, 1.1, 1.1, (0.9, 1.0, 1.4)), (0.0, -3.0, 3.2, 1.35, (1.5, 0.9, 0.7))):
+        px, py, pz = math.cos(a) * math.cos(el) * 7.0, math.sin(a) * math.cos(el) * 6.3 + 1.6, math.sin(el) * 7.0 + 1.0
+        bm_ico(bm, rr, loc=(px, py, pz), scale=(1.25, 1.0, 0.8), subdiv=2, rough=0.35, seed=k * 1.7)
+    for (px, py, pz, rr, sc) in ((-1.9, -4.2, 1.2, 1.15, (0.9, 1.0, 1.4)), (1.9, -4.2, 1.1, 1.1, (0.9, 1.0, 1.4)), (0.0, -4.0, 3.4, 1.35, (1.5, 0.9, 0.7))):
         bm_ico(bm, rr, loc=(px, py, pz), scale=sc, subdiv=3, rough=0.2, seed=px + pz)
     new_obj("MonkeyCave_Boulders", bm, C, [rock2], smooth_shade=True, parent=root,
             props=dict(cn="山包外圆石和洞口两侧、上方的大石", status="observed", note="M1；石块数量和位置为推测"))
     # 洞口上方石头上的刻纹（M1 可见，有图案；图案细节看不清，用简单线条代替）
     bm = bmesh.new()
-    bm_torus(bm, 0.28, 0.035, loc=(0, -4.02, 3.25), rot=(math.pi / 2, 0, 0), seg=20, rseg=4)
+    bm_torus(bm, 0.28, 0.035, loc=(0, -5.22, 3.45), rot=(math.pi / 2, 0, 0), seg=20, rseg=4)
     for (dx, dz, ang) in ((-0.12, 0.05, 0.6), (0.14, 0.02, -0.5), (0.0, -0.15, 0.0)):
-        bm_cube(bm, (0.05, 0.03, 0.3), loc=(dx, -4.05, 3.25 + dz), rot=(0, ang, 0))
+        bm_cube(bm, (0.05, 0.03, 0.3), loc=(dx, -5.25, 3.45 + dz), rot=(0, ang, 0))
     new_obj("MonkeyCave_Rock_Carving", bm, C, [mat("Carving_Pale", "#d9dccf", rough=0.8)], parent=root,
             props=dict(cn="洞口上方的石刻图案", status="observed", note="M1：洞口上方石头上刻着浅色图案；图案细节为推测"))
     # 洞前石板平台（M1：一层层平整石板）和台阶
     bm = bmesh.new()
-    for (w, d, h, px, py, pz) in ((5.2, 2.6, 0.45, 0.0, -4.6, 0.22), (6.6, 2.0, 0.4, -0.3, -6.6, 0.0), (2.4, 1.6, 0.5, -3.6, -4.9, 0.5),
-                                  (2.0, 1.4, 0.45, 3.4, -5.1, 0.45)):
+    for (w, d, h, px, py, pz) in ((5.6, 2.6, 0.55, 0.0, -5.7, 0.27), (7.2, 2.2, 0.45, -0.3, -7.8, 0.02), (2.6, 1.8, 0.6, -3.8, -6.0, 0.6),
+                                  (2.2, 1.6, 0.55, 3.6, -6.2, 0.55), (3.2, 1.4, 0.35, 1.0, -9.4, -0.1)):
         bm_cube(bm, (w, d, h), loc=(px + rnd.uniform(-0.1, 0.1), py, pz), rot=(rnd.uniform(-0.02, 0.02), rnd.uniform(-0.02, 0.02), rnd.uniform(-0.06, 0.06)))
     pl = new_obj("MonkeyCave_Stone_Platform", bm, C, [rock2], parent=root, props=dict(cn="洞前石板平台", status="observed", note="M1；尺寸为推测"))
     md = pl.modifiers.new("Bevel_Soft", "BEVEL")
@@ -3650,10 +3729,10 @@ def build_monkey_cave():
         bm_cube(bm, (0.08, 0.06, 0.18), loc=(0, -0.2, 1.0), mi=0)
         ob = new_obj(f"MonkeyCave_Totem_{side}", bm, C, [wood, dark], parent=root,
                      props=dict(cn="雕刻木图腾柱", status="observed", note="M1：平台前两根带人脸雕刻的木柱；雕刻细节为推测"))
-        ob.location = (px, -7.4, 0.2)
+        ob.location = (px, -8.6, 0.24)
         ob.rotation_euler = (0, 0, rnd.uniform(-0.2, 0.2))
     # 洞口周围的灌木和蕨类
-    for k, (px, py) in enumerate(((-4.6, -3.4), (4.4, -3.0), (-5.6, -6.2), (5.4, -6.8), (-7.0, -1.2), (6.8, -0.6))):
+    for k, (px, py) in enumerate(((-4.8, -4.6), (4.6, -4.2), (-5.9, -7.4), (5.7, -8.0), (-7.4, -1.6), (7.2, -1.0))):
         proto = bpy.data.objects[f"Proto_Bush_{k % 3}"] if f"Proto_Bush_{k % 3}" in bpy.data.objects else None
         if proto:
             ob = linked(proto, f"MonkeyCave_Bush_{k}", C, (px, py, 0.1), (0, 0, k), 1.2, props=dict(cn="洞口周围的灌木", status="observed", note="M1"))
@@ -3701,6 +3780,7 @@ def build_monkey_cave():
 def build_squirrel_tree():
     """蹦蹦的松鼠窝：一棵大树的树干上、粗树枝和树干相接处开一个小洞（候选洞口 A），里面是小洞室。
     S1：爱奇艺剧照里蹦蹦站在一根粗树枝上，树枝和树干相接处有一个深色竖缝——只能说明那里可能有洞，不能证明洞口位置和大小。
+    洞口 A 放在粗树枝根部正上方（局部方位 -0.4 rad），宽 0.2 m、高 0.44 m：比 S1 的缝略宽，是为了让 0.69 m 高的蹦蹦能钻进去（比例测试 ST03）。
     第一季第 1 集（其他版本）截图里蹦蹦的树洞里堆满松果，用作辅助。洞室大小、松果堆、睡窝都是推测。局部 +X 为树枝方向。"""
     C = COLL["SquirrelNest"]
     P = SQUIRRELTREE
@@ -3713,7 +3793,7 @@ def build_squirrel_tree():
     bm_tube(bm, [(0, 0, -0.4), (0, 0, 2), (0.05, 0, 5), (0.0, 0.05, 8), (0.05, 0, 11)], [1.15, 0.92, 0.85, 0.7, 0.45], seg=20)
     trunk = new_obj("SquirrelNest_Trunk", bm, C, [bark], smooth_shade=True, parent=root,
                     props=dict(cn="大树树干（裂纹树皮）", status="observed", note="S1：浅棕色、龟裂的树皮"))
-    add_cutters(trunk, C, [("Nest_Chamber", (0.55, 0.5, 0.6), (0.1, 0, 4.85), 0.0), ("Entrance_A_Slot", (0.42, 0.17, 0.34), (0.75, 0, 4.75), 0.0)],
+    add_cutters(trunk, C, [("Nest_Chamber", (0.55, 0.5, 0.6), (0.1, 0, 4.85), 0.0), ("Entrance_A_Slot", (0.2, 0.62, 0.44), (0.6 * math.cos(-0.4), 0.6 * math.sin(-0.4), 4.87), -0.4 - math.pi / 2)],
                 "SquirrelNest")
     bm = bmesh.new()
     bm_tube(bm, [(0.6, 0, 4.25), (2.0, 0.05, 4.3), (3.6, 0.1, 4.45), (4.8, 0.2, 4.6)], [0.36, 0.32, 0.26, 0.15], seg=14)
@@ -3747,7 +3827,7 @@ def build_squirrel_tree():
                  props=dict(cn="睡窝（推测）", status="inferred", note="没有画面"))
     ob.location = (0.2, -0.22, 4.3)
     li = bpy.data.lights.new("SquirrelNest_Chamber_Light", "POINT")
-    li.energy = 6
+    li.energy = 1.5
     li.shadow_soft_size = 0.1
     li.color = (1.0, 0.85, 0.6)
     lo = bpy.data.objects.new("SquirrelNest_Chamber_Light", li)
@@ -3756,7 +3836,7 @@ def build_squirrel_tree():
     lo.location = (0.05, 0.0, 4.9)
     empty("SquirrelNest_Candidate_Entrance_B", C, (-0.8, 0.0, 7.2), size=0.4, parent=root,
           props=dict(cn="候选洞口 B（只是标记，没有挖洞）", status="inferred", note="另一个可能的洞口位置，等截图确认"))
-    DOOR_PASSAGES.append(("松鼠窝洞口 A", "SquirrelNest_Tree_Root", (0.6, 0.95, -0.08, 0.08, 4.6, 4.9)))
+    DOOR_PASSAGES.append(("松鼠窝洞口 A", "SquirrelNest_Tree_Root", (0.52, 0.6, -0.3, -0.18, 4.68, 5.05)))
 
 
 def bpy_bm(build):
@@ -3774,7 +3854,7 @@ def build_pickup():
     局部坐标：+Y 车头，+X 车身右侧，Z 向上；原点在车底中心的地面上。
     尺寸为估算：车长约 5.3 m，宽 2.0 m（含轮拱），高 2.3 m，轮胎直径 1.05 m，轴距 3.1 m。"""
     V = COLL["Vehicles"]
-    x, y, rot = HOUSE["x"] + 12.5, HOUSE["y"] + 7.5, math.radians(-100)  # 院子东侧，避开院门小路（位置为推测）
+    x, y, rot = HOUSE["x"] + 22.0, HOUSE["y"] + 13.6, math.radians(-100)  # 院外土路上（R1 院子里看不到皮卡；位置为推测）
     root = empty("Vehicle_Pickup_Root", V, (x, y, ground(x, y)), (0, 0, rot), size=1.5,
                  props=dict(cn="光头强的蓝色皮卡", status="inferred",
                             note="各部件按第一季截图（S1E1-18/25/33/39/47/60 等）制作；四季篇是否同一辆车无法确认"))
@@ -4426,6 +4506,7 @@ def build_check_cameras():
     views("GQ_House_Root", "House", 8.6, 14.5, 9.0, kinds=("Front", "Side", "Back", "Top"), res="1100x700")
     for a, b in (("Check_House_Front", "Check_House_Back_tmp"), ("Check_House_Back", "Check_House_Front"), ("Check_House_Back_tmp", "Check_House_Back")):
         bpy.data.objects[a].name = b
+    bpy.data.objects["Check_House_Back"]["hide_collections"] = "GuangtouQiang_Warehouse"
     for n, cn in (("Check_House_Front", "木屋 正面"), ("Check_House_Back", "木屋 背面"), ("Check_House_Side", "木屋 侧面（东）"), ("Check_House_Top", "木屋 俯视")):
         bpy.data.objects[n]["name_cn"] = cn
     hr = bpy.data.objects["GQ_House_Root"]
@@ -4487,6 +4568,38 @@ def build_lake_cameras():
              (cx - nx_ * D, cy - ny_ * D, lv - 1.5), (cx, cy, lv - 1.5), ortho=56, hide="Forest_Trees,Forest_Plants,Characters", res="1600x800", clip=D)
 
 
+def build_still_match_cameras():
+    """剧照对位相机：每台相机按一张原作剧照的构图摆放（位置是从画面判断的近似值），用来把模型和剧照并排比较。
+    ref_id 对应 evidence/REFERENCE_INDEX.csv；render_still_match.py 渲染并拼对照图。"""
+    SC_ = coll("Still_Match_Cameras", COLL["Lights_and_Cameras"])
+    bpy.context.view_layer.update()
+    B = FOUND
+
+    def cam(name, ref, cn, root, loc, tgt, lens, extra=""):
+        cd = bpy.data.cameras.new(name)
+        cd.lens = lens
+        cd.clip_start = 0.05
+        cd.clip_end = 1500
+        co = bpy.data.objects.new(name, cd)
+        SC_.objects.link(co)
+        M = bpy.data.objects[root].matrix_world
+        co.location = M @ Vector(loc)
+        look_at(co, M @ Vector(tgt))
+        co["ref_id"] = ref
+        co["name_cn"] = cn
+        co["match_setup"] = extra
+        return co
+    cam("SM_R1_Yard_Overview", "R1", "院落全景（院门在画面左侧）", "GQ_House_Root", (16.0, 24.0, 6.5), (-2.0, 2.0, 2.5), 26)["clear_near"] = 14.0
+    cam("SM_R2_Front_Closeup", "R2", "木屋正面近景", "GQ_House_Root", (3.6, 9.2, B + 0.9), (-0.8, 3.0, B + 1.7), 22)
+    cam("SM_A45_Front_Window", "A45", "正面窗（窗扇向外上翻）", "GQ_House_Root", (-2.4, 6.4, B + 1.05), (-2.6, 3.0, B + 1.25), 26, "open_shutters")
+    cam("SM_R3_Kitchen", "R3", "厨房：卧室门、冰箱、水槽、圆窗", "GQ_House_Root", (0.25, 0.9, B + 1.25), (0.0, -2.8, B + 1.05), 18)
+    cam("SM_R4_Bedroom", "R4", "卧室：窗下土炕、铁炉、绿沙发、电视", "GQ_House_Root", (2.9, -1.95, B + 1.45), (2.9, 2.8, B + 0.85), 15)
+    cam("SM_A65_Bedroom_Desk", "A65", "卧室书桌和火枪", "GQ_House_Root", (2.65, 0.95, B + 1.25), (1.45, -0.2, B + 0.95), 24)
+    cam("SM_B1_TreeHome_Interior", "B1", "熊洞室内：后壁圆洞、石板床", "Bears_TreeHome_Root", (-0.3, -1.9, 1.05), (0.3, 3.0, 1.5), 18)
+    cam("SM_M1_MonkeyCave_Front", "M1", "猴洞洞口和石板平台", "MonkeyCave_Root", (2.6, -16.5, 3.4), (0.0, -4.5, 3.4), 26)
+    cam("SM_S1_Squirrel_Branch", "S1", "蹦蹦站的粗树枝和枝干相接处", "SquirrelNest_Tree_Root", (1.9, -3.6, 4.95), (1.3, 0.0, 4.75), 32)
+
+
 def build_acceptance_cameras():
     """验收相机（render_acceptance.py 渲染）：木屋四面、屋顶近景、室内俯视、三个房间、仓库四面、仓库内部、储物细节、院子全景。
     hide_collections 里的集合在渲染这台相机时隐藏（例如拆掉屋顶看室内）。室外相机的 clip_start 用来切掉挡在前面的树和另一栋建筑。"""
@@ -4522,9 +4635,9 @@ def build_acceptance_cameras():
     wh = "GuangtouQiang_Warehouse"
     house = "GuangtouQiang_House_Exterior,GuangtouQiang_House_Interior"
     cam("Acc_01_House_Front", "木屋正面", hr, (-1.0, 19.0, 4.6), (-1.2, 0.0, 3.4), clear=True)
-    cam("Acc_02_House_Back", "木屋背面", hr, (-1.5, -17.5, 4.6), (-1.2, 0.0, 3.2), clear=True)
-    cam("Acc_03_House_East_Side", "木屋东侧（站在门前看是左侧，卧室一侧；渲染时隐藏仓库）", hr, (18.5, 0.8, 4.6), (0.0, 0.8, 3.2), hide=wh, clear=True)
-    cam("Acc_04_House_West_Side", "木屋西侧（站在门前看是右侧，卫生间侧翼）", hr, (-21.0, 0.8, 4.6), (-2.0, 0.8, 3.0), clear=True)
+    cam("Acc_02_House_Back", "木屋背面（渲染时隐藏屋后的仓库）", hr, (-1.5, -17.5, 4.6), (-1.2, 0.0, 3.2), hide="GuangtouQiang_Warehouse", clear=True)
+    cam("Acc_03_House_East_Side", "木屋局部 +X 侧（地图约定叫“东”，没有原作证据；从院子正对木屋时在画面左侧，卧室一侧）", hr, (18.5, 0.8, 4.6), (0.0, 0.8, 3.2), hide=wh, clear=True)
+    cam("Acc_04_House_West_Side", "木屋局部 -X 侧（地图约定叫“西”；从院子正对木屋时在画面右侧，卫生间侧翼）", hr, (-21.0, 0.8, 4.6), (-2.0, 0.8, 3.0), clear=True)
     cam("Acc_05_House_Roof_Closeup", "屋顶近景（烟囱、天线、补丁、上翘屋檐）", hr, (-8.5, 9.0, 10.5), (-1.6, -0.6, 5.2), lens=32, clip=2.0)
     cam("Acc_06_House_Interior_Top", "木屋室内俯视（拆掉屋顶）", hr, (-1.2, 0.4, 13.0), None, hide=roof_h, res="1500x1000", ortho=13.6)
     cam("Acc_07_Kitchen_Dining", "客厅/厨房/餐厅", hr, (0.95, 2.45, B + 1.7), (-2.6, -2.3, B + 0.9), lens=14)
@@ -4533,13 +4646,21 @@ def build_acceptance_cameras():
     cam("Acc_09b_Bathroom_Sink", "卫生间（看洗手池、镜子、毛巾）", hr, (-5.0, -2.1, B + 1.7), (-6.6, 1.2, B + 1.0), lens=14)
     cam("Acc_10_Warehouse_Front", "仓库正面（大门朝向木屋；渲染时隐藏木屋）", wr, (0.0, 17.0, 3.6), (0.0, 0.0, 2.6), hide=house, clear=True)
     cam("Acc_11_Warehouse_Back", "仓库背面", wr, (0.0, -17.0, 3.6), (0.0, 0.0, 2.6), clear=True)
-    cam("Acc_12_Warehouse_East", "仓库东侧", wr, (16.0, 0.0, 3.6), (0.0, 0.0, 2.4), clear=True)
-    cam("Acc_13_Warehouse_West", "仓库西侧", wr, (-16.0, 0.0, 3.6), (0.0, 0.0, 2.4), clear=True)
+    cam("Acc_12_Warehouse_East", "仓库局部 +X 侧", wr, (16.0, 0.0, 3.6), (0.0, 0.0, 2.4), clear=True)
+    cam("Acc_13_Warehouse_West", "仓库局部 -X 侧", wr, (-16.0, 0.0, 3.6), (0.0, 0.0, 2.4), clear=True)
     cam("Acc_14_Warehouse_Interior", "仓库内部（从大门往里看）", wr, (0.5, 3.6, Bw + 1.7), (-0.5, -2.5, Bw + 0.9), lens=14)
     cam("Acc_15_Warehouse_Storage_Detail", "仓库储物细节（木料架）", wr, (0.2, 0.6, Bw + 1.6), (2.3, -1.6, Bw + 1.1), lens=20)
     cam("Acc_16_Warehouse_Interior_Top", "仓库室内俯视（拆掉屋顶）", wr, (0.0, 0.0, 12.0), None, hide=roof_w, res="1200x1400", ortho=9.6)
     build_lake_cameras()
-    cam("Acc_17_Yard_Overview", "院子全景（木屋、仓库、小路、栅栏、院门）", hr, (-14.0, 26.0, 17.0), (5.5, -1.0, 1.0), lens=28, clip=2.0)
+    build_still_match_cameras()
+    cam("Acc_17_Yard_Overview", "院子全景（木屋、仓库、小路、栅栏、院门）", hr, (18.0, 30.0, 20.0), (1.0, -7.0, 1.0), lens=26, clip=2.0)
+    tr, mc, sq = (bpy.data.objects[n] for n in ("Bears_TreeHome_Root", "MonkeyCave_Root", "SquirrelNest_Tree_Root"))
+    cam("Acc_18_TreeHome_Exterior", "熊洞外观（大树树干、前洞口、树根）", tr, (5.0, -15.0, 3.2), (0.0, 0.0, 3.4), lens=24, clear=True)
+    cam("Acc_19_TreeHome_Interior", "熊洞室内（石板床、树叶铺、后壁圆洞）", tr, (-1.7, -1.5, 1.7), (0.9, 2.1, 1.0), lens=14)
+    cam("Acc_20_MonkeyCave_Exterior", "猴洞外观（岩石山、洞口、石板平台、图腾）", mc, (-6.5, -19.0, 5.0), (0.0, -2.5, 3.0), lens=24, clear=True)
+    cam("Acc_21_MonkeyCave_Interior", "猴洞内部（从隧道往里看：座位、睡窝）", mc, (0.0, -4.4, 1.6), (0.0, 0.8, 1.0), lens=16)
+    cam("Acc_22_SquirrelNest_Tree", "松鼠窝大树（粗树枝和洞口 A）", sq, (6.5, -10.0, 3.6), (0.6, 0.0, 4.8), lens=28, clear=True)
+    cam("Acc_23_SquirrelNest_Entrance", "松鼠窝洞口 A 近景（粗树枝根部正上方）", sq, (1.9, -2.6, 5.1), (0.6, -0.2, 4.85), lens=30)
 
 
 # ------------------------------------------------------------------------------------------------

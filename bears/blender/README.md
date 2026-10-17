@@ -35,6 +35,10 @@
 | `make_check_sheets.py` | 把检查视图拼成检查图（需要 Pillow） |
 | `checks/` | 检查图：人物正侧背、皮卡四视图、木屋四视图、室内平面（带标注）、地图俯视 |
 | `REFERENCE_NOTES.md` | 参考清单、冲突取舍、比例与布局（.blend 里的文本块 `Reference_Notes.md` 也是这份内容） |
+| `evidence/REFERENCE_INDEX.csv`、`evidence/REFERENCE_GAPS.md` | 参考图总索引（编号、集数、来源、看到的细节、证据等级 A/B/C/D）；读取失败、版本冲突、缺少的画面 |
+| `evidence/STILL_MATCH_REVIEW.md` | 剧照对位审核：每张剧照的已确认 / 推测 / 本轮修改 / 下一轮；角色比例测试结果 |
+| `render_still_match.py`、`still_match/` | 剧照对位相机（`Still_Match_Cameras`）和模型渲染。和剧照并排的对比图含版权画面，不放进仓库 |
+| `render_scale_tests.py`、`scale_tests/` | 角色比例测试：门口、床、洞口、树枝；`scale_tests.json` 是量出来的开口净高净宽 |
 
 ## 打开文件
 
@@ -111,7 +115,7 @@ python3 make_check_sheets.py checks_out checks
 blender -b boonie_bears_forest_map.blend -P render_acceptance.py -- acceptance_out 32
 ```
 
-每台相机的自定义属性 `hide_collections` 写明渲染时要隐藏的集合（例如室内俯视要拆掉屋顶，木屋东侧要隐藏仓库），`clear_trees` 表示渲染时临时隐藏挡在相机和建筑之间的树。
+每台相机的自定义属性 `hide_collections` 写明渲染时要隐藏的集合（例如室内俯视要拆掉屋顶，木屋背面要隐藏屋后的仓库），`clear_trees` 表示渲染时临时隐藏挡在相机和建筑之间的树。
 
 **看木屋内部**：在大纲视图里点掉 `GuangtouQiang_House_Exterior / GQ_House_Roof_Removable` 集合的眼睛图标，主屋顶、侧翼屋顶、烟囱、天线、檩条和室内横梁会一起隐藏。仓库的屋顶在 `GuangtouQiang_Warehouse / WH_Roof_Removable`。三扇室内门和正门、仓库大门都是打开的，可以直接走进去。
 
@@ -195,8 +199,8 @@ blender -b boonie_bears_forest_map.blend -P render_acceptance.py -- acceptance_o
 - 厨房吊柜、微波炉、案板、餐桌和暖水瓶、入口小柜和篮子、进门角落的烧水炉、床头柜、相框、猎枪（R8）。
 
 **推测内容（inferred）**
-- **仓库整栋**：动画里没有找到仓库的可用画面。外观（竖木板墙、山墙、对开大门、两侧小窗、木板屋顶）、位置（木屋东侧，大门朝向木屋）和内部布置全部是推测。R7 是玩家复刻，只用来理解“高山墙木板仓库、正中一扇门”的结构，没有照搬。
-- 木屋背面、东山墙、屋顶背面坡（剧照只看到正面和侧翼）。
+- **仓库整栋**：动画里没有找到仓库的可用画面。外观（竖木板墙、山墙、对开大门、两侧小窗、木板屋顶）、位置（木屋背后，大门朝向木屋后墙；R1 院门一侧没有第二栋房子，所以从那一侧移走）和内部布置全部是推测。R7 是玩家复刻，只用来理解“高山墙木板仓库、正中一扇门”的结构，没有照搬。
+- 木屋背面、局部 +X 一侧（地图约定“东”）的山墙、屋顶背面坡（剧照只看到正面和侧翼）。
 - 卫生间的门、镜子和清洁用品；卧室衣柜和窗帘（剧照里没有，按要求补做）；厨房灶上的铁皮烟罩。
 - 院子栅栏的完整走向（只看到正面一段）、从木屋到仓库的小路。
 - 整张地图的布局和地形起伏，地点之间的位置关系。
@@ -215,7 +219,7 @@ blender -b boonie_bears_forest_map.blend -P render_acceptance.py -- acceptance_o
 
 有下面这些画面，可以把推测部分换成依据剧照的模型：
 
-1. 光头强木屋的**背面和东侧**、屋顶背面坡。
+1. 光头强木屋的**背面和两侧**、屋顶背面坡。
 2. **光头强仓库**的任何动画镜头（外观、大门、内部）。目前整栋是推测。
 3. 卫生间、卧室衣柜一侧的动画画面。
 4. 熊大熊二**树洞的外观**（门、窗、树的形状）。

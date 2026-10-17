@@ -44,13 +44,13 @@ def clear_trees(cam, hidden):
     d.normalize()
     out = []
     for cn in ("Forest_Trees", "Forest_Plants"):
-        for o in bpy.data.collections[cn].all_objects:
-            if o is None or o.name.startswith(("Bears", "Tree_HoneyTree", "Beehive")):
+        for o in list(bpy.data.collections[cn].all_objects):  # 先拷贝成列表：边遍历边改 hide_render 会让 Blender 崩溃
+            if o is None or o.name.startswith(("Bears", "BEAR_HOME_", "Tree_HoneyTree", "FOREST_Tree_HoneyTree", "Beehive")):
                 continue
             v = (o.matrix_world.translation - c).to_2d()
             along = v.dot(d)
             lat = abs(v.x * d.y - v.y * d.x)
-            if 0 < along < L - 4 and lat < 0.5 * along + 4:
+            if -3 < along < L - 4 and lat < 0.5 * max(along, 0) + 4:  # 也隐藏相机所在位置的树（相机可能在树冠里）
                 o.hide_render = hidden
                 out.append(o)
     return out

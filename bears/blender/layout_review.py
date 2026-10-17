@@ -114,20 +114,20 @@ if mode == "render":
     render(co, res, big, hide_c=("Forest_Trees", "Forest_Plants", "Characters"),
            lines=[(path_cn.get(n, n), pts, "infer") for n, pts in paths], title="E 地形、湖泊和连接道路（隐藏树木）")
     # B：院子俯视
-    F = dict(x0=-10.0, x1=20.0, y0=-6.0, y1=12.0)
+    F = dict(x0=-10.0, x1=15.0, y0=-22.0, y1=12.0)
     yard = [("木屋主屋", hw(0, 0, 5), "orig", True), ("卫生间侧翼", hw(-5.75, -0.6, 4), "orig", False),
             ("正门楼梯", hw(-0.2, 5.6, 1), "orig", False), ("带蓝顶的院门", hw(7.8, 12, 2), "orig", True),
             ("独立仓库（整栋推测）", loc("Warehouse_Root", 5), "infer", True), ("仓库大门", loc("Warehouse_Barn_Door_North", 1), "infer", False),
             ("轮胎堆", loc("Prop_Tire_Stack"), "orig", False), ("院里原木堆", loc("Prop_Log_Pile_Yard"), "orig", False),
             ("铁皮盆、铁桶", loc("Prop_Washtub_Galvanized"), "other", False), ("木墩和斧头", loc("Prop_Chopping_Block"), "other", False),
             ("水缸", loc("Prop_Water_Jar_Clay"), "orig", False), ("木桶", loc("Prop_Wooden_Barrel"), "other", False),
-            ("皮卡", loc("Vehicle_Pickup_Root"), "other", False), ("车道缺口", hw(15.7, 12, 0), "infer", False),
-            ("栅栏（正面一段 R1 可见）", hw(-3.5, 12.3, 0), "orig", False), ("栅栏（两侧和后面）", hw(20.4, 3, 0), "infer", False),
-            ("栅栏（后面）", hw(5, -6.4, 0), "infer", False), ("栅栏（西侧）", hw(-10.4, 3, 0), "infer", False)]
+            ("皮卡", loc("Vehicle_Pickup_Root"), "other", False), ("车道缺口", hw(12.75, 12, 0), "infer", False),
+            ("栅栏（正面一段 R1 可见）", hw(-3.5, 12.3, 0), "orig", False), ("栅栏（东侧）", hw(15.4, -5, 0), "infer", False),
+            ("栅栏（后面）", hw(5, -22.4, 0), "infer", False), ("栅栏（西侧）", hw(-10.4, 3, 0), "infer", False)]
     yl = [(path_cn[n], pts, "infer") for n, pts in paths if n in ("Path_House_Meadow", "Path_House_Warehouse", "Road_House_East")]
     yl.append(("栅栏一整圈", [hw(x, y, 0.5) for x, y in ((F["x0"], F["y1"]), (F["x1"], F["y1"]), (F["x1"], F["y0"]), (F["x0"], F["y0"]), (F["x0"], F["y1"]))], "infer"))
-    c = hw(5, 3)
-    co, res = cam_top("Review_B_Yard_Top", (c.x, c.y), 38, "1600x1100")
+    c = hw(2.5, -5)
+    co, res = cam_top("Review_B_Yard_Top", (c.x, c.y), 46, "1600x1300")
     render(co, res, yard, hide_c=("Forest_Trees",), lines=yl, title="B 木屋院落俯视：一整圈栅栏、院门、木屋、独立仓库")
     # C：木屋室内俯视（拆屋顶）
     rooms = [("客厅 / 厨房 / 餐厅", hw(-1.6, 1.6, 2), "other", True), ("卧室", hw(2.9, -1.4, 2), "other", True), ("卫生间", hw(-5.75, -1.4, 2), "other", True),
