@@ -8,7 +8,7 @@ import json
 import os
 import re
 from collections import Counter
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 report = []
 print("物体", len(bpy.data.objects), "网格", len(bpy.data.meshes), "材质", len(bpy.data.materials), "贴图", len(bpy.data.images))
@@ -36,8 +36,15 @@ def wbox(ob):
     return [f(c[i] for c in cs) for i in range(3) for f in (min, max)]
 
 
+def lbox(ob):
+    M = (ob.parent.matrix_world.inverted() if ob.parent else Matrix.Identity(4)) @ ob.matrix_world
+    cs = [M @ Vector(c) for c in ob.bound_box]
+    return [f(c[i] for c in cs) for i in range(3) for f in (min, max)]
+
+
 items = [o for o in bpy.data.objects if o.get("floor_item")]
 boxes = {o.name: wbox(o) for o in items}
+lboxes = {o.name: lbox(o) for o in items}
 for o in items:
     dz = boxes[o.name][4] - o["floor_z_world"]
     if abs(dz) > 0.03:
@@ -46,7 +53,7 @@ for i, a in enumerate(items):
     for b in items[i + 1:]:
         if a["room"] != b["room"] or not (a.get("overlap_check") and b.get("overlap_check")):
             continue
-        A, B = boxes[a.name], boxes[b.name]
+        A, B = lboxes[a.name], lboxes[b.name]
         if min(A[1], B[1]) - max(A[0], B[0]) > 0.02 and min(A[3], B[3]) - max(A[2], B[2]) > 0.02:
             report.append(f"家具互相穿插: {a.name} / {b.name}")
 for nm, root, (x0, x1, y0, y1, z0, z1) in json.loads(bpy.context.scene.get("door_passages_json", "[]")):
