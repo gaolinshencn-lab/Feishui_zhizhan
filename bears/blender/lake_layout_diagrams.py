@@ -145,7 +145,7 @@ im.save(os.path.join(out, "lake_plan_sketch.png"))
 # ---------------- 剖面图 ----------------
 sec = d["section"]
 PXs = 34
-zmin, zmax = -10.0, 6.0
+zmin, zmax = -12.0, 6.0
 Ws, Hs = int((sec[-1][0] - sec[0][0]) * PXs), int((zmax - zmin) * PXs)
 M2 = 70
 im = Image.new("RGB", (Ws + 2 * M2, Hs + 2 * M2 + 60), "white")
@@ -185,7 +185,7 @@ for s_ in (-14.0, 4.0):
     dr.text((x0_ - 20, y1_ - 26), "熊大 2 m", fill=(150, 70, 40), font=FS)
 dr.text((sp(sec[0][0], 0)[0] + 10, M2 + 10), "A：东南沙滩", fill=(200, 0, 120), font=F)
 dr.text((sp(sec[-1][0], 0)[0] - 420, M2 + 10), "B：西北石崖", fill=(200, 0, 120), font=F)
-dr.text((M2, Hs + M2 + 34), "横纵比例 1:1（不夸大）。湖底形状与深度为推测：浅滩约 1.4 m → 陡坎 → 湖心约 5–6 m → 石崖下最深约 7.5–8 m。", fill=(0, 0, 0), font=FS)
+dr.text((M2, Hs + M2 + 34), "横纵比例 1:1（不夸大）。湖底形状与深度为推测：浅滩约 1.4 m → 陡坎 → 湖心约 7 m → 岩石区平地约 8.8 m（依据 L1 估算）。", fill=(0, 0, 0), font=FS)
 dr.text((M2, 10), "湖泊结构草图：A–B 剖面（沿“沙滩—湖心—石崖”方向）", fill=(0, 0, 0), font=F)
 im.save(os.path.join(out, "lake_section_sketch.png"))
 print("DREW", out)

@@ -153,8 +153,10 @@ def setup_collections():
     coll("WH_Roof_Removable", COLL["GuangtouQiang_Warehouse"])
     coll("WH_Interior", COLL["GuangtouQiang_Warehouse"])
     coll("Bears_TreeHome", COLL["Forest_Trees"])
-    for n in ("Lake_Water", "Lake_Bottom", "Lake_Shore"):
+    for n in ("Lake_Water", "Lake_Bottom", "Lake_Rocks", "Lake_Shore"):
         coll(n, COLL["River_and_Rocks"])
+    coll("LW_Surface", COLL["Lake_Water"])
+    coll("LW_Volume", COLL["Lake_Water"])
     coll("Inferred_Models", COLL["Reference_Notes"])
     coll("Prototypes_Hidden", COLL["Reference_Notes"])
     for n in ["Characters_XiongDa", "Characters_XiongEr", "Characters_GuangtouQiang",
@@ -694,7 +696,18 @@ def _base_height(x, y):
 
 
 _CLEAR_H = None
-LAKE_DEPTH = dict(shelf=1.4, basin=5.0, cliff_extra=2.5)  # 推测：按熊大身高 2 m 估算，第 30 集没有可用画面
+LAKE_DEPTH = dict(shelf=1.4, basin=6.5, cliff_extra=3.0, rock_floor=8.8)  # 推测：按熊大身高 2 m 和 L1 剧照里岩石塔高度估算
+
+
+def lake_rock_frame():
+    """湖底岩石区的局部坐标：原点 R 在湖心往石崖方向 5 m；f 指向石崖（从入水的沙滩看过去的方向），r 是 f 的右手边。
+    L1 剧照（爱奇艺“强哥被螃蟹追”）的构图：中间巨大的岩石塔，左后方层叠的石板岩，右后方带孔洞的岩石。"""
+    ux, uy = math.cos(CLIFF["fall"]) * LAKE["rx"], math.sin(CLIFF["fall"]) * LAKE["ry"]
+    n = math.hypot(ux, uy)
+    f = Vector((ux / n, uy / n, 0.0))
+    r = Vector((f.y, -f.x, 0.0))
+    R = Vector((LAKE["x"], LAKE["y"], 0.0)) + f * 5.0
+    return R, f, r
 
 
 def lake_bed(x, y, e=None, a=None):
@@ -709,7 +722,11 @@ def lake_bed(x, y, e=None, a=None):
     r_in = r_out - lerp(0.32, 0.14, c)
     d = D["shelf"] * (1 - smooth(0.8, 1.0, e))
     d += (D["basin"] + D["cliff_extra"] * c - D["shelf"]) * (1 - smooth(r_in, r_out, e))
-    d += 0.55 * fbm(x * 0.07, y * 0.07, 3, 13.0) * (1 - smooth(0.6, 0.9, e))
+    d += 0.3 * fbm(x * 0.07, y * 0.07, 3, 13.0) * (1 - smooth(0.6, 0.9, e))
+    # 岩石区周围是平缓的细沙地（L1 剧照）
+    R, _, _ = lake_rock_frame()
+    k = 1 - smooth(7.0, 12.0, math.hypot(x - R.x, y - R.y))
+    d = lerp(d, D["rock_floor"] + 0.15 * fbm(x * 0.2, y * 0.2, 2, 5.0), k)
     return LAKE["level"] - 0.3 - d
 
 
@@ -827,8 +844,13 @@ def build_terrain():
     new_obj("Terrain_Backdrop_Mountains", bm, COLL["Terrain"], [mat("Backdrop_Mountains_Haze", "#7e9fb4", rough=1.0)],
             props=dict(cn="远山背景", status="observed", note="U1、第一季片头可见远处蓝色群山；形状为推测"))
     # 远处地面（防止从高处看到地形外边缘）
+    # 做成圆环（内半径 100 m）：中间留空，避免盖住比它更深的湖底
     bm = bmesh.new()
-    bm_cyl(bm, 330, 330, 0.2, loc=(0, 0, -2.5), seg=48)
+    seg = 64
+    inner = [bm.verts.new((math.cos(2 * math.pi * k / seg) * 100, math.sin(2 * math.pi * k / seg) * 100, -2.5)) for k in range(seg)]
+    outer = [bm.verts.new((math.cos(2 * math.pi * k / seg) * 330, math.sin(2 * math.pi * k / seg) * 330, -2.5)) for k in range(seg)]
+    for k in range(seg):
+        bm.faces.new((inner[k], outer[k], outer[(k + 1) % seg], inner[(k + 1) % seg]))
     new_obj("Terrain_Distant_Ground", bm, COLL["Terrain"], [mat("Distant_Forest_Floor", "#3f6a35", rough=1.0)],
             props=dict(cn="远处地面", status="inferred"))
 
@@ -848,7 +870,7 @@ def build_lake_bottom():
     bm = bmesh.new()
     col = bm.loops.layers.color.new("Col")
     grid = {}
-    C = {k: Vector(srgb(v)[:3]) for k, v in dict(sand="#c9a565", mid="#8f7d56", silt="#5e5c46", dark="#47483a", algae="#5d6e3c").items()}
+    C = {k: Vector(srgb(v)[:3]) for k, v in dict(sand="#c9a565", mid="#a2a17e", silt="#8fb0a4", dark="#82a69a", algae="#5d7e4c").items()}
     vcol = {}
     for j in range(ny):
         for i in range(nx):
@@ -880,6 +902,196 @@ def build_lake_bottom():
           props=dict(cn="角色入水点（推测）", status="inferred", note="剧中入水地点没有画面；暂放在小路到达的沙滩"))
 
 
+def mat_lake_rock(name, base1, base2, algae="#4fae4a", speck="#d9efe8", algae_amt=0.5, speck_amt=1.0):
+    """湖底岩石（L1）：蓝绿色底色、成片的绿色藻斑、白色小点。"""
+    if name in MATS:
+        return MATS[name]
+    m = _new_mat(name)
+    nodes, links = _nodes(m)
+    b = nodes.get("Principled BSDF")
+    tc = nodes.new("ShaderNodeTexCoord")
+    n1 = nodes.new("ShaderNodeTexNoise")
+    n1.inputs["Scale"].default_value = 1.6
+    n1.inputs["Detail"].default_value = 6.0
+    links.new(tc.outputs["Object"], n1.inputs["Vector"])
+    r1 = nodes.new("ShaderNodeValToRGB")
+    r1.color_ramp.elements[0].color = srgb(base1)
+    r1.color_ramp.elements[1].color = srgb(base2)
+    links.new(n1.outputs["Fac"], r1.inputs["Fac"])
+    n2 = nodes.new("ShaderNodeTexNoise")
+    n2.inputs["Scale"].default_value = 1.3
+    n2.inputs["Detail"].default_value = 4.0
+    links.new(tc.outputs["Object"], n2.inputs["Vector"])
+    r2 = nodes.new("ShaderNodeValToRGB")
+    r2.color_ramp.elements[0].position = 0.62 - 0.08 * algae_amt
+    r2.color_ramp.elements[1].position = 0.66 - 0.08 * algae_amt
+    links.new(n2.outputs["Fac"], r2.inputs["Fac"])
+    mx1 = nodes.new("ShaderNodeMix")
+    mx1.data_type = "RGBA"
+    mx1.inputs["B"].default_value = srgb(algae)
+    links.new(r2.outputs["Color"], mx1.inputs["Factor"])
+    links.new(r1.outputs["Color"], mx1.inputs["A"])
+    vo = nodes.new("ShaderNodeTexVoronoi")
+    vo.inputs["Scale"].default_value = 16.0
+    links.new(tc.outputs["Object"], vo.inputs["Vector"])
+    r3 = nodes.new("ShaderNodeValToRGB")
+    r3.color_ramp.elements[0].position = 0.06
+    r3.color_ramp.elements[1].position = 0.1
+    r3.color_ramp.elements[0].color = (speck_amt, speck_amt, speck_amt, 1)
+    r3.color_ramp.elements[1].color = (0, 0, 0, 1)
+    links.new(vo.outputs["Distance"], r3.inputs["Fac"])
+    mx2 = nodes.new("ShaderNodeMix")
+    mx2.data_type = "RGBA"
+    mx2.inputs["B"].default_value = srgb(speck)
+    links.new(r3.outputs["Color"], mx2.inputs["Factor"])
+    links.new(mx1.outputs["Result"], mx2.inputs["A"])
+    links.new(mx2.outputs["Result"], b.inputs["Base Color"])
+    bp = nodes.new("ShaderNodeBump")
+    bp.inputs["Strength"].default_value = 0.45
+    links.new(n1.outputs["Fac"], bp.inputs["Height"])
+    links.new(bp.outputs["Normal"], b.inputs["Normal"])
+    _set(b, "Roughness", 0.8)
+    m.diffuse_color = srgb(base2)
+    MATS[name] = m
+    return m
+
+
+def _roughen(bm, verts, amp, freq, seed):
+    for v in verts:
+        p = v.co * freq + Vector((seed, seed * 0.7, -seed))
+        v.co += Vector((noise.noise(p), noise.noise(p + Vector((3.1, 0, 0))), noise.noise(p + Vector((0, 5.3, 0))))) * amp
+
+
+def build_lake_rocks():
+    """湖底岩石（推测位置，形状依据 L1 剧照）：中间巨大的蓝绿色岩石塔（由一团团圆钝的岩块叠成，上窄下宽）、
+    左后方层叠的石板岩、右后方带孔洞和拱洞的岩石、周围的小圆石。每块大岩石是独立网格，便于单独修改。"""
+    LR = COLL["Lake_Rocks"]
+    R, f, r = lake_rock_frame()
+    up = Vector((0, 0, 1))
+    rnd = random.Random(77)
+
+    def at(a, b):  # 局部 (沿 r, 沿 f) → 世界坐标和该处湖底高度
+        p = R + r * a + f * b
+        return p, ground(p.x, p.y)
+
+    def blobs(name, cn, mats, items, note, center, rough=0.32, subdiv=3, extra_amp=0.12):
+        bm = bmesh.new()
+        for (rad, (a, b, z), sc, mi) in items:
+            p = R + r * a + f * b - center
+            p.z = z
+            ret = bmesh.ops.create_icosphere(bm, subdivisions=subdiv, radius=1.0)
+            seed = rnd.uniform(0, 50)
+            for v in ret["verts"]:
+                k = 1.0 + rough * noise.noise(v.co * 1.4 + Vector((seed, seed * 0.3, -seed)))
+                k += 0.08 * noise.noise(v.co * 4.0 + Vector((-seed, seed, 0)))
+                v.co = Vector((v.co.x * rad * sc[0] * k, v.co.y * rad * sc[1] * k, v.co.z * rad * sc[2] * k)) + p
+            for fc in _faces(ret):
+                fc.material_index = mi
+        _roughen(bm, bm.verts, extra_amp, 0.6, rnd.uniform(0, 9))
+        ob = new_obj(name, bm, LR, mats, smooth_shade=True, props=dict(cn=cn, status="observed", note=note))
+        ob.location = center
+        ob["position_status"] = "inferred"
+        return ob
+    teal = mat_lake_rock("Rock_Lake_Teal_Algae", "#2b7782", "#3d95a0")
+    teal_dark = mat_lake_rock("Rock_Lake_Teal_Dark", "#1f5866", "#2c6e7a", algae_amt=0.2, speck_amt=0.6)
+    blue_grey = mat_lake_rock("Rock_Lake_BlueGrey", "#3c6f80", "#4f8494", algae_amt=0.1, speck_amt=0.4)
+    # 1. 岩石塔
+    c0, zf = at(0, 0)
+    c0.z = zf - 0.4
+    tower = [(2.7, (0.0, 0.0, 0.7), (1.15, 1.05, 0.55), 0), (2.35, (0.4, 0.3, 1.9), (1.0, 0.95, 0.6), 0),
+             (2.0, (-0.35, -0.2, 3.0), (0.95, 0.9, 0.62), 0), (1.75, (0.25, 0.2, 4.1), (0.95, 0.95, 0.62), 0),
+             (1.45, (-0.2, 0.1, 5.1), (0.9, 0.9, 0.66), 0), (1.15, (0.15, -0.1, 6.0), (0.9, 0.85, 0.72), 0),
+             (1.3, (1.9, -0.7, 1.2), (1.0, 0.9, 0.85), 0), (1.1, (-2.1, 0.5, 0.9), (1.0, 0.9, 0.8), 0),
+             (0.95, (1.3, 0.9, 3.4), (1.0, 0.9, 0.9), 0), (0.85, (-1.4, -0.6, 4.3), (1.0, 0.9, 0.9), 0)]
+    blobs("Lake_Rock_Tower_Main", "湖底巨大的蓝绿色岩石塔", [teal], tower,
+          "L1：画面中央巨大的蓝绿色岩石，表面有绿色藻斑和白色小点，上窄下宽，高出画面（≥3 个熊身高）；高度约 6.5 m 为估算", c0)
+    # 2. 左后方层叠石板岩（两组）
+    for g, (a, b, n) in enumerate(((-6.5, 4.5, 5), (-9.5, 1.0, 3))):
+        c, zf = at(a, b)
+        c.z = zf - 0.3
+        items = []
+        z = 0.3
+        for k in range(n):
+            rad = 2.3 - 0.28 * k + rnd.uniform(-0.15, 0.15)
+            items.append((rad, (a + rnd.uniform(-0.5, 0.5), b + rnd.uniform(-0.4, 0.4), z), (1.55, 1.0, 0.32), 0))
+            z += rad * 0.55
+        blobs(f"Lake_Rock_Ledges_Layered_{g + 1}", "左后方层叠的石板岩", [teal_dark], items,
+              "L1：画面左后方一层层的扁平岩块", c, rough=0.2, extra_amp=0.08)
+    # 3. 右后方带孔洞的岩石：一大块粗糙岩体，用布尔“差集”修改器挖出几个贯通的孔洞（切割体保留在场景里，可移动改孔洞）
+    c, zf = at(7.8, 2.6)
+    c.z = zf - 0.3
+    items = [(2.4, (7.8, 2.6, 1.6), (1.15, 0.85, 0.9), 0), (1.9, (8.6, 3.4, 3.6), (1.0, 0.85, 0.9), 0),
+             (1.5, (7.0, 2.2, 4.4), (0.95, 0.9, 0.85), 0), (1.4, (9.6, 2.0, 1.4), (0.9, 1.0, 1.0), 0)]
+    ob = blobs("Lake_Rock_Porous_Holes", "右后方带孔洞的岩石", [blue_grey], items,
+               "L1：画面右后方有大孔洞的岩石；孔洞的数量和位置为推测（布尔修改器，切割体 Lake_Rock_Porous_Cutter_*）", c, rough=0.28)
+    for k, (rad, (a, b, z), rot) in enumerate(((0.95, (7.6, 2.6, 1.8), 0.2), (0.7, (8.8, 3.3, 3.8), -0.5),
+                                                (0.6, (6.9, 2.0, 4.3), 0.9), (0.55, (9.7, 1.8, 1.6), 1.3))):
+        bm = bmesh.new()
+        p = R + r * a + f * b
+        bm_ico(bm, 1.0, scale=(rad, 3.5, rad * 1.15), subdiv=2, rough=0.15, seed=k)
+        cut = new_obj(f"Lake_Rock_Porous_Cutter_{k + 1}", bm, LR, [], props=dict(cn="孔洞切割体（渲染时隐藏）", status="inferred"))
+        cut.location = (p.x, p.y, zf - 0.3 + z)
+        cut.rotation_euler = (0, 0, math.atan2(f.y, f.x) - math.pi / 2 + rot)
+        cut.hide_render = True
+        cut.display_type = "WIRE"
+        cut["helper"] = True
+        md = ob.modifiers.new(f"Hole_{k + 1}", "BOOLEAN")
+        md.operation = "DIFFERENCE"
+        md.solver = "EXACT"
+        md.use_self = True
+        md.object = cut
+    # 4. 小圆石
+    bm = bmesh.new()
+    for k in range(60):
+        a, b = rnd.uniform(-11, 11), rnd.uniform(-7, 8)
+        if math.hypot(a, b) < 3.2:
+            continue
+        p, zf = at(a, b)
+        s_ = rnd.uniform(0.08, 0.28)
+        bm_ico(bm, s_, loc=(p.x, p.y, zf + s_ * 0.25), scale=(1.2, 1.0, 0.6), subdiv=1, rough=0.2, seed=k)
+    new_obj("Lake_Pebbles", bm, LR, [mat_noise("Pebble_BlueGrey", "#5f8796", "#7b9fac", scale=4)], smooth_shade=True,
+            props=dict(cn="湖底小圆石", status="observed", note="L1：画面左下的蓝灰色圆石；分布为推测"))
+
+
+def build_lake_water_volume():
+    """水体（预览版）：湖面以下的椭圆柱体积，青绿色散射和吸收，让水下远处变暗（L1：蓝绿色水体）。最终水下效果在第五步再调。"""
+    bm = bmesh.new()
+    seg = 64
+    zb = LAKE["level"] - 12.0
+    top = LAKE["level"] - 0.02
+    lo = [bm.verts.new((*lake_point(2 * math.pi * k / seg, 1.0), zb)) for k in range(seg)]
+    hi = [bm.verts.new((*lake_point(2 * math.pi * k / seg, 1.0), top)) for k in range(seg)]
+    for k in range(seg):
+        bm.faces.new((lo[k], lo[(k + 1) % seg], hi[(k + 1) % seg], hi[k]))
+    bm.faces.new(lo[::-1])
+    bm.faces.new(hi)
+    m = _new_mat("Water_Lake_Volume_Teal")
+    nodes, links = _nodes(m)
+    out = nodes.get("Material Output")
+    nodes.remove(nodes.get("Principled BSDF"))
+    pv = nodes.new("ShaderNodeVolumePrincipled")
+    pv.inputs["Color"].default_value = srgb("#3fa8a8")
+    pv.inputs["Density"].default_value = 0.07
+    pv.inputs["Absorption Color"].default_value = srgb("#e08070")  # 红光吸收多，水呈青绿色
+    pv.inputs["Anisotropy"].default_value = 0.3
+    links.new(pv.outputs["Volume"], out.inputs["Volume"])
+    m.diffuse_color = srgb("#2f8f96")
+    MATS[m.name] = m
+    # 水面透下来的柔光（卡通片里湖底很亮，L1）：湖面下方一盏朝下的大面积灯，只照湖里
+    R, f, r = lake_rock_frame()
+    la = bpy.data.lights.new("Lake_Underwater_Skylight", "AREA")
+    la.shape = "ELLIPSE"
+    la.size, la.size_y = 2 * LAKE["rx"] * 0.9, 2 * LAKE["ry"] * 0.9
+    la.energy = 9000
+    la.color = (0.75, 1.0, 0.95)
+    lo = bpy.data.objects.new("Lake_Underwater_Skylight", la)
+    COLL["LW_Volume"].objects.link(lo)
+    lo.location = (LAKE["x"], LAKE["y"], LAKE["level"] - 0.3)
+    lo["name_cn"] = "水面透下来的光（预览）"
+    new_obj("Lake_Water_Volume", bm, COLL["LW_Volume"], [m], props=dict(cn="湖水体积（预览）", status="observed",
+                                                                         note="L1：青绿色水体；浓度和颜色为预览值，第五步再按剧照调"))
+
+
 def build_lake_and_rocks():
     C = COLL["River_and_Rocks"]
     # 湖面
@@ -893,9 +1105,11 @@ def build_lake_and_rocks():
         ring.append(bm.verts.new((x, y, LAKE["level"])))
     for k in range(seg):
         bm.faces.new((center, ring[k], ring[(k + 1) % seg]))
-    new_obj("Lake_Water_Surface", bm, COLL["Lake_Water"], [mat_water("Water_Lake", "#4f8fc0", "#2d6a96")], recalc=False,
+    new_obj("Lake_Water_Surface", bm, COLL["LW_Surface"], [mat_water("Water_Lake", "#4f8fc0", "#2d6a96")], recalc=False,
             props=dict(cn="湖面", status="observed", note="U1：大湖；湖的完整轮廓为推测"))
     build_lake_bottom()
+    build_lake_rocks()
+    build_lake_water_volume()
 
     # 石崖：成排的深灰色多棱柱状岩体，前面陡直、顶部参差（U1）
     bm = bmesh.new()
@@ -3636,6 +3850,13 @@ def build_lake_cameras():
              (cx - nx_ * D, cy - ny_ * D, lv - 1.5), (cx, cy, lv - 1.5), ortho=56, hide=hide_wf, res="1600x800", clip=D)
     co["section_axis"] = (ux, uy)
     cam("Lake_04_Bottom_Oblique_NoWater", "隐藏水面后的湖底斜视", (cx + 26, cy - 30, 20), (cx - 2, cy + 1, lv - 4), lens=28, hide=hide_wf)
+    R, f, r = lake_rock_frame()
+    zf = ground(R.x, R.y)
+    up = Vector((0, 0, 1))
+    cam("Lake_05_Ref_Still_Match_L1", "按 L1 剧照构图重建的水下镜头（预览）", R - f * 7.0 + up * (zf + 1.3), R + up * (zf + 2.9), lens=22,
+        hide="Characters")
+    cam("Lake_06_Rock_Group_NoWater", "岩石区全貌（隐藏水体）", R - f * 13 - r * 7 + up * (zf + 7.5), R + f * 2 + up * (zf + 1.5), lens=26, hide=hide_wf)
+    cam("Lake_07_Rock_Tower_Closeup", "岩石塔近景（隐藏水体）", R - f * 5.0 + r * 1.8 + up * (zf + 2.2), R + up * (zf + 2.6), lens=30, hide=hide_wf)
 
 
 def build_acceptance_cameras():
