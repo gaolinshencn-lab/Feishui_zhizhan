@@ -1,9 +1,12 @@
 // Battlefield soundscape (off until the viewer turns it on). Beds of wind, water, fire, marching feet,
 // cavalry and massed shouting follow the timeline; war drums play patterns that quicken with the
 // fighting; horns, the retreat gong, arrow volleys and cranes mark particular moments, and a deep
-// drum stroke opens each time node. Everything is synthesised in the browser (bank.js).
+// drum stroke opens each time node. Under it plays the background theme 《前秦风雨》 (music.js), or a
+// piece of the viewer's own choosing, ducking while the fighting is loud. Everything is synthesised in
+// the browser (bank.js); no audio files are shipped.
 
 import { buildBank } from './bank.js';
+import { Music } from './music.js';
 
 /** Beds that carry on while the timeline is paused; the rest belong to moving armies. */
 export const AMBIENT_BEDS = ['wind', 'water', 'fire'];
@@ -53,6 +56,11 @@ export class Sound {
     this.surge = 0;
     this.t = 0;
     this.lastChapter = -1;
+    this.fxOn = true;
+    this.musicOn = true;
+    this.musicVolume = 0.5;
+    this.music = null;
+    this.local = null; // { el, src } when the viewer plays a file of their own
   }
 
   /** Builds the mixing graph on a new AudioContext, or on `ctx` (an offline one, for tests). */
@@ -81,12 +89,17 @@ export class Sound {
     const ret = ctx.createGain();
     ret.gain.value = 0.7;
     this.reverb.connect(ret).connect(this.master);
+    // effects and music each have a gate, and their own way into the reverb
+    this.fx = ctx.createGain();
+    this.fx.connect(this.master);
+    this.fxSend = ctx.createGain();
+    this.fxSend.connect(this.reverb);
     const bus = (send) => {
       const g = ctx.createGain();
       const s = ctx.createGain();
       s.gain.value = send;
-      g.connect(this.master);
-      g.connect(s).connect(this.reverb);
+      g.connect(this.fx);
+      g.connect(s).connect(this.fxSend);
       return g;
     };
     this.amb = bus(0.12);
@@ -96,6 +109,15 @@ export class Sound {
     this.air = this.filter('lowpass', 3000, -3);
     this.act = ctx.createGain();
     this.act.connect(this.air).connect(this.actOut);
+    // music: ducked under the battle, then the viewer's volume
+    this.musicIn = ctx.createGain();
+    this.musicOut = ctx.createGain();
+    this.musicOut.gain.value = this.musicVolume;
+    const musicSend = ctx.createGain();
+    musicSend.gain.value = 0.3;
+    this.musicIn.connect(this.musicOut).connect(this.master);
+    this.musicOut.connect(musicSend).connect(this.reverb);
+    this.music = new Music(ctx, this.musicIn, () => this.bank?.drums);
     return ctx;
   }
 
@@ -140,7 +162,64 @@ export class Sound {
     // once faded out, stop the audio thread altogether
     if (!v) this.sleep = setTimeout(() => !this.enabled && ctx.suspend?.(), 2500);
     else this.load();
+    this.syncMusic();
     return true;
+  }
+
+  /** Battlefield sounds on or off (the music carries on). */
+  setEffects(on) {
+    this.fxOn = on;
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    for (const g of [this.fx, this.fxSend]) g.gain.setTargetAtTime(on ? 1 : 0, now, 0.3);
+  }
+
+  setMusic(on) {
+    this.musicOn = on;
+    this.syncMusic();
+  }
+
+  setMusicVolume(v) {
+    this.musicVolume = v;
+    if (this.ctx) this.musicOut.gain.setTargetAtTime(v, this.ctx.currentTime, 0.1);
+  }
+
+  /** Plays an audio file from the viewer's device instead of the theme; it never leaves the page. */
+  useFile(file) {
+    if (!this.ensure()) return;
+    this.dropFile();
+    const el = new Audio(URL.createObjectURL(file));
+    el.loop = true;
+    const src = this.ctx.createMediaElementSource(el);
+    src.connect(this.musicIn);
+    this.local = { el, src };
+    this.syncMusic();
+  }
+
+  /** Back to 《前秦风雨》. */
+  useScore() {
+    this.dropFile();
+    this.syncMusic();
+  }
+
+  dropFile() {
+    if (!this.local) return;
+    this.local.el.pause();
+    this.local.src.disconnect();
+    URL.revokeObjectURL(this.local.el.src);
+    this.local = null;
+  }
+
+  /** Starts or stops whichever music should be playing now. */
+  syncMusic() {
+    if (!this.music) return;
+    const on = this.enabled && this.musicOn;
+    if (on && !this.local) this.music.start();
+    else this.music.stop();
+    if (this.local) {
+      if (on) this.local.el.play().catch(() => {});
+      else this.local.el.pause();
+    }
   }
 
   /** Renders the sample bank (once) and starts the beds. */
@@ -211,7 +290,7 @@ export class Sound {
 
   /** A deep drum stroke as each time node begins. */
   chapter() {
-    if (!this.enabled || !this.ctx) return;
+    if (!this.enabled || !this.ctx || !this.fxOn) return;
     if (!this.bank) {
       this.load().then(() => this.chapter());
       return;
@@ -225,7 +304,7 @@ export class Sound {
 
   /** One-off moments on the timeline. */
   cue(name) {
-    if (!this.enabled || !this.bank) return;
+    if (!this.enabled || !this.bank || !this.fxOn) return;
     const b = this.bank;
     const now = this.ctx.currentTime + 0.03;
     if (name === 'horn') this.play(b.horn, 'sig', 0.55, now, rand(-0.3, 0.3));
@@ -246,8 +325,13 @@ export class Sound {
    * table (0 far .. 1 near).
    */
   update(dt, levels, near = 0.5) {
-    if (!this.enabled || !this.bank) return;
+    if (!this.enabled) return;
     const now = this.ctx.currentTime;
+    // the music steps back while the fighting is loud, and leaves the drumming to the battle
+    const fight = this.fxOn ? Math.max(levels.roar || 0, levels.clash || 0, 0.8 * (levels.drums || 0)) : 0;
+    this.musicIn.gain.setTargetAtTime(1 - 0.6 * fight, now, 1.2);
+    this.music.update(this.fxOn && (levels.drums || 0) > 0.3);
+    if (!this.bank || !this.fxOn) return;
     this.t += dt;
     this.surge = Math.max(0, this.surge - dt / 3);
     this.air.frequency.setTargetAtTime(1400 * Math.pow(2, 2.2 * near), now, 0.3);

@@ -20,7 +20,7 @@ export function rng(seed) {
 const range = (r, a, b) => a + (b - a) * r();
 const logRange = (r, a, b) => a * Math.pow(b / a, r());
 
-function render(seconds, channels, rate, build) {
+export function render(seconds, channels, rate, build) {
   const ctx = new OAC(channels, Math.ceil(seconds * rate), rate);
   build(ctx);
   return new Promise((resolve, reject) => {
@@ -56,7 +56,7 @@ function noiseData(len, r, color = 'white') {
 }
 
 /** A noise buffer with `channels` independent channels. */
-function noise(ctx, seconds, r, color = 'white', channels = 1) {
+export function noise(ctx, seconds, r, color = 'white', channels = 1) {
   const len = Math.ceil(seconds * ctx.sampleRate);
   const buf = ctx.createBuffer(channels, len, ctx.sampleRate);
   for (let c = 0; c < channels; c++) buf.getChannelData(c).set(noiseData(len, r, color));
@@ -64,7 +64,7 @@ function noise(ctx, seconds, r, color = 'white', channels = 1) {
 }
 
 /** Peak-normalises a rendered buffer (all channels together). */
-function normalize(buf, peak = 0.9) {
+export function normalize(buf, peak = 0.9) {
   let m = 0;
   for (let c = 0; c < buf.numberOfChannels; c++) {
     const d = buf.getChannelData(c);
@@ -168,7 +168,7 @@ const hit = (list, r) => list[Math.floor(r() * list.length)];
 
 // --- node helpers for offline graphs -------------------------------------------------------
 
-function filter(ctx, type, freq, q = 0.7, gain = 0) {
+export function filter(ctx, type, freq, q = 0.7, gain = 0) {
   const f = ctx.createBiquadFilter();
   f.type = type;
   f.frequency.value = freq;

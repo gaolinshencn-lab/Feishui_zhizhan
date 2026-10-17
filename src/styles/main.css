@@ -215,6 +215,10 @@ button {
   top: calc(62px + env(safe-area-inset-top, 0px));
   right: max(22px, env(safe-area-inset-right, 0px));
   width: 300px;
+  max-height: calc(100% - 90px - env(safe-area-inset-top, 0px));
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-dim) transparent;
   padding: 14px 16px 16px;
   background: var(--lacquer-2);
   border: 1px solid var(--gold-dim);
@@ -292,6 +296,50 @@ button {
   border: 1px solid var(--gold-dim);
   border-radius: var(--radius);
   padding: 5px 8px;
+}
+.pop-sub {
+  margin: 6px 0 0;
+  padding-top: 11px;
+  border-top: 1px solid rgba(201, 163, 91, 0.25);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--f-display);
+  font-weight: 400;
+  font-size: 17px;
+  letter-spacing: 0.08em;
+}
+.pop-sub small {
+  font-family: inherit;
+  font-size: 11.5px;
+  letter-spacing: 0;
+  color: var(--paper-3);
+}
+#snd-music-name {
+  margin-left: 2px;
+  overflow-wrap: anywhere;
+}
+.pop-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pop-btn {
+  padding: 5px 10px;
+  font-size: 12.5px;
+  color: var(--paper-2);
+  background: #241d17;
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.pop-btn:hover,
+.pop-btn:focus-visible {
+  border-color: var(--gold);
+  color: var(--paper);
+}
+.layers-pop .pop-note {
+  margin: -4px 0 0;
 }
 
 /* places index */

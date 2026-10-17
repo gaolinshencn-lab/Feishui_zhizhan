@@ -65,14 +65,14 @@ export class UI {
   </div>
   <button class="icon-btn" id="btn-camera" aria-pressed="true" title="自动镜头：跟随剧情推移视角">${SVG.camera}<span>自动镜头</span></button>
   <button class="icon-btn" id="btn-places" aria-expanded="false" title="地名索引：古今对照，点击飞往">${SVG.pin}<span>地名</span></button>
-  <button class="icon-btn" id="btn-sound" aria-pressed="false" title="声音：战鼓、号角、喊杀、马蹄与风声">${SVG.sound}<span>声音</span></button>
-  <button class="icon-btn" id="btn-layers" aria-expanded="false" title="图层与显示">${SVG.layers}<span>图层</span></button>
+  <button class="icon-btn" id="btn-sound" aria-pressed="false" title="声音：战鼓、号角、喊杀、马蹄与风声，背景乐《前秦风雨》">${SVG.sound}<span>声音</span></button>
+  <button class="icon-btn" id="btn-layers" aria-expanded="false" title="图层、显示与声音">${SVG.layers}<span>图层</span></button>
   <button class="icon-btn" id="btn-full" title="全屏">${SVG.full}<span>全屏</span></button>
   <button class="icon-btn" id="btn-about" title="史料与说明">${SVG.info}<span>说明</span></button>
 </nav>
 
 <section class="layers-pop" id="layers-pop" hidden aria-label="图层">
-  <h2 class="pop-title">图层与显示</h2>
+  <h2 class="pop-title">图层、显示与声音</h2>
   <label class="toggle"><input type="checkbox" id="lay-places" checked /><span>地名标注</span></label>
   <label class="toggle"><input type="checkbox" id="lay-modern" checked /><span>古今地名对照</span></label>
   <label class="toggle"><input type="checkbox" id="lay-arrows" checked /><span>行军路线</span></label>
@@ -84,6 +84,16 @@ export class UI {
   <label class="range"><span>画质</span>
     <select id="lay-quality"><option value="high">高</option><option value="medium" selected>标准</option><option value="low">省电</option></select>
   </label>
+  <h3 class="pop-sub">声音<small>工具栏「声音」开启后生效</small></h3>
+  <label class="toggle"><input type="checkbox" id="snd-fx" checked /><span>战场音效</span></label>
+  <label class="toggle"><input type="checkbox" id="snd-music" checked /><span>背景乐<span id="snd-music-name">《前秦风雨》</span></span></label>
+  <label class="range"><span>背景乐音量 <output id="snd-vol-out">50%</output></span><input type="range" id="snd-vol" min="0" max="100" step="5" value="50" /></label>
+  <div class="pop-row">
+    <button type="button" class="pop-btn" id="snd-file-btn">换用本地音乐…</button>
+    <button type="button" class="pop-btn" id="snd-score-btn" hidden>恢复《前秦风雨》</button>
+    <input type="file" id="snd-file" accept="audio/*" hidden />
+  </div>
+  <p class="pop-note">本地音乐只在本机播放，不会上传。</p>
 </section>
 
 <section class="places-pop" id="places-pop" hidden aria-label="地名索引">
@@ -312,6 +322,26 @@ export class UI {
       const ok = await app.sound.setEnabled(on);
       this.$('btn-sound').setAttribute('aria-pressed', String(on && ok));
       if (on && ok) app.sound.chapter();
+    });
+    this.$('snd-fx').addEventListener('change', (e) => app.sound.setEffects(e.target.checked));
+    this.$('snd-music').addEventListener('change', (e) => app.sound.setMusic(e.target.checked));
+    this.$('snd-vol').addEventListener('input', (e) => {
+      this.$('snd-vol-out').textContent = `${e.target.value}%`;
+      app.sound.setMusicVolume(e.target.value / 100);
+    });
+    this.$('snd-file-btn').addEventListener('click', () => this.$('snd-file').click());
+    this.$('snd-file').addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      app.sound.useFile(file);
+      this.$('snd-music-name').textContent = `「${file.name}」`;
+      this.$('snd-score-btn').hidden = false;
+      e.target.value = '';
+    });
+    this.$('snd-score-btn').addEventListener('click', () => {
+      app.sound.useScore();
+      this.$('snd-music-name').textContent = '《前秦风雨》';
+      this.$('snd-score-btn').hidden = true;
     });
     const about = this.$('about');
     this.$('btn-about').addEventListener('click', () => (about.showModal ? about.showModal() : about.setAttribute('open', '')));
