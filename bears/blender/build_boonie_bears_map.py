@@ -147,6 +147,11 @@ def setup_collections():
               "Reference_Notes"]:
         coll(n)
     coll("GQ_House_Roof_Removable", COLL["GuangtouQiang_House_Exterior"])
+    for n in ("GQ_Room_Kitchen_Dining", "GQ_Room_Bedroom", "GQ_Room_Bathroom"):
+        coll(n, COLL["GuangtouQiang_House_Interior"])
+    coll("GuangtouQiang_Warehouse")
+    coll("WH_Roof_Removable", COLL["GuangtouQiang_Warehouse"])
+    coll("WH_Interior", COLL["GuangtouQiang_Warehouse"])
     coll("Bears_TreeHome", COLL["Forest_Trees"])
     coll("Inferred_Models", COLL["Reference_Notes"])
     coll("Prototypes_Hidden", COLL["Reference_Notes"])
@@ -639,7 +644,7 @@ CLIFF = dict(a0=math.radians(108), a1=math.radians(162), fall=math.radians(134),
 MEADOW = (6.0, -6.0, 15.0)
 HOUSE = dict(x=34.0, y=-28.0, rot=0.0)  # 正面朝北（+Y）
 YARD = (36.0, -20.0, 14.0)
-LOGYARD = (49.0, -30.0, 7.0)
+LOGYARD = (60.0, -25.0, 6.0)  # 院子栅栏外东侧
 BEARHOME = dict(x=20.0, y=18.0, rot=math.radians(-140))  # 树洞门朝西南（空地方向）
 HONEYTREE = (29.0, 28.0)
 
@@ -648,10 +653,12 @@ PATHS = [
     dict(name="Path_Meadow_BearsHome", w=1.8, pts=[(6, -6), (9, 3), (14, 10), (17.5, 14.5)]),
     dict(name="Path_BearsHome_HoneyTree", w=1.3, pts=[(21, 20), (25, 24), (28, 27)]),
     dict(name="Path_Meadow_LakeBeach", w=1.8, pts=[(6, -6), (-6, -14), (-18, -24), (-31, -32)]),
+    dict(name="Path_House_Warehouse", w=1.5, pts=[(33.8, -20.6), (38.5, -22.0), (41.8, -26.2), (43.6, -29.0)]),
     dict(name="Road_House_East", w=3.6, pts=[(38, -18.5), (50, -16), (64, -13), (82, -11), (125, -9)]),
 ]
 CLEARINGS = [(MEADOW[0], MEADOW[1], MEADOW[2]), (YARD[0], YARD[1], YARD[2]), (LOGYARD[0], LOGYARD[1], LOGYARD[2]),
-             (BEARHOME["x"], BEARHOME["y"], 7.5), (HONEYTREE[0], HONEYTREE[1], 4.5)]
+             (BEARHOME["x"], BEARHOME["y"], 7.5), (HONEYTREE[0], HONEYTREE[1], 4.5),
+             (49.0, -29.0, 8.0), (50.0, -18.0, 6.0)]  # 仓库、院子东北角
 
 
 def lake_e(x, y):
@@ -1169,36 +1176,291 @@ def build_forest():
 
 
 # ------------------------------------------------------------------------------------------------
-# 阶段 4：光头强的小木屋（外观、室内、可拆屋顶）
+# 阶段 4：光头强的木屋（四季篇改版：红棕色木墙、蓝灰色木板屋顶）和独立仓库。逐项依据见 HOUSE_WAREHOUSE_AUDIT.md。
+# 木屋局部坐标：+Y 为正面（北），+X 为东（站在门前看在左手边），原点在主屋中心、四角地面最高点的高度。
+# 布局：主屋 = 客厅/厨房/餐厅（西）+ 卧室（东，隔墙 PART_X）；卫生间是西侧单独的一翼（站在门前看在右手边）。
 
-W_HOUSE, D_HOUSE, H_WALL, FOUND = 9.0, 6.0, 3.0, 0.35
+W_HOUSE, D_HOUSE, H_WALL, FOUND = 9.0, 6.0, 3.0, 1.0
+WING = dict(x0=-7.0, x1=-4.5, y0=-3.0, y1=1.8, h=2.5, rise=1.4)
+ROOF_RISE, ROOF_OV = 2.0, 0.8
+PART_X = 1.3
+DECK_Y = 4.75
+DOOR_X = (-0.9, 0.5)
+WIN_FRONT = ((-3.55, -2.25), (2.25, 3.55))
+WIN_Z = (0.95, 2.05)
+BED_DOOR = (-2.25, -1.35)
+BATH_DOOR = (-0.6, 0.3)
+ROUND_WIN = (-1.6, 1.75, 0.5)
+IN_X, IN_Y = W_HOUSE / 2 - 0.155, D_HOUSE / 2 - 0.155
+WAREHOUSE = dict(lx=15.0, ly=-1.0, rot=math.pi / 2, W=6.0, D=8.0, H=3.2, rise=2.0, floor=0.45)
+DOOR_PASSAGES = []  # (名称, 根物体名, 局部 AABB (x0, x1, y0, y1, z0, z1))：质量检查时门洞里不能有家具
+
+
+def _cut(segs, holes, zc):
+    for (x0, x1, z0, z1) in holes:
+        if zc < z0 or zc > z1:
+            continue
+        nxt = []
+        for s0, s1 in segs:
+            if x1 <= s0 or x0 >= s1:
+                nxt.append((s0, s1))
+                continue
+            if x0 > s0:
+                nxt.append((s0, x0))
+            if x1 < s1:
+                nxt.append((x1, s1))
+        segs = nxt
+    return segs
 
 
 def board_wall(bm, L, H, holes, n_shades, rnd, board=0.3, depth=0.1, z0=0.0, mi_base=0):
-    """横木板墙：逐条木板生成，跳过门窗洞，木板随机分到 n_shades 种木色。"""
+    """横木板墙（室内蓝灰色墙板）：逐条木板生成，跳过门窗洞。"""
     y = 0.0
     while y < H - 1e-3:
         bh = min(board, H - y) - 0.02
         yc = y + bh / 2
-        segs = [(-L / 2, L / 2)]
-        for (x0, x1, y0, y1) in holes:
-            if yc < y0 or yc > y1:
-                continue
-            nxt = []
-            for s0, s1 in segs:
-                if x1 <= s0 or x0 >= s1:
-                    nxt.append((s0, s1))
-                    continue
-                if x0 > s0:
-                    nxt.append((s0, x0))
-                if x1 < s1:
-                    nxt.append((x1, s1))
-            segs = nxt
-        for s0, s1 in segs:
+        for s0, s1 in _cut([(-L / 2, L / 2)], holes, yc):
             if s1 - s0 > 0.03:
                 bm_cube(bm, (s1 - s0, depth, bh), loc=((s0 + s1) / 2, rnd.uniform(-0.01, 0.01), z0 + yc),
                         mi=mi_base + rnd.randrange(n_shades))
         y += board
+
+
+def log_wall(bm, L, H, holes, n_shades, rnd, board=0.27, depth=0.1, z0=0.0, round_frac=0.3):
+    """外墙（R1、R2）：高低不一的红棕色横木板夹着圆木，木板略有倾斜。圆木只向墙外（局部 -Y）凸出。"""
+    z = 0.0
+    while z < H - 0.02:
+        bh = min(board * rnd.uniform(0.75, 1.25), H - z)
+        zc = z + bh / 2
+        for s0, s1 in _cut([(-L / 2, L / 2)], holes, zc):
+            if s1 - s0 < 0.04:
+                continue
+            mi = rnd.randrange(n_shades)
+            if rnd.random() < round_frac and bh > 0.2:
+                r = bh / 2
+                bm_cyl(bm, r, r, s1 - s0, loc=((s0 + s1) / 2, -(r - depth / 2), z0 + zc), rot=(0, math.pi / 2, 0), seg=10, mi=mi)
+            else:
+                bm_cube(bm, (s1 - s0, depth, bh - 0.025), loc=((s0 + s1) / 2, rnd.uniform(-0.015, 0.015), z0 + zc),
+                        rot=(rnd.uniform(-0.04, 0.04), 0, 0), mi=mi)
+        z += bh
+
+
+def gable_boards(bm, half, rise, n_shades, rnd, board=0.27, depth=0.1, z0=0.0, inset=0.0):
+    """山墙三角：一层层变短的横木板。"""
+    z = 0.0
+    while z < rise - 0.05:
+        bh = min(board * rnd.uniform(0.8, 1.2), rise - z)
+        zc = z + bh / 2
+        L = 2 * (half - inset) * (1 - zc / rise)
+        if L > 0.08:
+            bm_cube(bm, (L, depth, bh - 0.02), loc=(rnd.uniform(-0.03, 0.03), rnd.uniform(-0.01, 0.01), z0 + zc), mi=rnd.randrange(n_shades))
+        z += bh
+
+
+def vplank_wall(bm, L, H, holes, n_shades, rnd, plank=0.24, depth=0.06, z0=0.0, top=None):
+    """竖木板墙（仓库，推测）。top(x) 给出山墙顶边。"""
+    x = -L / 2
+    while x < L / 2 - 0.02:
+        w = min(plank * rnd.uniform(0.8, 1.2), L / 2 - x)
+        xc = x + w / 2
+        zt = H if top is None else top(xc)
+        segs = [(0.0, zt)]
+        for (h0, h1, a, b) in holes:
+            if xc < h0 or xc > h1:
+                continue
+            nxt = []
+            for s0, s1 in segs:
+                if b <= s0 or a >= s1:
+                    nxt.append((s0, s1))
+                    continue
+                if a > s0:
+                    nxt.append((s0, a))
+                if b < s1:
+                    nxt.append((b, s1))
+            segs = nxt
+        for s0, s1 in segs:
+            if s1 - s0 > 0.03:
+                bm_cube(bm, (w - 0.018, depth, s1 - s0), loc=(xc, rnd.uniform(-0.01, 0.01), z0 + (s0 + s1) / 2),
+                        rot=(0, rnd.uniform(-0.01, 0.01), 0), mi=rnd.randrange(n_shades))
+        x += w
+
+
+def surf_box(bm, P, ua, ub, va, vb, thick, nu=3, nv=2, mi=0):
+    """沿曲面 P(u, v) 的一块木板（底面贴曲面，向 +Z 加厚）。用于上翘的屋顶木板、坡道。"""
+    gb = [[bm.verts.new(P(lerp(ua, ub, i / nu), lerp(va, vb, j / nv))) for j in range(nv + 1)] for i in range(nu + 1)]
+    gt = [[bm.verts.new(v.co + Vector((0, 0, thick))) for v in row] for row in gb]
+    faces = []
+
+    def q(a, b, c, d):
+        f = bm.faces.new((a, b, c, d))
+        f.material_index = mi
+        faces.append(f)
+    for i in range(nu):
+        for j in range(nv):
+            q(gb[i][j], gb[i][j + 1], gb[i + 1][j + 1], gb[i + 1][j])
+            q(gt[i][j], gt[i + 1][j], gt[i + 1][j + 1], gt[i][j + 1])
+    for i in range(nu):
+        q(gb[i][0], gb[i + 1][0], gt[i + 1][0], gt[i][0])
+        q(gb[i][nv], gt[i][nv], gt[i + 1][nv], gb[i + 1][nv])
+    for j in range(nv):
+        q(gb[0][j], gt[0][j], gt[0][j + 1], gb[0][j + 1])
+        q(gb[nu][j], gb[nu][j + 1], gt[nu][j + 1], gt[nu][j])
+    return faces
+
+
+def roof_surface(x0, x1, y_ridge, half, ov, top, rise, lift_hi, lift_lo, curl=0.16):
+    """屋顶坡面 S(x, side, u)：u=0 屋脊，u=1 檐口。两端上翘（R2：屋檐两端翘起，左右不对称），檐口外缘再微微上卷。"""
+    xc, xh = (x0 + x1) / 2, (x1 - x0) / 2
+
+    def S(x, side, u):
+        d = u * (half + ov)
+        z = top + rise - d * rise / half
+        xm = (x - xc) / xh
+        k = lift_hi if xm > 0 else lift_lo
+        z += k * (max(0.0, abs(xm) - 0.87) / 0.13) ** 2
+        z += curl * (max(0.0, u - 0.82) / 0.18) ** 2 * (0.4 + 0.6 * abs(xm))
+        return Vector((x, y_ridge + side * d, z))
+    return S
+
+
+def roof_boards(bm, S, x0, x1, rnd, n_mats, tiers=3, thick=0.05, wmin=0.32, wmax=0.5):
+    """一条条顺坡铺的木板，分几层，上层压住下层（R2）。"""
+    for side in (-1, 1):
+        x = x0
+        while x < x1 - 0.05:
+            w = min(rnd.uniform(wmin, wmax), x1 - x)
+            xa, xb = x + 0.012, x + w - 0.012
+            for t in range(tiers):
+                ua = 0.0 if t == 0 else t / tiers - 0.05
+                ub = 1.0 + rnd.uniform(-0.03, 0.03) if t == tiers - 1 else (t + 1) / tiers + rnd.uniform(0.0, 0.04)
+                dz = 0.03 + (tiers - 1 - t) * 0.035 + rnd.uniform(0, 0.02)
+                tilt = rnd.uniform(-0.05, 0.05)
+                xm = (xa + xb) / 2
+                surf_box(bm, lambda u, xx, side=side, dz=dz, tilt=tilt, xm=xm: S(xx, side, u) + Vector((0, 0, dz + (xx - xm) * tilt)),
+                         ua, ub, xa, xb, thick, nu=4, nv=1, mi=rnd.randrange(n_mats))
+            x += w
+
+
+def roof_extras(bm_patch, bm_moss, S, x0, x1, rnd, n_patch, tiers=3, n_moss=30, n_twig=6, mi_twig=1):
+    """补丁木板、苔藓、草和落下的树枝（R1、R2、R8-a41）。"""
+    base = 0.03 + tiers * 0.035 + 0.05
+    for k in range(n_patch):
+        side = rnd.choice((-1, 1))
+        u0 = rnd.uniform(0.05, 0.75)
+        L = rnd.uniform(0.25, 0.45)
+        xa = rnd.uniform(x0 + 0.3, x1 - 1.0)
+        w = rnd.uniform(0.25, 0.55)
+        skew = rnd.uniform(-0.6, 0.6)
+        surf_box(bm_patch, lambda u, xx, side=side, skew=skew, u0=u0: S(xx + (u - u0) * skew * 3, side, u) + Vector((0, 0, base)),
+                 u0, min(1.0, u0 + L), xa, xa + w, 0.045, nu=3, nv=1, mi=k % 3)
+    for k in range(n_moss):
+        side = rnd.choice((-1, 1))
+        p = S(rnd.uniform(x0 + 0.2, x1 - 0.2), side, rnd.uniform(0.05, 0.95)) + Vector((0, 0, base - 0.03))
+        if rnd.random() < 0.6:
+            bm_ico(bm_moss, rnd.uniform(0.12, 0.3), loc=p, scale=(1.3, 1.0, 0.3), subdiv=1, rough=0.3, seed=k, mi=0)
+        else:
+            for g in range(5):
+                a = g * 1.26
+                bm_cyl(bm_moss, 0.02, 0.0, rnd.uniform(0.18, 0.32), loc=p + Vector((math.cos(a) * 0.05, math.sin(a) * 0.05, 0.12)),
+                       rot=(math.cos(a) * 0.35, math.sin(a) * 0.35, 0), seg=4, mi=0)
+    for k in range(n_twig):
+        side = rnd.choice((-1, 1))
+        x, u = rnd.uniform(x0 + 0.5, x1 - 1.5), rnd.uniform(0.1, 0.7)
+        pts = [S(x + i * 0.35, side, u + i * rnd.uniform(-0.04, 0.06)) + Vector((0, 0, base + 0.03)) for i in range(4)]
+        bm_tube(bm_moss, pts, [0.03, 0.025, 0.02, 0.012], seg=5, mi=mi_twig)
+        bm_tube(bm_moss, [pts[1], pts[1] + Vector((0.2, 0.25 * side, 0.03))], [0.015, 0.008], seg=4, mi=mi_twig)
+
+
+def rounded_rect_path(w, h, r, n=5):
+    pts = []
+    for cx, cz, a0 in ((w / 2 - r, h / 2 - r, 0.0), (-w / 2 + r, h / 2 - r, math.pi / 2),
+                       (-w / 2 + r, -h / 2 + r, math.pi), (w / 2 - r, -h / 2 + r, 1.5 * math.pi)):
+        for i in range(n + 1):
+            a = a0 + (math.pi / 2) * i / n
+            pts.append((cx + math.cos(a) * r, 0.0, cz + math.sin(a) * r))
+    return pts + [pts[0], pts[1]]
+
+
+def paper_cut(bm, y, r=0.17, mi=0):
+    """红色窗花：八瓣团花（R2）。"""
+    bm_cyl(bm, r * 0.35, r * 0.35, 0.012, loc=(0, y, 0), rot=(math.pi / 2, 0, 0), seg=12, mi=mi)
+    for i in range(8):
+        a = i * math.pi / 4
+        bm_sphere(bm, (r * 0.32, 0.006, r * 0.17), loc=(math.cos(a) * r * 0.62, y, math.sin(a) * r * 0.62), rot=(0, -a, 0), seg=8, rings=4, mi=mi)
+
+
+def lattice_window(bm, w, h, depth=0.24, mi_frame=0, mi_paper=1, mi_lat=2, mi_red=3, r=0.22):
+    """圆角方框格子窗（R2、R4）：圆角木框、窗纸、木格、两面红色窗花；窗洞四周有木衬板。中心在原点，XZ 平面。"""
+    pts = rounded_rect_path(w, h, r)
+    for y in (-depth / 2 + 0.02, depth / 2 - 0.02):
+        bm_tube(bm, [(p[0], y, p[2]) for p in pts], [0.065] * len(pts), seg=6, mi=mi_frame, caps=False)
+    for sx, sz, px, pz in ((w + 0.12, 0.06, 0, h / 2 + 0.03), (w + 0.12, 0.06, 0, -h / 2 - 0.03),
+                           (0.06, h + 0.12, w / 2 + 0.03, 0), (0.06, h + 0.12, -w / 2 - 0.03, 0)):
+        bm_cube(bm, (sx, depth, sz), loc=(px, 0, pz), mi=mi_frame)
+    bm_cube(bm, (w - 0.12, 0.02, h - 0.12), loc=(0, 0, 0), mi=mi_paper)
+    for t in (-0.25, 0.0, 0.25):
+        bm_cube(bm, (0.035, 0.06, h - 0.1), loc=(t * w, 0, 0), mi=mi_lat)
+    for t in (-0.22, 0.22):
+        bm_cube(bm, (w - 0.1, 0.06, 0.035), loc=(0, 0, t * h), mi=mi_lat)
+    for y in (-0.035, 0.035):
+        paper_cut(bm, y, r=min(w, h) * 0.17, mi=mi_red)
+
+
+def round_window(bm, r, half, depth, mi_frame=0, mi_glass=1, mi_lat=2, mi_fill=3, seg=28):
+    """后墙圆形格子窗（R3、U7）：圆框、玻璃、橙色木格；方形窗洞的四角用木板补齐。"""
+    bm_cyl(bm, r, r, 0.02, rot=(math.pi / 2, 0, 0), seg=seg, mi=mi_glass)
+    for y in (-depth / 2 + 0.03, depth / 2 - 0.03):
+        bm_torus(bm, r + 0.04, 0.06, loc=(0, y, 0), rot=(math.pi / 2, 0, 0), seg=seg, rseg=6, mi=mi_frame)
+    bm_tube(bm, [(0, -depth / 2, 0), (0, depth / 2, 0)], [r + 0.02, r + 0.02], seg=seg, mi=mi_frame, caps=False)
+    for t in (-0.5, 0.0, 0.5):
+        ln = 2 * r * math.sqrt(max(0.0, 1 - t * t))
+        bm_cube(bm, (0.035, 0.05, ln), loc=(t * r, 0, 0), mi=mi_lat)
+        bm_cube(bm, (ln, 0.05, 0.035), loc=(0, 0, t * r), mi=mi_lat)
+    # 四角补板：从方洞角点到圆弧的扇形面
+    for qx, qz in ((1, 1), (-1, 1), (-1, -1), (1, -1)):
+        a0 = math.atan2(qz, qx) - math.pi / 4
+        for y in (-depth / 2, depth / 2):
+            c = bm.verts.new((qx * half, y, qz * half))
+            arc = [bm.verts.new((math.cos(a0 + k * (math.pi / 2) / 8) * (r + 0.03), y, math.sin(a0 + k * (math.pi / 2) / 8) * (r + 0.03)))
+                   for k in range(9)]
+            for k in range(8):
+                f = bm.faces.new((c, arc[k], arc[k + 1]))
+                f.material_index = mi_fill
+
+
+def wall_run(name, cn, a, b, z0, H, holes, rnd, C_ext, C_int, root, ext_mats=None, int_mats=None, offsets=(0.13,), shrink=0.3,
+             gable=None, status="observed", note=None, int_name=None, round_frac=0.3, int_cn=None):
+    """一段墙：从 a 走到 b，左手边是室内。holes 用墙所在轴的坐标 (c0, c1, z0, z1)。
+    外层红棕色木板/圆木（ext_mats），内层蓝灰色木板（int_mats，offsets 为距墙中线的距离）。gable=(half, rise) 时在墙顶加山墙。"""
+    ax, ay = a
+    bx, by = b
+    L = math.hypot(bx - ax, by - ay)
+    M = Matrix.Translation(((ax + bx) / 2, (ay + by) / 2, 0)) @ Matrix.Rotation(math.atan2(by - ay, bx - ax), 4, "Z")
+    axis = 0 if abs(bx - ax) > abs(by - ay) else 1
+    a0, sgn = a[axis], (1 if b[axis] > a[axis] else -1)
+    lh = []
+    for (c0, c1, hz0, hz1) in holes:
+        s0, s1 = sorted(((c0 - a0) * sgn, (c1 - a0) * sgn))
+        lh.append((s0 - L / 2, s1 - L / 2, hz0, hz1))
+    out = []
+    if ext_mats:
+        bm = bmesh.new()
+        log_wall(bm, L, H, lh, len(ext_mats), rnd, z0=z0, round_frac=round_frac)
+        if gable:
+            gable_boards(bm, gable[0], gable[1], len(ext_mats), rnd, z0=z0 + H)
+        bmesh.ops.transform(bm, matrix=M, verts=bm.verts[:])
+        out.append(new_obj(name + "_Exterior", bm, C_ext, ext_mats, parent=root, props=dict(cn=cn, status=status, note=note)))
+    if int_mats:
+        for k, off in enumerate(offsets):
+            bm = bmesh.new()
+            board_wall(bm, L - shrink, H, lh, len(int_mats), rnd, board=0.26, depth=0.05, z0=z0)
+            if gable:
+                gable_boards(bm, gable[0], gable[1], len(int_mats), rnd, board=0.26, depth=0.05, z0=z0 + H, inset=0.3)
+            bmesh.ops.transform(bm, matrix=M @ Matrix.Translation((0, off, 0)), verts=bm.verts[:])
+            nm = (int_name or name + "_Interior") + ("" if len(offsets) == 1 else ("_A", "_B")[k])
+            out.append(new_obj(nm, bm, C_int, int_mats, parent=root,
+                               props=dict(cn=int_cn or cn + "（室内蓝灰色墙板）", status="observed", note="R3、R4、U5–U7：室内是蓝灰色木板墙")))
+    return out
 
 
 def build_house():
@@ -1206,405 +1468,1161 @@ def build_house():
     ROOF = COLL["GQ_House_Roof_Removable"]
     INT = COLL["GuangtouQiang_House_Interior"]
     hx, hy = HOUSE["x"], HOUSE["y"]
-    gz = max(ground(hx + sx * W_HOUSE / 2, hy + sy * D_HOUSE / 2) for sx in (-1, 1) for sy in (-1, 1))
+    corners = [(WING["x0"], -D_HOUSE / 2), (WING["x0"], WING["y1"]), (-W_HOUSE / 2, D_HOUSE / 2), (W_HOUSE / 2, D_HOUSE / 2),
+               (W_HOUSE / 2, -D_HOUSE / 2), (0, DECK_Y)]
+    gz = max(ground(hx + x, hy + y) for x, y in corners)
     root = empty("GQ_House_Root", EXT, (hx, hy, gz), (0, 0, HOUSE["rot"]), size=1.5,
-                 props=dict(cn="光头强的小木屋（根）", note="子物体都挂在这里，移动它即可整体移动木屋"))
+                 props=dict(cn="光头强的小木屋（根）", note="子物体都挂在这里，移动它即可整体移动木屋；局部 +Y 为正面"))
     rnd = random.Random(12)
     W, D, H, B = W_HOUSE, D_HOUSE, H_WALL, FOUND
-    wood = [mat_noise(f"Wood_Plank_Exterior_{i}", c1, c2, scale=9, bump=0.15) for i, (c1, c2) in enumerate(
-        (("#c4853f", "#d39a55"), ("#b0703a", "#c4874a"), ("#d8a05c", "#e3b06e"), ("#a3653a", "#b97b47")))]
-    inner = [mat_noise(f"Wood_Plank_Interior_BlueGrey_{i}", c1, c2, scale=9, bump=0.1) for i, (c1, c2) in enumerate(
-        (("#5c7486", "#68808f"), ("#4f6676", "#5d7484"), ("#667d8b", "#71889a")))]
-    yellow = mat("Paint_Yellow_Trim", "#e2c048", rough=0.6)
-    lattice_m = mat("Wood_Lattice_Dark", "#4a3424", rough=0.7)
-    glass = mat("Glass_Window_Warm", "#ffe2a0", rough=0.3, emit="#ffc46a", emit_strength=0.6)
-    stone = mat_noise("Stone_Foundation", "#7c7872", "#9a958d", scale=4, bump=0.4)
-
-    # 地基
-    bm = bmesh.new()
-    bm_cube(bm, (W + 0.3, D + 0.3, B + 0.6), loc=(0, 0, B / 2 - 0.3))
-    new_obj("GQ_House_Foundation", bm, EXT, [stone], parent=root,
-            props=dict(cn="石头地基", status="inferred"))
-
-    # 门窗洞（墙体局部坐标：x 沿墙长，z 自地基顶起）
-    door = (-0.85, 0.85, 0.0, 2.1)
-    win_l, win_r = (-3.4, -2.7, 1.9, 2.6), (2.7, 3.4, 1.9, 2.6)
-    win_back = (1.6, 2.6, 1.4, 2.4)  # 圆窗外框所在洞
-    win_side = (-0.4, 0.4, 1.9, 2.6)
-    walls = [
-        ("Front", W, [door, win_l, win_r], Matrix.Translation((0, D / 2 - 0.05, B))),
-        ("Back", W, [(-win_back[1], -win_back[0], win_back[2], win_back[3])], Matrix.Translation((0, -D / 2 + 0.05, B)) @ Matrix.Rotation(math.pi, 4, "Z")),
-        ("Right", D, [win_side], Matrix.Translation((W / 2 - 0.05, 0, B)) @ Matrix.Rotation(-math.pi / 2, 4, "Z")),
-        ("Left", D, [], Matrix.Translation((-W / 2 + 0.05, 0, B)) @ Matrix.Rotation(math.pi / 2, 4, "Z")),
-    ]
-    for wname, L, holes, M in walls:
-        bm = bmesh.new()
-        board_wall(bm, L, H, holes, 4, rnd, depth=0.1)
-        bmesh.ops.transform(bm, matrix=M, verts=bm.verts[:])
-        new_obj(f"GQ_Wall_{wname}_Exterior_Boards", bm, EXT, wood, parent=root,
-                props=dict(cn=f"外墙木板（{wname}）", status="observed" if wname == "Front" else "inferred",
-                           note="U3：橙黄深浅不一的横木板" if wname == "Front" else "侧面和背面不可见，按正面推测"))
-        bm = bmesh.new()
-        board_wall(bm, L - 0.3, H, holes, 3, rnd, board=0.26, depth=0.05)
-        bmesh.ops.transform(bm, matrix=M @ Matrix.Translation((0, -0.11, 0)) if wname != "Front" else M @ Matrix.Translation((0, -0.11, 0)), verts=bm.verts[:])
-        new_obj(f"GQ_Wall_{wname}_Interior_Boards", bm, INT, inner, parent=root,
-                props=dict(cn=f"室内墙板（{wname}，蓝灰色）", status="observed", note="U5–U7：蓝灰色木板内墙"))
-
-    # 黄色包角、门框、窗框（U3）
-    bm = bmesh.new()
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            bm_cube(bm, (0.26, 0.26, H), loc=(sx * W / 2, sy * D / 2, B + H / 2))
-    bm_cube(bm, (W + 0.3, 0.2, 0.18), loc=(0, D / 2 + 0.02, B + H - 0.05))
-
-    def frame(o, M):
-        x0, x1, y0, y1 = o
-        w, h = x1 - x0, y1 - y0
-        cx, cz = (x0 + x1) / 2, (y0 + y1) / 2
-        for (sx, sz, px, pz) in ((w + 0.24, 0.12, cx, y1 + 0.06), (w + 0.24, 0.12, cx, y0 - 0.06),
-                                 (0.12, h, x0 - 0.06, cz), (0.12, h, x1 + 0.06, cz)):
-            fs = bm_cube(bm, (sx, 0.18, sz), loc=(px, 0.02, B + pz))
-            bmesh.ops.transform(bm, matrix=M, verts=list({v for f in fs for v in f.verts}))
-
-    front_M = Matrix.Translation((0, D / 2 - 0.02, 0))
-    for o in (door, win_l, win_r):
-        frame(o, front_M)
-    frame(win_side, Matrix.Translation((W / 2 - 0.02, 0, 0)) @ Matrix.Rotation(-math.pi / 2, 4, "Z"))
-    new_obj("GQ_Yellow_Trim_and_Frames", bm, EXT, [yellow], parent=root,
-            props=dict(cn="黄色包角板和门窗框", status="observed", note="U3"))
-
-    # 小方窗：玻璃 + 深色格子（U3）
-    for wn, o, M in (("Front_Left", win_l, front_M), ("Front_Right", win_r, front_M),
-                     ("Right_Side", win_side, Matrix.Translation((W / 2 - 0.02, 0, 0)) @ Matrix.Rotation(-math.pi / 2, 4, "Z"))):
-        x0, x1, y0, y1 = o
-        w, h = x1 - x0, y1 - y0
-        cx, cz = (x0 + x1) / 2, B + (y0 + y1) / 2
-        bm = bmesh.new()
-        bm_cube(bm, (w, 0.02, h), loc=(cx, 0, cz), mi=0)
-        for t in (-0.25, 0.25):
-            bm_cube(bm, (w, 0.04, 0.035), loc=(cx, 0.03, cz + t * h), mi=1)
-            bm_cube(bm, (0.035, 0.04, h), loc=(cx + t * w, 0.03, cz), mi=1)
-        bm_cube(bm, (w * 0.5, 0.04, 0.035), loc=(cx, 0.035, cz), mi=1)
-        bm_cube(bm, (0.035, 0.04, h * 0.5), loc=(cx, 0.035, cz), mi=1)
-        bmesh.ops.transform(bm, matrix=M, verts=bm.verts[:])
-        new_obj(f"GQ_Window_{wn}", bm, EXT, [glass, lattice_m], parent=root,
-                props=dict(cn="小方格窗", status="observed" if wn != "Right_Side" else "inferred", note="U3：黄框、深色格子"))
-
-    # 黄色对开门，向外打开（U3）
-    for side in (-1, 1):
-        bm = bmesh.new()
-        dw = 0.85
-        bm_cube(bm, (dw, 0.06, 2.08), loc=(side * dw / 2, 0, 1.04), mi=0)
-        for i in (1, 2):
-            bm_cube(bm, (0.04, 0.03, 0.9), loc=(side * dw * i / 3, 0.04, 1.5), mi=1)
-        bm_cube(bm, (dw * 0.9, 0.03, 0.04), loc=(side * dw / 2, 0.04, 1.05), mi=1)
-        ob = new_obj(f"GQ_Door_Leaf_{'Left' if side < 0 else 'Right'}", bm, EXT, [yellow, lattice_m], parent=root,
-                     props=dict(cn="黄色木门（可旋转开合）", status="observed", note="U3：对开黄门，向外开"))
-        # 铰链在门洞两侧：左扇铰链在左、右扇铰链在右，都向屋外（+Y）打开 75°
-        ob.location = ((door[0] if side < 0 else door[1]), D / 2 + 0.06, B)
-        ob.data.transform(Matrix.Translation((dw if side < 0 else -dw, 0, 0)))
-        ob.rotation_euler = (0, 0, math.radians(75) * -side)
-    # 门前台阶
-    bm = bmesh.new()
-    bm_cube(bm, (2.2, 0.8, 0.22), loc=(0, D / 2 + 0.5, B - 0.11))
-    new_obj("GQ_Door_Step", bm, EXT, [mat_noise("Wood_Step", "#a3784a", "#b8895a", scale=8)], parent=root,
-            props=dict(cn="门前台阶", status="inferred"))
-
-    # 屋顶（可隐藏）：山墙、石板瓦、屋脊、烟囱、室内顶板
     top = B + H
-    rise = 1.8
-    bm = bmesh.new()
-    for sx in (-1, 1):
-        v = [bm.verts.new((sx * (W / 2 - 0.02), -D / 2, top)), bm.verts.new((sx * (W / 2 - 0.02), D / 2, top)),
-             bm.verts.new((sx * (W / 2 - 0.02), 0, top + rise))]
-        bm.faces.new(v)
-    new_obj("GQ_Roof_Gables", bm, ROOF, [wood[1]], parent=root, recalc=False,
-            props=dict(cn="山墙", status="inferred", note="U3 中屋顶被积雪遮住，屋顶形状为推测"))
-    slope = math.atan2(rise, D / 2)
-    L = math.hypot(rise, D / 2) + 0.7
-    bm = bmesh.new()
-    for side in (-1, 1):
-        rows, cols = 6, 10
-        for r in range(rows):
-            u = (r + 0.5) / rows
-            for c in range(cols):
-                x = -W / 2 - 0.5 + (c + 0.5 + (r % 2) * 0.5) / cols * (W + 1.0)
-                fs = bm_cube(bm, ((W + 1.0) / cols + 0.1, L / rows + 0.22, 0.08),
-                             loc=(0, 0, 0), mi=rnd.randrange(3))
-                M = (Matrix.Translation((x, side * u * L * math.cos(slope), top + rise + 0.12 - u * L * math.sin(slope)))
-                     @ Matrix.Rotation(side * -slope + rnd.uniform(-0.04, 0.04), 4, "X"))
-                bmesh.ops.transform(bm, matrix=M, verts=list({v for f in fs for v in f.verts}))
-    bm_cube(bm, (W + 1.2, 0.35, 0.22), loc=(0, 0, top + rise + 0.12), mi=2)
-    new_obj("GQ_Roof_Slabs", bm, ROOF, [mat_noise("Roof_Slab_BlueGrey_A", "#5d7089", "#6c8098", scale=5),
-                                        mat_noise("Roof_Slab_BlueGrey_B", "#4f6178", "#5f7189", scale=5),
-                                        mat_noise("Roof_Slab_BlueGrey_C", "#6b7f96", "#7a8ea4", scale=5)], parent=root,
-            props=dict(cn="灰蓝色石板瓦屋顶（可隐藏）", status="inferred",
-                       note="屋顶材料没有清楚的剧照；参照另一张合影里的灰蓝色石板瓦"))
-    bm = bmesh.new()
-    bm_cube(bm, (0.8, 0.8, 2.6), loc=(2.8, -1.2, top + 1.5))
-    bm_cube(bm, (0.95, 0.95, 0.15), loc=(2.8, -1.2, top + 2.85))
-    new_obj("GQ_Chimney", bm, ROOF, [stone], parent=root, props=dict(cn="烟囱", status="inferred"))
-    bm = bmesh.new()
-    for side in (-1, 1):
-        for k in range(12):
-            x = -W / 2 + 0.3 + k * (W - 0.6) / 11
-            fs = bm_cube(bm, (0.12, D / 2 / math.cos(slope) + 0.1, 0.14), loc=(0, 0, 0))
-            M = Matrix.Translation((x, side * D / 4, top + rise / 2 - 0.12)) @ Matrix.Rotation(side * -slope, 4, "X")
-            bmesh.ops.transform(bm, matrix=M, verts=list({v for f in fs for v in f.verts}))
-    new_obj("GQ_Roof_Rafters_Interior", bm, ROOF, [mat_noise("Wood_Rafter", "#6e5440", "#85674d", scale=8)], parent=root,
-            props=dict(cn="室内椽子", status="observed", note="U7：室内可见斜屋顶木板"))
 
-    build_house_interior(root, INT, inner, B)
-    build_yard(root)
+    def lg(x, y):
+        """木屋局部坐标处的地面高度（相对根物体）。"""
+        return ground(hx + x, hy + y) - gz
+
+    # 材质（R1、R2：红棕色木墙；R3–R6：蓝灰色室内墙；R1、R2：蓝灰色木板屋顶）
+    wood = [mat_noise(f"Wood_Wall_RedBrown_{i}", c1, c2, scale=9, bump=0.2, stretch=(0.25, 1.0, 1.0)) for i, (c1, c2) in enumerate(
+        (("#8a3f2e", "#9a4b37"), ("#7a3527", "#8a4130"), ("#a0523b", "#b0614a"), ("#6e3226", "#7d3c2e"), ("#94503f", "#a35d4a")))]
+    inner = [mat_noise(f"Wood_Plank_Interior_BlueGrey_{i}", c1, c2, scale=9, bump=0.1, stretch=(0.25, 1.0, 1.0)) for i, (c1, c2) in enumerate(
+        (("#5c7486", "#68808f"), ("#4f6676", "#5d7484"), ("#667d8b", "#71889a")))]
+    roof_m = [mat_noise(f"Roof_Board_BlueGrey_{i}", c1, c2, scale=7, bump=0.2, stretch=(0.3, 1.0, 1.0)) for i, (c1, c2) in enumerate(
+        (("#4f7896", "#5d86a2"), ("#5e88a6", "#6b94b0"), ("#44697f", "#527790"), ("#6a90a8", "#7a9db3")))]
+    patch_m = [mat_noise("Roof_Patch_Pale_Blue", "#8fb2c6", "#a0c0d2", scale=7), mat_noise("Roof_Patch_Tan_Wood", "#9b7350", "#ad8460", scale=8),
+               mat_noise("Roof_Patch_Grey", "#7c8a92", "#8c99a0", scale=7)]
+    moss_m = [mat_noise("Roof_Moss_Grass", "#5f9a3a", "#77b04a", scale=10), mat_noise("Roof_Twig", "#5a4330", "#6b5038", scale=10)]
+    log_m = mat_noise("Bark_Log_Light", "#8a6a4a", "#9e7c58", scale=8, stretch=(0.3, 1.0, 1.0))
+    cut_m = MATS.get("Wood_Cut_End") or mat_noise("Wood_Cut_End", "#d7b07a", "#e6c696", scale=12)
+    post_m = mat_noise("Wood_Post_Dark", "#5e3a2a", "#6e4634", scale=8, stretch=(1.0, 1.0, 0.25))
+    rail_m = mat_noise("Wood_Branch_Rail_Tan", "#c49a62", "#d4ad74", scale=9)
+    stone_ms = [mat_noise("Stone_Base_GreyGreen", "#6f817c", "#83958f", scale=4, bump=0.4),
+                mat_noise("Stone_Base_Grey", "#7d8384", "#91979a", scale=4, bump=0.4)]
+    core_m = mat_noise("Stone_Base_Core", "#5d6466", "#6c7375", scale=5, bump=0.3)
+    green = mat("Paint_Door_Frame_Green", "#3f7a58", rough=0.6)
+    door_red = mat_noise("Wood_Door_DarkRed", "#6e2620", "#7c2e26", scale=9, stretch=(1.0, 1.0, 0.3))
+    slat_red = mat("Wood_Door_Slat_Red", "#9a463a", rough=0.7)
+    dark = mat("Shadow_Opening", "#1c1c1c", rough=1.0)
+    frame_tan = mat_noise("Wood_Window_Frame_Tan", "#b48a5a", "#c49a68", scale=9)
+    paper = mat("Paper_Window_Lattice", "#eee0bf", rough=0.9, emit="#ffe6b0", emit_strength=0.15)
+    lat_m = mat("Wood_Lattice_Brown", "#7a5434", rough=0.7)
+    red_paper = mat("Paper_Red_Cut", "#c8231d", rough=0.7)
+    brick = mat_brick("Brick_Chimney_Red", "#9a3b2c", "#b04a36", "#8a7f72", scale=3.0)
+    cap_m = mat_noise("Stone_Chimney_Cap", "#9aa3a0", "#adb5b2", scale=6)
+    metal = mat("Metal_Antenna", "#a7adb1", metal=0.8, rough=0.35)
+    chili = MATS.get("Chili_Red") or mat("Chili_Red", "#c8241c", rough=0.45)
+    corn_m = MATS.get("Corn_Yellow") or mat("Corn_Yellow", "#f0c943", rough=0.6)
+    husk = mat("Corn_Husk", "#d9c08a", rough=0.8)
+
+    # ---- 石头基座（R1：木屋坐在青灰色石头矮墙上，比院子高）
+    bm = bmesh.new()
+    for (x0, x1, y0, y1, zt) in ((-W / 2 - 0.05, W / 2 + 0.05, -D / 2 - 0.05, D / 2, B - 0.04),
+                                 (WING["x0"] - 0.05, -W / 2, WING["y0"] - 0.05, WING["y1"] + 0.05, B - 0.04),
+                                 (-W / 2 - 0.2, W / 2 + 0.2, D / 2, DECK_Y - 0.12, B - 0.27)):
+        zb = min(lg(x, y) for x in (x0, x1) for y in (y0, y1)) - 0.6
+        bm_cube(bm, (x1 - x0, y1 - y0, zt - zb), loc=((x0 + x1) / 2, (y0 + y1) / 2, (zt + zb) / 2))
+    new_obj("GQ_Stone_Base_Core", bm, EXT, [core_m], parent=root, props=dict(cn="石头基座（内芯）", status="observed", note="R1、R8-a41：青灰色石头基座"))
+    bm = bmesh.new()
+    loop = [(W / 2, -D / 2), (W / 2, D / 2), (W / 2 + 0.2, D / 2), (W / 2 + 0.2, DECK_Y - 0.12), (-W / 2 - 0.2, DECK_Y - 0.12), (-W / 2 - 0.2, D / 2), (-W / 2, D / 2), (-W / 2, WING["y1"]),
+            (WING["x0"], WING["y1"]), (WING["x0"], WING["y0"]), (W / 2, -D / 2)]
+    for (ax, ay), (bx, by) in zip(loop[:-1], loop[1:]):
+        L = math.hypot(bx - ax, by - ay)
+        n = max(1, int(L / 0.55))
+        along_x = abs(bx - ax) > abs(by - ay)
+        nx, ny = ((by - ay) / L, -(bx - ax) / L)  # 走向的右手边 = 墙外
+        for i in range(n + 1):
+            t = i / n
+            px, py = ax + (bx - ax) * t + nx * 0.06, ay + (by - ay) * t + ny * 0.06
+            zt = B - (0.3 if py > D / 2 + 0.01 else 0.1)
+            zb = lg(px, py) - 0.15
+            rows = max(1, int((zt - zb) / 0.36 + 0.5))
+            for r in range(rows):
+                s = rnd.uniform(0.22, 0.32)
+                off = (0.27 if r % 2 else 0.0) * (1 if along_x else 0)
+                offy = (0.27 if r % 2 else 0.0) * (0 if along_x else 1)
+                z = zb + (r + 0.5) * (zt - zb) / rows
+                sc = (1.25, 0.55, 0.75) if along_x else (0.55, 1.25, 0.75)
+                bm_ico(bm, s, loc=(px + off, py + offy, z), scale=sc, subdiv=1, rough=0.25, seed=i * 7 + r, mi=rnd.randrange(2))
+    new_obj("GQ_Stone_Base", bm, EXT, stone_ms, parent=root, props=dict(cn="石头基座（外圈石块）", status="observed", note="R1、R2"))
+
+    # ---- 地板（室内各房间的地板在 build_house_interior 里；这里是主屋和侧翼的地板龙骨）
+    # ---- 外墙（主屋逆时针：后 → 东 → 前 → 西；左手边是室内）
+    ext_note = "R1、R2：红棕色原木和木板墙，深浅不一"
+    hole_door = (DOOR_X[0], DOOR_X[1], 0.0, 2.1)
+    holes_front = [hole_door] + [(x0, x1, WIN_Z[0], WIN_Z[1]) for x0, x1 in WIN_FRONT]
+    rx, rz, rr = ROUND_WIN
+    hole_round = (rx - 0.6, rx + 0.6, rz - 0.6, rz + 0.6)
+    hole_bath = (BATH_DOOR[0], BATH_DOOR[1], 0.0, 2.05)
+    wall_run("GQ_Wall_Back", "后墙", (-W / 2, -D / 2), (W / 2, -D / 2), B, H, [hole_round], rnd, EXT, INT, root, wood, inner,
+             note="R1 只看到正面；后墙按正面材料推测，圆窗依据 R3", status="inferred")
+    wall_run("GQ_Wall_East", "东山墙（卧室一侧）", (W / 2, -D / 2), (W / 2, D / 2), B, H, [], rnd, EXT, INT, root, wood, inner,
+             gable=(D / 2, ROOF_RISE), note="R8-a41/a42：山墙上露出圆木头；东墙不开窗为推测", status="inferred")
+    wall_run("GQ_Wall_Front", "正面墙", (W / 2, D / 2), (-W / 2, D / 2), B, H, holes_front, rnd, EXT, INT, root, wood, inner, note=ext_note)
+    wall_run("GQ_Wall_West", "西山墙（客厅与卫生间之间）", (-W / 2, D / 2), (-W / 2, -D / 2), B, H, [hole_bath], rnd, EXT, INT, root, wood, inner,
+             gable=(D / 2, ROOF_RISE), note="卫生间门开在这面墙上（R6、R8-a52 积木布局）", status="inferred", round_frac=0.0)
+    # 侧翼（卫生间）：逆时针 后 → … ；东侧借用主屋西墙
+    bath_int = [mat_noise(f"Wood_Plank_Bathroom_LightBlue_{i}", c1, c2, scale=9, bump=0.1, stretch=(0.25, 1.0, 1.0)) for i, (c1, c2) in enumerate(
+        (("#7d99aa", "#8aa5b5"), ("#7090a2", "#7e9cad")))]
+    Cb = COLL["GQ_Room_Bathroom"]
+    hw = WING["h"]
+    wing_win = (-1.0, -0.3, 1.2, 1.9)
+    wall_run("GQ_Wing_Wall_Back", "卫生间侧翼后墙", (WING["x0"], WING["y0"]), (WING["x1"], WING["y0"]), B, hw, [], rnd, EXT, Cb, root, wood, bath_int,
+             status="inferred", note="R1 只看到侧翼正面")
+    wall_run("GQ_Wing_Wall_Front", "卫生间侧翼正面墙（挂玉米）", (WING["x1"], WING["y1"]), (WING["x0"], WING["y1"]), B, hw, [], rnd, EXT, Cb, root, wood, bath_int,
+             note="R1、R8-a41：侧翼正面挂三串玉米")
+    wall_run("GQ_Wing_Wall_West", "卫生间侧翼西山墙（小窗）", (WING["x0"], WING["y1"]), (WING["x0"], WING["y0"]), B, hw, [wing_win], rnd, EXT, Cb, root, wood, bath_int,
+             gable=((WING["y1"] - WING["y0"]) / 2, WING["rise"]), note="R8-a42：侧翼山墙有格子窗，山墙上露出圆木头")
+    wall_run("GQ_Bathroom_Wall_East", "卫生间东墙（主屋西墙的卫生间一侧）", (-W / 2, WING["y0"]), (-W / 2, WING["y1"]), B, hw,
+             [hole_bath], rnd, EXT, Cb, root, None, bath_int, offsets=(0.13,), int_name="GQ_Bathroom_Wall_East_Boards",
+             int_cn="卫生间东墙（浅蓝灰色墙板）")
+    # 卧室隔墙（两面都是蓝灰色木板，开门洞）
+    wall_run("GQ_Partition_Bedroom", "客厅与卧室之间的隔墙", (PART_X, -IN_Y), (PART_X, IN_Y), B, H, [(BED_DOOR[0], BED_DOOR[1], 0.0, 2.05)],
+             rnd, EXT, COLL["GQ_Room_Bedroom"], root, None, inner, offsets=(-0.06, 0.06), shrink=0.0, int_name="GQ_Partition_Bedroom_Boards",
+             int_cn="卧室隔墙（蓝灰色木板，两面）")
+
+    # ---- 转角交叉圆木头和正面粗细不一的木柱（R1、R2）
+    bm = bmesh.new()
+    for (cx, cy, h) in ((W / 2, -D / 2, H), (W / 2, D / 2, H), (WING["x0"], WING["y0"], hw), (WING["x0"], WING["y1"], hw)):
+        z = B + 0.15
+        k = 0
+        while z < B + h - 0.05:
+            r = rnd.uniform(0.12, 0.15)
+            ext_len = rnd.uniform(0.25, 0.4)
+            if k % 2 == 0:
+                bm_cyl(bm, r, r, 0.6 + ext_len, loc=(cx + math.copysign(ext_len / 2, cx), cy, z), rot=(0, math.pi / 2, 0), seg=10, mi=0)
+                bm_cyl(bm, r * 0.95, r * 0.95, 0.01, loc=(cx + math.copysign(ext_len + 0.3, cx), cy, z), rot=(0, math.pi / 2, 0), seg=10, mi=1)
+            else:
+                bm_cyl(bm, r, r, 0.6 + ext_len, loc=(cx, cy + math.copysign(ext_len / 2, cy), z), rot=(math.pi / 2, 0, 0), seg=10, mi=0)
+                bm_cyl(bm, r * 0.95, r * 0.95, 0.01, loc=(cx, cy + math.copysign(ext_len + 0.3, cy), z), rot=(math.pi / 2, 0, 0), seg=10, mi=1)
+            z += 2 * r + 0.02
+            k += 1
+    new_obj("GQ_Corner_LogEnds", bm, EXT, [log_m, cut_m], parent=root,
+            props=dict(cn="转角交叉的圆木头", status="inferred", note="R1 侧翼转角可见圆木头；其余转角按此推测"))
+    bm = bmesh.new()
+    for x, r0, lean in ((4.32, 0.17, 0.03), (1.75, 0.13, -0.025), (-1.75, 0.15, 0.02), (-4.38, 0.19, -0.03)):
+        bm_tube(bm, [(x, D / 2 + 0.16, B - 0.05), (x + lean * 0.5, D / 2 + 0.16, B + 1.6), (x + lean, D / 2 + 0.16, top - 0.15)],
+                [r0 * 1.08, r0, r0 * 0.94], seg=10, mi=0)
+    new_obj("GQ_Posts_Irregular", bm, EXT, [post_m], parent=root, smooth_shade=True,
+            props=dict(cn="正面粗细不一、略倾斜的木柱", status="observed", note="R2：门窗两侧深色粗木柱；根数为估算"))
+
+    # ---- 门：绿色门框里的深红色对开门，上部竖条窗（R2）；门向外打开，可以进入
+    bm = bmesh.new()
+    for x in (DOOR_X[0] - 0.06, DOOR_X[1] + 0.06):
+        bm_cube(bm, (0.12, 0.26, 2.16), loc=(x, D / 2 + 0.02, B + 1.08))
+    bm_cube(bm, (DOOR_X[1] - DOOR_X[0] + 0.24, 0.26, 0.12), loc=((DOOR_X[0] + DOOR_X[1]) / 2, D / 2 + 0.02, B + 2.16))
+    bm_cube(bm, (DOOR_X[1] - DOOR_X[0], 0.24, 0.04), loc=((DOOR_X[0] + DOOR_X[1]) / 2, D / 2 + 0.02, B + 0.02))
+    new_obj("GQ_Door_Front_Frame_Green", bm, EXT, [green], parent=root, props=dict(cn="正门绿色门框", status="observed", note="R2"))
+    dw = (DOOR_X[1] - DOOR_X[0]) / 2
+    for side, hinge, ang in (("East", DOOR_X[1], -1.0), ("West", DOOR_X[0], 1.0)):
+        bm = bmesh.new()
+        s = -1 if side == "East" else 1  # 门扇从铰链向门洞中间延伸的方向
+        bm_cube(bm, (dw - 0.01, 0.06, 2.08), loc=(s * dw / 2, 0, 1.04), mi=0)
+        bm_cube(bm, (dw - 0.16, 0.065, 0.62), loc=(s * dw / 2, 0, 1.62), mi=2)
+        for i in range(5):
+            bm_cube(bm, (0.045, 0.075, 0.62), loc=(s * (0.12 + i * (dw - 0.24) / 4), 0, 1.62), mi=1)
+        for z in (0.35, 0.8, 1.2):
+            bm_cube(bm, (dw - 0.06, 0.08, 0.06), loc=(s * dw / 2, 0, z), mi=1)
+        bm_torus(bm, 0.04, 0.008, loc=(s * (dw - 0.1), 0.05, 1.05), rot=(math.pi / 2, 0, 0), seg=10, rseg=4, mi=3)
+        ob = new_obj(f"GQ_Door_Front_Leaf_{side}", bm, EXT, [door_red, slat_red, dark, metal], parent=root,
+                     props=dict(cn="深红色对开木门（上部竖条窗，已打开）", status="observed", note="R2；门扇内侧细节为推测"))
+        ob.location = (hinge, D / 2 + 0.16, B)
+        ob.rotation_euler = (0, 0, ang * math.radians(100))
+    DOOR_PASSAGES.append(("正门", "GQ_House_Root", (DOOR_X[0] + 0.1, DOOR_X[1] - 0.1, D / 2 - 1.2, D / 2 + 1.0, B + 0.05, B + 2.0)))
+
+    # ---- 正面两扇圆角格子窗，贴红窗花（R2）；卫生间小格子窗（R8-a42）
+    for nm, (x0, x1) in zip(("West_LivingRoom", "East_Bedroom"), WIN_FRONT):
+        bm = bmesh.new()
+        lattice_window(bm, x1 - x0, WIN_Z[1] - WIN_Z[0], depth=0.34)
+        bmesh.ops.transform(bm, matrix=Matrix.Translation(((x0 + x1) / 2, D / 2, B + (WIN_Z[0] + WIN_Z[1]) / 2)), verts=bm.verts[:])
+        new_obj(f"GQ_Window_Front_{nm}", bm, EXT, [frame_tan, paper, lat_m, red_paper], parent=root,
+                props=dict(cn="圆角方框格子窗（贴红窗花）", status="observed", note="R2：门两侧各一扇"))
+    bm = bmesh.new()
+    lattice_window(bm, 0.7, 0.7, r=0.14)
+    bmesh.ops.transform(bm, matrix=Matrix.Translation((WING["x0"], -0.65, B + 1.55)) @ Matrix.Rotation(math.pi / 2, 4, "Z"), verts=bm.verts[:])
+    new_obj("GQ_Window_Bathroom_West", bm, EXT, [frame_tan, paper, lat_m, red_paper], parent=root,
+            props=dict(cn="卫生间格子小窗", status="inferred", note="R8-a42 积木侧翼山墙下有格子窗；动画里看不到"))
+    bm = bmesh.new()
+    round_window(bm, rr, 0.6, 0.26)
+    bmesh.ops.transform(bm, matrix=Matrix.Translation((rx, -D / 2 + 0.065, B + rz)), verts=bm.verts[:])
+    new_obj("GQ_Window_Back_Round_Kitchen", bm, EXT, [mat_noise("Wood_Window_Frame_Orange", "#a5622f", "#b9733a", scale=10),
+                                                    mat("Glass_Clear", "#cfe6f2", rough=0.05, transmission=0.9),
+                                                    mat("Wood_Lattice_Orange", "#c4772f", rough=0.6), frame_tan], parent=root,
+            props=dict(cn="厨房圆形格子窗", status="observed", note="R3、U7：水槽右侧的圆形格子窗"))
+
+    # ---- 正面露台：一排顺着前后方向的原木，前沿露出原木端头（R2）；窗下石头矮墙（R2）
+    bm = bmesh.new()
+    x = -W / 2 - 0.2 + 0.13
+    while x < W / 2 + 0.2:
+        r = rnd.uniform(0.12, 0.14)
+        bm_cyl(bm, r, r, DECK_Y - D / 2 + 0.05, loc=(x, (D / 2 + DECK_Y) / 2, B - r), rot=(math.pi / 2, 0, 0), seg=10, mi=0)
+        bm_cyl(bm, r * 0.95, r * 0.95, 0.01, loc=(x, DECK_Y + 0.03, B - r), rot=(math.pi / 2, 0, 0), seg=10, mi=1)
+        x += 0.265
+    new_obj("GQ_Front_Deck_Logs", bm, EXT, [log_m, cut_m], parent=root,
+            props=dict(cn="门前原木露台（前沿露出原木端头）", status="observed", note="R2"))
+    bm = bmesh.new()
+    for x0, x1 in ((-W / 2 + 0.1, DOOR_X[0] - 0.4), (DOOR_X[1] + 0.4, W / 2 - 0.1)):
+        n = int((x1 - x0) / 0.42)
+        for i in range(n):
+            for rrow in range(2):
+                xx = x0 + (i + 0.5 + 0.5 * (rrow % 2)) * (x1 - x0) / (n + 0.5)
+                bm_ico(bm, rnd.uniform(0.2, 0.26), loc=(xx, D / 2 + 0.36, B + 0.18 + rrow * 0.33), scale=(1.05, 0.6, 0.72), subdiv=1, rough=0.2,
+                       seed=i + 10 * rrow, mi=rnd.randrange(2))
+    new_obj("GQ_Front_Stone_Planters", bm, EXT, stone_ms, parent=root,
+            props=dict(cn="窗下石头矮墙", status="observed", note="R2：门两侧窗下、栏杆后面是一排青灰色石头"))
+
+    # ---- 中间木楼梯 + 树枝扶手（R1、R2）
+    sx0, sx1 = DOOR_X[0] - 0.1, DOOR_X[1] + 0.1
+    zf = lg((sx0 + sx1) / 2, DECK_Y + 1.8)
+    n_steps = max(3, int(round((B - zf) / 0.19)))
+    rise = (B - zf) / n_steps
+    zf = lg((sx0 + sx1) / 2, DECK_Y + n_steps * 0.3)
+    rise = (B - zf) / n_steps
+    y_end = DECK_Y + n_steps * 0.3
+    bm = bmesh.new()
+    for k in range(1, n_steps + 1):
+        ztop = B - k * rise
+        y0 = DECK_Y + (k - 1) * 0.3
+        bm_cube(bm, (sx1 - sx0, 0.34, 0.07), loc=((sx0 + sx1) / 2, y0 + 0.15, ztop - 0.035), rot=(0, rnd.uniform(-0.01, 0.01), 0), mi=0)
+        bm_cube(bm, (sx1 - sx0 - 0.1, 0.3, max(0.05, ztop - 0.07 - zf + 0.2)), loc=((sx0 + sx1) / 2, y0 + 0.15, (ztop - 0.07 + zf - 0.2) / 2), mi=1)
+    for x in (sx0 - 0.05, sx1 + 0.05):
+        bm_tube(bm, [(x, DECK_Y - 0.05, B - 0.1), (x, y_end + 0.05, zf - 0.05)], [0.11, 0.11], seg=10, mi=2)
+    new_obj("GQ_Front_Stairs", bm, EXT, [mat_noise("Wood_Stair_Tread", "#a8825a", "#b9926a", scale=8), mat_noise("Wood_Stair_Riser", "#6a4a34", "#7a573e", scale=8), log_m],
+            parent=root, props=dict(cn=f"正门木楼梯（{n_steps} 级）", status="observed", note="R1、R2：露台中间一道木楼梯；级数按地面高差计算"))
+
+    def branch(bm, p0, p1, r, wob=0.03):
+        p0, p1 = Vector(p0), Vector(p1)
+        n = 4
+        pts = [p0.lerp(p1, i / n) + (Vector((rnd.uniform(-wob, wob), rnd.uniform(-wob, wob), rnd.uniform(-wob, wob))) if 0 < i < n else Vector())
+               for i in range(n + 1)]
+        bm_tube(bm, pts, [r * rnd.uniform(0.9, 1.1) for _ in pts], seg=8)
+    bm = bmesh.new()
+    yr = DECK_Y - 0.1
+    hr = 0.95
+    posts = [(-W / 2 - 0.1, yr), (-3.1, yr), (sx0 - 0.05, yr), (sx1 + 0.05, yr), (2.0, yr), (W / 2 + 0.1, yr),
+             (-W / 2 - 0.1, D / 2 + 0.7), (W / 2 + 0.1, D / 2 + 0.7)]
+    for (px, py) in posts:
+        branch(bm, (px, py, B - 0.1), (px, py, B + hr), rnd.uniform(0.07, 0.1), wob=0.015)
+        bm_sphere(bm, (0.1, 0.1, 0.08), loc=(px, py, B + hr + 0.02), seg=10, rings=6)
+    for (a, b) in ((0, 1), (1, 2), (3, 4), (4, 5), (0, 6), (5, 7)):
+        (ax, ay), (bx, by) = posts[a], posts[b]
+        branch(bm, (ax, ay, B + hr - 0.05), (bx, by, B + hr - 0.05), 0.065)
+        branch(bm, (ax, ay, B + 0.45), (bx, by, B + 0.5), 0.045)
+    for x in (sx0 - 0.05, sx1 + 0.05):
+        branch(bm, (x, y_end - 0.1, zf - 0.1), (x, y_end - 0.1, zf + hr), 0.085, wob=0.015)
+        bm_sphere(bm, (0.1, 0.1, 0.08), loc=(x, y_end - 0.1, zf + hr + 0.02), seg=10, rings=6)
+        branch(bm, (x, yr, B + hr - 0.05), (x, y_end - 0.1, zf + hr - 0.05), 0.065)
+        branch(bm, (x, yr, B + 0.45), (x, y_end - 0.1, zf + 0.45), 0.045)
+    new_obj("GQ_Deck_Stair_Railings", bm, EXT, [rail_m], parent=root, smooth_shade=True,
+            props=dict(cn="露台和楼梯的天然树枝扶手", status="observed", note="R1、R2：浅色树枝扶手，立柱顶端圆头"))
+    DOOR_PASSAGES.append(("正门楼梯", "GQ_House_Root", (sx0 + 0.2, sx1 - 0.2, DECK_Y - 0.3, y_end, zf + 0.3, B + 2.0)))
+
+    # ---- 屋檐下的装饰：辣椒串、玉米串、葫芦、圆形小牌（R1、R2）
+    bm = bmesh.new()
+    for x, n in ((3.85, 15), (1.45, 13), (-1.4, 9)):
+        for i in range(n):
+            bm_cyl(bm, 0.05, 0.0, 0.22, loc=(x + math.sin(i * 1.9) * 0.06, D / 2 + 0.24 + math.cos(i * 1.3) * 0.04, top - 0.15 - i * 0.1),
+                   rot=(math.pi + math.sin(i) * 0.3, 0, 0), seg=6)
+    new_obj("GQ_Eave_Chili_Strings", bm, EXT, [chili], parent=root, props=dict(cn="屋檐下的红辣椒串", status="observed", note="R2：门边、窗边"))
+    bm = bmesh.new()
+    for x in (-6.45, -5.75, -5.05):
+        for i in range(6):
+            a = (i - 2.5) * 0.25
+            bm_sphere(bm, (0.075, 0.075, 0.22), loc=(x + math.sin(a) * 0.14, WING["y1"] + 0.2, B + hw - 0.7 - abs(i - 2.5) * 0.06),
+                      rot=(0, a, 0), seg=10, rings=8, mi=0)
+            bm_cyl(bm, 0.03, 0.06, 0.18, loc=(x + math.sin(a) * 0.05, WING["y1"] + 0.2, B + hw - 0.45), rot=(0, a * 0.6, 0), seg=6, mi=1)
+        bm_cyl(bm, 0.01, 0.01, 0.25, loc=(x, WING["y1"] + 0.2, B + hw - 0.27), seg=4, mi=1)
+    bm_sphere(bm, (0.12, 0.12, 0.16), loc=(-1.75, D / 2 + 0.3, B + 1.85), seg=12, rings=8, mi=0)
+    bm_sphere(bm, (0.16, 0.16, 0.2), loc=(-1.75, D / 2 + 0.3, B + 1.55), seg=12, rings=8, mi=0)
+    new_obj("GQ_Eave_Corn_And_Gourd", bm, EXT, [corn_m, husk], parent=root, smooth_shade=True,
+            props=dict(cn="侧翼墙上的三串玉米、门边的葫芦", status="observed", note="R1、R8-a41：侧翼正面三串玉米；R2：右窗左侧黄色葫芦"))
+    bm = bmesh.new()
+    for x, z, r in ((-1.25, 2.45, 0.11), (-1.25, 2.1, 0.07), (1.2, 2.5, 0.09)):
+        bm_cyl(bm, r, r, 0.03, loc=(x, D / 2 + 0.14, B + z), rot=(math.pi / 2, 0, 0), seg=16)
+    new_obj("GQ_Wall_Plaques", bm, EXT, [mat("Metal_Plaque_Grey", "#9aa5a6", metal=0.5, rough=0.4)], parent=root,
+            props=dict(cn="门边墙上的圆形小牌", status="observed", note="R2"))
+
+    # ---- 屋顶（可隐藏）：主屋 + 侧翼。木板顺坡铺、分三层、两端上翘（东端翘得更高），补丁、苔藓、树枝（R1、R2、R8-a41）
+    x0m, x1m = -W / 2 - 0.7, W / 2 + 0.7
+    S = roof_surface(x0m, x1m, 0.0, D / 2, ROOF_OV, top, ROOF_RISE, lift_hi=0.65, lift_lo=0.4)
+    bm = bmesh.new()
+    roof_boards(bm, S, x0m, x1m, rnd, len(roof_m))
+    for side in (-1, 1):
+        surf_box(bm, lambda u, xx, side=side: S(xx, side, u) + Vector((0, 0, 0.15)), 0.0, 0.07, x0m - 0.1, x1m + 0.1, 0.05, nu=1, nv=12, mi=2)
+    new_obj("GQ_Roof_Main_Boards", bm, COLL["GQ_House_Roof_Removable"], roof_m, parent=root,
+            props=dict(cn="主屋顶：蓝灰色木板（可隐藏）", status="observed", note="R1、R2：蓝灰色长短不一的木板；背面坡看不到，按正面推测"))
+    bm_p, bm_m = bmesh.new(), bmesh.new()
+    roof_extras(bm_p, bm_m, S, x0m, x1m, rnd, 16, n_moss=34, n_twig=7)
+    new_obj("GQ_Roof_Patches", bm_p, ROOF, patch_m, parent=root, props=dict(cn="屋顶补丁木板", status="observed", note="R1、R2：浅色补丁板、斜放的木板"))
+    new_obj("GQ_Roof_Moss_Twigs", bm_m, ROOF, moss_m, parent=root, props=dict(cn="屋顶苔藓、草和树枝", status="observed", note="R2"))
+    under = mat_noise("Wood_Ceiling_Underside", "#6e5a4a", "#7d6957", scale=8, stretch=(0.3, 1.0, 1.0))
+    bm = bmesh.new()
+    for side in (-1, 1):
+        surf_box(bm, lambda u, xx, side=side: S(xx, side, u) - Vector((0, 0, 0.03)), 0.0, 1.0, x0m, x1m, 0.04, nu=6, nv=12, mi=0)
+    # 檩条：顺屋脊方向的圆木，伸出山墙，端头露在上翘的屋檐下（R2、R8-a41/a42）
+    for side in (-1, 1):
+        for u in ((0.0, 0.33, 0.66, 0.95) if side > 0 else (0.33, 0.66, 0.95)):
+            p = S(0.0, side, u)
+            r = rnd.uniform(0.13, 0.16)
+            bm_cyl(bm, r, r, x1m - x0m + 0.5, loc=(0, p.y, p.z - r - 0.03), rot=(0, math.pi / 2, 0), seg=12, mi=1)
+            for ex in (x0m - 0.25, x1m + 0.25):
+                bm_cyl(bm, r * 0.95, r * 0.95, 0.01, loc=(ex + math.copysign(0.005, ex), p.y, p.z - r - 0.03), rot=(0, math.pi / 2, 0), seg=12, mi=2)
+    # 室内横梁（R4：屋里看得到横梁）
+    for x in (-3.0, -0.9, 3.0):
+        bm_cyl(bm, 0.12, 0.12, D, loc=(x, 0, top + 0.05), rot=(math.pi / 2, 0, 0), seg=10, mi=1)
+    new_obj("GQ_Roof_Underside_Purlins_Beams", bm, ROOF, [under, log_m, cut_m], parent=root,
+            props=dict(cn="屋顶内衬板、檩条（端头露出山墙）和室内横梁", status="observed", note="R3、R4：室内能看到斜屋顶木板和横梁"))
+    # 侧翼屋顶（卫生间）：屋脊也顺东西向，西端翘起，屋脊比主屋檐低
+    wy = (WING["y0"] + WING["y1"]) / 2
+    whalf = (WING["y1"] - WING["y0"]) / 2
+    x0w, x1w = WING["x0"] - 0.6, -W / 2 - 0.05
+    Sw = roof_surface(x0w, x1w, wy, whalf, 0.6, B + hw, WING["rise"], lift_hi=0.0, lift_lo=0.45)
+    bm = bmesh.new()
+    roof_boards(bm, Sw, x0w, x1w, rnd, len(roof_m), tiers=2)
+    for side in (-1, 1):
+        surf_box(bm, lambda u, xx, side=side: Sw(xx, side, u) + Vector((0, 0, 0.12)), 0.0, 0.08, x0w - 0.1, x1w, 0.05, nu=1, nv=6, mi=2)
+        surf_box(bm, lambda u, xx, side=side: Sw(xx, side, u) - Vector((0, 0, 0.03)), 0.0, 1.0, x0w, x1w, 0.04, nu=4, nv=6, mi=len(roof_m))
+    for side, u in ((1, 0.0), (1, 0.5), (-1, 0.5), (1, 0.95), (-1, 0.95)):
+        p = Sw(-6.0, side, u)
+        bm_cyl(bm, 0.12, 0.12, x1w - x0w + 0.3, loc=((x0w + x1w) / 2 - 0.15, p.y, p.z - 0.15), rot=(0, math.pi / 2, 0), seg=10, mi=len(roof_m) + 1)
+        bm_cyl(bm, 0.115, 0.115, 0.01, loc=(x0w - 0.31, p.y, p.z - 0.15), rot=(0, math.pi / 2, 0), seg=10, mi=len(roof_m) + 2)
+    new_obj("GQ_Roof_Wing_Boards", bm, ROOF, roof_m + [under, log_m, cut_m], parent=root,
+            props=dict(cn="卫生间侧翼屋顶（可隐藏）", status="observed", note="R1、R8-a41：右侧较低的副屋顶，山墙露出圆木头"))
+    bm_p, bm_m = bmesh.new(), bmesh.new()
+    roof_extras(bm_p, bm_m, Sw, x0w, x1w, rnd, 4, tiers=2, n_moss=10, n_twig=2)
+    new_obj("GQ_Roof_Wing_Patches", bm_p, ROOF, patch_m, parent=root, props=dict(cn="侧翼屋顶补丁", status="observed", note="R1"))
+    new_obj("GQ_Roof_Wing_Moss", bm_m, ROOF, moss_m, parent=root, props=dict(cn="侧翼屋顶苔藓", status="inferred"))
+    # 红砖烟囱 + 灰色烟囱帽（R1、R2：高高的红砖烟囱，在主屋顶靠侧翼一侧、屋脊后面）
+    bm = bmesh.new()
+    cxh, cyh = -3.4, -2.3
+    z = top + 0.2
+    lean = 0.0
+    while z < top + 4.3:
+        lean += rnd.uniform(-0.006, 0.01)
+        bm_cube(bm, (0.72 + rnd.uniform(-0.02, 0.02), 0.72 + rnd.uniform(-0.02, 0.02), 0.2), loc=(cxh + lean, cyh + rnd.uniform(-0.01, 0.01), z + 0.1), mi=0)
+        z += 0.2
+    bm_cube(bm, (0.86, 0.86, 0.12), loc=(cxh + lean, cyh, z + 0.06), mi=1)
+    bm_cube(bm, (0.62, 0.62, 0.3), loc=(cxh + lean, cyh, z + 0.27), mi=1)
+    bm_cube(bm, (0.92, 0.92, 0.1), loc=(cxh + lean, cyh, z + 0.47), mi=1)
+    new_obj("GQ_Chimney_RedBrick", bm, ROOF, [brick, cap_m], parent=root,
+            props=dict(cn="红砖烟囱和灰色烟囱帽", status="observed", note="R1、R2；烟囱根部被屋顶挡住，为推测"))
+    # 电视天线（R1、R8-a41：侧翼屋顶上）
+    bm = bmesh.new()
+    pz = Sw(-5.35, 1, 0.0).z + 0.1
+    bm_cyl(bm, 0.025, 0.02, 1.9, loc=(-5.35, wy, pz + 0.95), seg=8)
+    for k, (zz, ln) in enumerate(((1.2, 1.0), (1.5, 0.8), (1.75, 0.6))):
+        bm_cyl(bm, 0.012, 0.012, ln, loc=(-5.35, wy, pz + zz), rot=(0, math.pi / 2, 0.5), seg=6)
+        for s in (-1, 1):
+            bm_cyl(bm, 0.008, 0.008, 0.28, loc=(-5.35 + s * ln * 0.44 * math.cos(0.5), wy + s * ln * 0.44 * math.sin(0.5), pz + zz + 0.12), rot=(0.25 * s, 0, 0), seg=4)
+    new_obj("GQ_TV_Antenna", bm, ROOF, [metal], parent=root, props=dict(cn="电视天线", status="observed", note="R1、R8-a41"))
+
+    build_house_interior(root, gz)
+    build_yard(root, lg, y_end)
     return root
 
 
-def build_house_interior(root, INT, inner, B):
-    W, D = W_HOUSE, D_HOUSE
+def build_house_interior(root, gz):
+    """三个室内空间：A 客厅/厨房/餐厅（开放）、B 卧室（隔墙后）、C 卫生间（侧翼，有自己的墙和门）。"""
+    B = FOUND
+    ROOM = {"Kitchen": COLL["GQ_Room_Kitchen_Dining"], "Bedroom": COLL["GQ_Room_Bedroom"], "Bathroom": COLL["GQ_Room_Bathroom"]}
 
-    INFERRED_POS = ("Kang", "Slippers", "Storage_Shelf", "Cupboard", "Lantern", "Low_Table", "Chest", "Armchair", "PaperCut")
-
-    def obj(name, cn, mats, build, loc=(0, 0, 0), rot=(0, 0, 0), status="observed", note=None, smooth_shade=False):
+    def obj(room, name, cn, mats, build, loc=(0, 0, 0), rot=(0, 0, 0), status="observed", note=None, smooth_shade=False,
+            floor=False, pos="observed", overlap=True):
         bm = bmesh.new()
         build(bm)
-        ob = new_obj(name, bm, INT, mats, smooth_shade=smooth_shade, parent=root,
-                     props=dict(cn=cn, status=status, note=note))
-        # 位置依据：灶台一侧（冰箱→水盆→灶台→圆窗）的相对顺序来自 U5/U7；炕、储物架、碗柜、马灯靠哪面墙看不到
-        ob["position_status"] = "inferred" if any(k in name for k in INFERRED_POS) else "observed"
+        ob = new_obj(name, bm, ROOM[room], mats, smooth_shade=smooth_shade, parent=root, props=dict(cn=cn, status=status, note=note))
+        ob["room"] = room
+        ob["position_status"] = pos
+        if floor:
+            ob["floor_item"] = True
+            ob["floor_z_world"] = gz + B
+            ob["overlap_check"] = overlap
         ob.location = (loc[0], loc[1], B + loc[2])
         ob.rotation_euler = rot
         return ob
 
-    # 地面：灰色不规则石板（U4）
-    obj("GQ_Int_Floor_StoneTiles", "石板地面", [mat_stone_floor()],
-        lambda bm: bm_plane(bm, W - 0.3, D - 0.3, loc=(0, 0, 0.01), sub=4), note="U4")
-    # 土炕（U6）：木框、竹席、蓝底白花被子、红棕枕头；炕边红拖鞋
-    kx, ky = -2.95, -1.95
+    def soft(ob, w=0.04, seg=2):
+        md = ob.modifiers.new("Bevel_Soft", "BEVEL")
+        md.width = w
+        md.segments = seg
+        return ob
 
-    def kang(bm):
-        bm_cube(bm, (2.8, 1.9, 0.62), loc=(0, 0, 0.31), mi=0)
-        bm_cube(bm, (2.9, 0.1, 0.12), loc=(0, 0.98, 0.62), mi=1)
-        bm_cube(bm, (0.1, 1.95, 0.12), loc=(1.42, 0, 0.62), mi=1)
-    obj("GQ_Int_Kang_Base", "土炕", [mat_noise("Kang_Brick_Plaster", "#8c6a52", "#9b7a60", scale=4),
-                                    mat_noise("Wood_Kang_Edge", "#6b4a34", "#7d5940", scale=8)], kang, loc=(kx, ky, 0),
-        note="U6：木框土炕；尺寸为估算")
-    obj("GQ_Int_Kang_BambooMat", "竹席（绿边）", [mat_stripes("Bamboo_Mat", "#c7b36a", "#a8934e", scale=60, axis="X"),
-                                              mat("Bamboo_Mat_Green_Edge", "#4f8a3a")],
-        lambda bm: (bm_plane(bm, 2.7, 1.8, loc=(0, 0, 0), mi=0), bm_cube(bm, (2.75, 0.1, 0.01), loc=(0, 0.88, 0.003), mi=1),
-                    bm_cube(bm, (2.75, 0.1, 0.01), loc=(0, -0.88, 0.003), mi=1)), loc=(kx, ky, 0.63), note="U6")
-
-    def quilt(bm):
-        ret = bmesh.ops.create_grid(bm, x_segments=14, y_segments=12, size=1.0)
-        for v in ret["verts"]:
-            x, y = v.co.x * 0.85, v.co.y * 0.9
-            edge = min(1.0, (1 - abs(v.co.x)) * 6, (1 - abs(v.co.y)) * 6)
-            v.co = Vector((x, y, 0.06 + 0.22 * edge + 0.05 * math.sin(x * 6) * math.cos(y * 5)))
-        bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=0.03)
-    obj("GQ_Int_Kang_Quilt", "蓝底白花打补丁的被子", [mat_quilt()], quilt, loc=(kx + 0.3, ky + 0.05, 0.63),
-        smooth_shade=True, note="U6：蓝底白花，带蓝色、紫色补丁")
-    obj("GQ_Int_Kang_Pillow", "红棕色枕头", [mat("Fabric_Pillow_Red", "#8e2f2a", rough=0.85)],
-        lambda bm: bm_cube(bm, (0.32, 0.65, 0.18), loc=(0, 0, 0.09)), loc=(kx - 1.05, ky + 0.05, 0.63), note="U6；E44：枕头一头靠墙")
-    obj("GQ_Int_Slippers_Red", "红拖鞋", [mat("Rubber_Slipper_Red", "#c4322b", rough=0.6)],
-        lambda bm: (bm_cube(bm, (0.11, 0.27, 0.04), loc=(-0.08, 0, 0.02)), bm_cube(bm, (0.11, 0.27, 0.04), loc=(0.1, 0.03, 0.02))),
-        loc=(kx + 0.6, ky + 1.25, 0), note="U6")
-
-    # 《冬日乐翻天》第 44 集室内画面（E44）：炕头靠墙，墙上挂日历、旧衣服、辣椒串，旁边挂蒜辫；
-    # 炕头边放绿色电话和水杯。对面墙有贴红色“春”字窗花的格子窗，窗下有矮木桌和红棕色木箱，角落一张绿色单人沙发。
-    wx = -W / 2 + 0.2  # 西墙内表面附近
-    obj("GQ_Int_Wall_Calendar", "墙上的日历", [mat_noise("Wood_Calendar_Board", "#9b7a52", "#ab8a60", scale=8), mat("Paper_Calendar", "#efe8d6")],
-        lambda bm: (bm_cube(bm, (0.03, 0.42, 0.55), loc=(0, 0, 0), mi=0), bm_cube(bm, (0.012, 0.36, 0.4), loc=(0.02, 0, -0.04), mi=1)),
-        loc=(wx, -1.25, 1.75), note="E44")
-    obj("GQ_Int_Hanging_Clothes", "墙上挂的旧衣服", [mat_noise("Fabric_Old_Grey", "#9aa0a6", "#b0b5ba", scale=12)],
-        lambda bm: (bm_cube(bm, (0.06, 0.42, 1.0), loc=(0, 0, 0)), bm_cube(bm, (0.05, 0.12, 0.9), loc=(0, -0.26, 0.02)),
-                    bm_cube(bm, (0.05, 0.12, 0.9), loc=(0, 0.26, 0.02))), loc=(wx + 0.02, -0.45, 1.7), note="E44")
-    obj("GQ_Int_Chili_String_Bedside", "炕边墙上的辣椒串", [MATS.get("Chili_Red") or mat("Chili_Red", "#c8241c", rough=0.45)],
-        lambda bm: [bm_cyl(bm, 0.045, 0.0, 0.2, loc=(math.sin(i * 1.3) * 0.05, math.cos(i * 1.7) * 0.06, -i * 0.1), rot=(math.pi, 0, 0), seg=6)
-                    for i in range(14)], loc=(wx + 0.06, 0.05, 2.55), note="E44")
-    obj("GQ_Int_Garlic_Braid", "蒜辫", [mat("Garlic_White", "#ece6da", rough=0.6)],
-        lambda bm: [bm_sphere(bm, (0.06, 0.06, 0.055), loc=(math.sin(i * 2.1) * 0.03, 0, -i * 0.11), seg=10, rings=6) for i in range(12)],
-        loc=(wx + 0.07, 0.4, 2.6), smooth_shade=True, note="E44")
-    obj("GQ_Int_Phone_And_Glass", "炕头边的绿色电话和水杯", [mat("Phone_Teal", "#3e9a86", rough=0.4), mat("Glass_Cup", "#d8e6ea", rough=0.1, transmission=0.6),
-                                                       mat_noise("Wood_Ledge", "#8a6440", "#9c7550", scale=8)],
-        lambda bm: (bm_cube(bm, (0.45, 0.4, 0.05), loc=(0, 0, 0), mi=2), bm_cube(bm, (0.22, 0.17, 0.08), loc=(-0.05, 0, 0.065), mi=0),
-                    bm_cube(bm, (0.2, 0.05, 0.05), loc=(-0.05, -0.04, 0.13), rot=(0.4, 0, 0), mi=0),
-                    bm_cyl(bm, 0.035, 0.03, 0.11, loc=(0.13, 0.05, 0.08), seg=10, mi=1)), loc=(wx + 0.2, -0.75, 0.62), note="E44")
-    obj("GQ_Int_Window_PaperCut_Chun", "窗上的红色“春”字窗花", [mat("Paper_Red_Chun", "#cc2a24", rough=0.7)],
-        lambda bm: bm_cube(bm, (0.32, 0.01, 0.32), loc=(0, 0, 0), rot=(0, math.pi / 4, 0)), loc=(-3.05, D / 2 - 0.2, 2.25),
-        note="E44：格子窗上贴红色“春”字窗花；E44 的窗看起来比 U3 正面小方窗大（冲突），按 U3 尺寸贴在左窗上")
-    obj("GQ_Int_Low_Table", "窗下矮木桌", [mat_noise("Wood_Low_Table", "#a2703f", "#b5824d", scale=8)],
-        lambda bm: (bm_cube(bm, (0.9, 0.5, 0.05), loc=(0, 0, 0.45)),
-                    [bm_cube(bm, (0.06, 0.06, 0.43), loc=(sx * 0.38, sy * 0.19, 0.215)) for sx in (-1, 1) for sy in (-1, 1)]),
-        loc=(-2.85, D / 2 - 0.5, 0), note="E44")
-    obj("GQ_Int_Chest_Red", "红棕色木箱", [mat_noise("Wood_Chest_Red", "#7a3328", "#8c3e30", scale=8), mat("Steel_Pot", "#8f969c", metal=0.7, rough=0.35)],
-        lambda bm: (bm_cube(bm, (0.7, 0.45, 0.5), loc=(0, 0, 0.25), mi=0), bm_cube(bm, (0.08, 0.02, 0.06), loc=(0, -0.235, 0.4), mi=1)),
-        loc=(-1.85, D / 2 - 0.45, 0), note="E44")
-
-    def armchair(bm):
-        bm_cube(bm, (0.8, 0.75, 0.42), loc=(0, 0, 0.21))
-        bm_cube(bm, (0.8, 0.2, 0.55), loc=(0, 0.3, 0.68))
+    def legs(bm, w, d, h, t=0.05, mi=0):
         for sx in (-1, 1):
-            bm_cube(bm, (0.16, 0.75, 0.25), loc=(sx * 0.36, 0, 0.52))
-    ob = obj("GQ_Int_Armchair_Green", "绿色单人沙发", [mat("Fabric_Armchair_Green", "#3f9a5c", rough=0.8)], armchair,
-             loc=(-3.85, 2.3, 0), rot=(0, 0, math.pi * 0.75), note="E44：画面右侧角落的绿色沙发")
-    md = ob.modifiers.new("Bevel_Soft", "BEVEL")
-    md.width = 0.06
-    md.segments = 3
+            for sy in (-1, 1):
+                bm_cube(bm, (t, t, h), loc=(sx * (w / 2 - t / 2 - 0.02), sy * (d / 2 - t / 2 - 0.02), h / 2), mi=mi)
 
-    # 绿冰箱（U5）：圆角、上门冷冻室、白把手、门上两张纸条；地上易拉罐、陶罐
-    fx, fy = -1.05, -2.55
+    def chair(bm, mi=0):
+        bm_cube(bm, (0.44, 0.42, 0.04), loc=(0, 0, 0.45), mi=mi)
+        legs(bm, 0.44, 0.42, 0.43, 0.045, mi)
+        for sx in (-1, 1):
+            bm_cube(bm, (0.045, 0.045, 0.5), loc=(sx * 0.19, -0.19, 0.72), mi=mi)
+        for z in (0.68, 0.92):
+            bm_cube(bm, (0.42, 0.03, 0.1), loc=(0, -0.19, z), mi=mi)
+
+    def chili_string(bm, n, mi=0, dx=0.05):
+        for i in range(n):
+            bm_cyl(bm, 0.045, 0.0, 0.2, loc=(math.sin(i * 1.7) * dx, math.cos(i * 1.3) * 0.04, -i * 0.1), rot=(math.pi, 0, 0), seg=6, mi=mi)
+
+    wood_furn = mat_noise("Wood_Furniture_Brown", "#8a5a3a", "#9c6a46", scale=8)
+    wood_light = mat_noise("Wood_Shelf_Light", "#c19a6b", "#d2ac7d", scale=8)
+    steel = mat("Steel_Pot", "#8f969c", metal=0.7, rough=0.35)
+    iron = mat("Iron_Wok", "#26272a", metal=0.5, rough=0.45)
+    white = mat("Ceramic_White", "#f1efe8", rough=0.25)
+    blue = mat("Paint_Kitchen_Blue", "#3f8fc0", rough=0.55)
+    blue_d = mat("Paint_Kitchen_Blue_Dark", "#2f76a4", rough=0.55)
+    green_furn = mat("Fabric_Armchair_Green", "#3f9a5c", rough=0.8)
+    chili = MATS["Chili_Red"]
+    corn_m = MATS["Corn_Yellow"]
+    glow = mat("Lantern_Glow", "#ffd38a", emit="#ffb44a", emit_strength=3.0)
+    lamp_metal = mat("Lantern_Metal", "#5a5f62", metal=0.6, rough=0.4)
+
+    # =============== A. 客厅 / 厨房 / 餐厅（开放空间）x ∈ [-IN_X, PART_X]，依据 R3、R6、R8-a52/a56–a61 ===============
+    kx0, kx1 = -IN_X, PART_X - 0.075
+
+    def planks(bm, x0, x1, y0, y1, w=0.24, along="Y"):
+        rr = random.Random(int(x0 * 100 + y0 * 10))
+        if along == "Y":
+            x = x0
+            while x < x1 - 0.01:
+                ww = min(w, x1 - x)
+                bm_cube(bm, (ww - 0.008, y1 - y0, 0.05), loc=(x + ww / 2, (y0 + y1) / 2, -0.025), mi=rr.randrange(3))
+                x += w
+        else:
+            y = y0
+            while y < y1 - 0.01:
+                ww = min(w, y1 - y)
+                bm_cube(bm, (x1 - x0, ww - 0.008, 0.05), loc=((x0 + x1) / 2, y + ww / 2, -0.025), mi=rr.randrange(3))
+                y += w
+    floor_wood = [mat_noise(f"Wood_Floor_Plank_{i}", c1, c2, scale=8, stretch=(1.0, 0.25, 1.0)) for i, (c1, c2) in enumerate(
+        (("#8a6c50", "#98795a"), ("#7c5f45", "#8b6c50"), ("#977a5c", "#a68869")))]
+    obj("Kitchen", "GQ_Kitchen_Floor_Planks", "客厅/厨房木地板", floor_wood, lambda bm: planks(bm, kx0, kx1, -IN_Y, IN_Y),
+        note="R3：厨房地面是旧木地板（四季篇）；R8 积木为浅木色")
+    # 冰箱（R3、U5）：薄荷绿双门、上冷冻下冷藏、白把手、门上纸条，顶上放纸箱
+    fx, fy = 0.78, -IN_Y + 0.33
 
     def fridge(bm):
         ret = bmesh.ops.create_cube(bm, size=1.0)
         for v in ret["verts"]:
-            v.co = Vector((v.co.x * 0.7, v.co.y * 0.62, v.co.z * 1.7 + 0.85))
-        bmesh.ops.bevel(bm, geom=[e for e in bm.edges], offset=0.09, segments=4, affect="EDGES")
-        bm_cube(bm, (0.69, 0.02, 0.012), loc=(0, 0.315, 1.18), mi=1)
-        bm_cube(bm, (0.035, 0.05, 0.28), loc=(0.27, 0.34, 1.42), mi=2)
-        bm_cube(bm, (0.035, 0.05, 0.36), loc=(0.27, 0.34, 0.8), mi=2)
-        bm_cube(bm, (0.12, 0.005, 0.15), loc=(-0.08, 0.316, 0.95), rot=(0, 0.3, 0), mi=3)
-        bm_cube(bm, (0.13, 0.005, 0.13), loc=(0.1, 0.316, 0.7), rot=(0, -0.2, 0), mi=3)
-    obj("GQ_Int_Fridge_Green", "绿色冰箱", [mat("Paint_Fridge_Mint", "#7fb5a5", rough=0.45), mat("Fridge_Seam", "#5d8f80"),
-                                         mat("Plastic_Handle_White", "#f0efe8", rough=0.4), mat("Paper_Note", "#ece6d2")],
-        fridge, loc=(fx, fy, 0), smooth_shade=True, note="U5；尺寸为估算")
+            v.co = Vector((v.co.x * 0.66, v.co.y * 0.6, v.co.z * 1.65 + 0.825))
+        bmesh.ops.bevel(bm, geom=[e for e in bm.edges], offset=0.08, segments=3, affect="EDGES")
+        bm_cube(bm, (0.64, 0.02, 0.014), loc=(0, 0.3, 1.12), mi=1)
+        for z, hgt in ((1.38, 0.24), (0.8, 0.34)):
+            bm_cube(bm, (0.035, 0.05, hgt), loc=(-0.25, 0.33, z), mi=2)
+        bm_cube(bm, (0.12, 0.005, 0.14), loc=(0.12, 0.302, 1.35), rot=(0, 0.25, 0), mi=3)
+        bm_cube(bm, (0.12, 0.005, 0.12), loc=(0.15, 0.302, 0.85), rot=(0, -0.15, 0), mi=3)
+        bm_cube(bm, (0.36, 0.3, 0.22), loc=(-0.12, -0.05, 1.76), rot=(0, 0, 0.1), mi=4)
+        bm_cube(bm, (0.24, 0.2, 0.3), loc=(0.17, 0.0, 1.8), mi=5)
+    obj("Kitchen", "GQ_Kitchen_Fridge_Green_TwoDoor", "绿色双门冰箱（顶上放纸箱）",
+        [mat("Paint_Fridge_Mint", "#7fb5a5", rough=0.45), mat("Fridge_Seam", "#5d8f80"), mat("Plastic_Handle_White", "#f0efe8", rough=0.4),
+         mat("Paper_Note", "#ece6d2"), mat("Cardboard_Box_Red", "#8a3b2c", rough=0.8), mat("Cardboard_Box_Green", "#6f8a3c", rough=0.8)],
+        fridge, loc=(fx, fy, 0), smooth_shade=False, floor=True, note="R3、U5：冰箱在卧室门洞旁、靠后墙")
+    obj("Kitchen", "GQ_Kitchen_Clay_Jar", "陶罐", [mat_noise("Clay_Jar", "#7c6a58", "#8d7a66", scale=5)],
+        lambda bm: (bm_sphere(bm, (0.2, 0.2, 0.24), loc=(0, 0, 0.24), seg=16, rings=10), bm_cyl(bm, 0.09, 0.11, 0.08, loc=(0, 0, 0.5), seg=12)),
+        loc=(0.1, -IN_Y + 0.3, 0), smooth_shade=True, floor=True, note="R3：冰箱和水槽之间地上的陶罐")
 
-    def cans(bm):
-        rnd = random.Random(4)
-        for i in range(7):
+    def cans(bm, n=7, seed=4):
+        rr = random.Random(seed)
+        for i in range(n):
             lay = i in (2, 5)
-            bm_cyl(bm, 0.035, 0.035, 0.12, loc=(rnd.uniform(-0.25, 0.25), rnd.uniform(-0.15, 0.15), 0.035 if lay else 0.06),
-                   rot=((math.pi / 2, 0, rnd.uniform(0, 3)) if lay else (0, 0, 0)), seg=10, mi=i % 2)
-    obj("GQ_Int_Cans_On_Floor", "地上的易拉罐", [mat("Can_Red", "#c8302a", rough=0.35, metal=0.4), mat("Can_Silver", "#c9cdd2", rough=0.3, metal=0.8)],
-        cans, loc=(fx + 0.15, fy + 0.65, 0), note="U5、U7")
-    obj("GQ_Int_Clay_Jar", "陶罐（酸菜缸）", [mat_noise("Clay_Jar", "#5e4a3a", "#6f594a", scale=5)],
-        lambda bm: bm_sphere(bm, (0.25, 0.25, 0.3), loc=(0, 0, 0.3), seg=16, rings=10), loc=(fx - 0.6, fy + 0.1, 0),
-        smooth_shade=True, note="U5：冰箱旁的陶罐")
+            bm_cyl(bm, 0.035, 0.035, 0.12, loc=(rr.uniform(-0.25, 0.25), rr.uniform(-0.15, 0.15), 0.035 if lay else 0.06),
+                   rot=((math.pi / 2, 0, rr.uniform(0, 3)) if lay else (0, 0, 0)), seg=10, mi=i % 2)
+    can_ms = [mat("Can_Red", "#c8302a", rough=0.35, metal=0.4), mat("Can_Silver", "#c9cdd2", rough=0.3, metal=0.8)]
+    obj("Kitchen", "GQ_Kitchen_Cans_On_Floor", "地上的易拉罐", can_ms, cans, loc=(0.2, -1.95, 0), floor=True, overlap=False, note="R3、U5")
+    # 挂墙式白色水槽 + 水龙头 + 下水管 + 墙上旧报纸（R3）
+    sx = -0.5
 
-    # 青绿色灶台（U7）：橱柜、灶面、炒锅、汤锅、灰色水盆、柜里的小木桶
-    cx, cy = 2.25, -2.6
+    def sink(bm):
+        bm_cube(bm, (0.62, 0.42, 0.26), loc=(0, 0, 0.0), mi=0)
+        bm_cube(bm, (0.52, 0.32, 0.2), loc=(0, 0.0, 0.05), mi=3)
+        bm_cyl(bm, 0.025, 0.025, 0.55, loc=(0.05, -0.05, -0.4), seg=8, mi=1)
+        bm_cyl(bm, 0.015, 0.015, 0.25, loc=(0, -0.12, 0.3), seg=8, mi=1)
+        bm_cyl(bm, 0.012, 0.012, 0.14, loc=(0, -0.06, 0.42), rot=(math.pi / 2, 0, 0), seg=8, mi=1)
+        bm_cube(bm, (0.06, 0.03, 0.03), loc=(0, -0.17, 0.32), mi=1)
+        bm_cube(bm, (0.62, 0.012, 0.5), loc=(0.05, -0.2, 0.85), rot=(0, 0.04, 0), mi=2)
+        bm_cube(bm, (0.42, 0.012, 0.32), loc=(-0.15, -0.195, 0.45), rot=(0, -0.2, 0), mi=2)
+    soft(obj("Kitchen", "GQ_Kitchen_Sink_WallMounted", "挂墙式白色水槽和水龙头（墙上贴旧报纸）",
+             [white, steel, mat("Paper_Newspaper", "#cfccc2", rough=0.9), mat("Ceramic_Sink_Inner", "#dcdad2", rough=0.2)],
+             sink, loc=(sx, -IN_Y + 0.22, 0.72), note="R3"), 0.02)
+    obj("Kitchen", "GQ_Kitchen_Brick_Dado_Under_Sink", "水槽下的砖墙裙", [mat_brick("Brick_Dado_Dark", "#4c4f5a", "#585b66", "#3a3c44", scale=4.0)],
+        lambda bm: bm_cube(bm, (0.9, 0.04, 0.55), loc=(0, 0, 0.275)), loc=(sx, -IN_Y + 0.02, 0), note="R3：水槽下方深色砖")
+    # 圆窗下的挂杆和炊具（R3）
+    obj("Kitchen", "GQ_Kitchen_Utensil_Rail", "窗下挂杆上的锅铲、勺子、杯子", [wood_furn, steel, mat("Cup_Green", "#3f8a4a", rough=0.4)],
+        lambda bm: (bm_cube(bm, (0.9, 0.05, 0.05), loc=(0, 0, 0)),
+                    [bm_cube(bm, (0.04, 0.01, 0.3), loc=(-0.3 + i * 0.2, 0.03, -0.17), mi=1) for i in range(3)],
+                    bm_cyl(bm, 0.045, 0.04, 0.1, loc=(0.32, 0.05, -0.1), seg=10, mi=2)),
+        loc=(-1.6, -IN_Y + 0.04, 1.02), note="R3")
+    # 蓝色橱柜台面 + 吊柜（R3 画面右侧蓝色橱柜；R8-a57/a59：吊柜、微波炉、案板）
+    cx0, cx1 = -IN_X, -2.25
+    cy = -IN_Y + 0.32
 
-    def kitchen(bm):
-        bm_cube(bm, (3.6, 0.62, 0.82), loc=(0, 0, 0.41), mi=0)
-        bm_cube(bm, (3.7, 0.7, 0.07), loc=(0, 0, 0.85), mi=1)
-        for x in (-1.2, -0.4, 0.4):
-            bm_cube(bm, (0.72, 0.02, 0.6), loc=(x, 0.32, 0.4), mi=1)
-        bm_cube(bm, (0.72, 0.02, 0.6), loc=(1.25, 0.32, 0.4), mi=4)  # 开口
-    obj("GQ_Int_Kitchen_Counter_Teal", "青绿色灶台橱柜", [mat("Paint_Kitchen_Teal", "#4e9c93", rough=0.55),
-                                                     mat("Paint_Kitchen_Teal_Dark", "#3f857d", rough=0.55),
-                                                     mat("Steel_Pot", "#8f969c", metal=0.7, rough=0.35),
-                                                     mat("Iron_Wok", "#26272a", metal=0.5, rough=0.45),
-                                                     mat("Shadow_Opening", "#1c1c1c", rough=1.0)],
-        kitchen, loc=(cx, cy, 0), note="U7")
-    obj("GQ_Int_Wok", "黑色炒锅", [MATS["Iron_Wok"]],
-        lambda bm: (bm_sphere(bm, (0.36, 0.36, 0.16), loc=(0, 0, 0.16), seg=20, rings=8,
-                              deform=lambda co: Vector((co.x, co.y, min(co.z, 0.0)))),
-                    bm_cyl(bm, 0.025, 0.025, 0.3, loc=(0.48, 0, 0.18), rot=(0, math.pi / 2, 0), seg=6)),
-        loc=(cx + 0.55, cy, 0.89), smooth_shade=True, note="U7")
-    obj("GQ_Int_Pot", "汤锅", [MATS["Steel_Pot"]], lambda bm: bm_cyl(bm, 0.2, 0.18, 0.26, loc=(0, 0, 0.13), seg=16),
-        loc=(cx - 0.3, cy, 0.89), smooth_shade=True, note="U7")
-    obj("GQ_Int_Water_Basin", "灰色水盆", [MATS["Steel_Pot"]],
-        lambda bm: bm_cyl(bm, 0.36, 0.3, 0.28, loc=(0, 0, 0.14), seg=18), loc=(cx - 1.3, cy, 0.89), smooth_shade=True,
-        note="U7：冰箱旁的灰色水盆")
-    obj("GQ_Int_Small_Barrel", "橱柜里的小木桶", [mat_noise("Wood_Barrel", "#8a5a33", "#a06b3f", scale=10)],
-        lambda bm: bm_sphere(bm, (0.2, 0.2, 0.26), loc=(0, 0, 0.26), seg=14, rings=8,
-                             deform=lambda co: Vector((co.x, co.y, clamp(co.z, -0.8, 0.8)))),
-        loc=(cx + 1.25, cy + 0.42, 0.0), smooth_shade=True, note="U7：橱柜开口处的小木桶")
-    # 圆形格子窗（U7）：后墙灶台上方
-    bm = bmesh.new()
-    bm_cyl(bm, 0.5, 0.5, 0.02, rot=(math.pi / 2, 0, 0), seg=24, mi=0)
-    bm_torus(bm, 0.55, 0.07, rot=(math.pi / 2, 0, 0), seg=28, rseg=6, mi=1)
-    for t in (-0.25, 0, 0.25):
-        bm_cube(bm, (0.035, 0.04, 1.0 * math.sqrt(max(0.0, 1 - (t / 0.5) ** 2))), loc=(t, 0.02, 0), mi=1)
-        bm_cube(bm, (1.0 * math.sqrt(max(0.0, 1 - (t / 0.5) ** 2)), 0.04, 0.035), loc=(0, 0.02, t), mi=1)
-    ob = new_obj("GQ_Int_Round_Lattice_Window", bm, INT, [mat("Glass_Sky", "#bfe3f7", rough=0.2, emit="#cfe9ff", emit_strength=0.8),
-                                                            mat_noise("Wood_Window_Frame_Orange", "#a5622f", "#b9733a", scale=10)],
-                 parent=root, props=dict(cn="圆形格子窗", status="observed", note="U7"))
-    ob.location = (2.1, -D / 2 + 0.06, B + 1.9)
-    # 挂着的辣椒串和玉米（U7、U4）
-    obj("GQ_Int_Chili_String", "红辣椒串", [mat("Chili_Red", "#c8241c", rough=0.45)],
-        lambda bm: [bm_cyl(bm, 0.045, 0.0, 0.18, loc=(math.sin(i * 1.7) * 0.05, 0, -i * 0.11), rot=(math.pi, 0, 0), seg=6)
-                    for i in range(12)], loc=(1.2, -D / 2 + 0.25, 2.85), note="U7")
+    def counter(bm):
+        L = cx1 - cx0
+        bm_cube(bm, (L, 0.62, 0.82), loc=(0, 0, 0.41), mi=0)
+        bm_cube(bm, (L + 0.04, 0.66, 0.05), loc=(0, 0.01, 0.845), mi=2)
+        n = 3
+        for i in range(n):
+            x = -L / 2 + (i + 0.5) * L / n
+            bm_cube(bm, (L / n - 0.05, 0.02, 0.6), loc=(x, 0.315, 0.42), mi=1)
+            bm_cube(bm, (0.12, 0.03, 0.025), loc=(x, 0.33, 0.66), mi=3)
+    obj("Kitchen", "GQ_Kitchen_Counter_Blue", "蓝色橱柜台面", [blue, blue_d, wood_light, steel], counter,
+        loc=((cx0 + cx1) / 2, cy, 0), floor=True, note="R3、R8-a56")
 
-    def corn(bm):
-        for i in range(7):
-            a = (i - 3) * 0.12
-            bm_sphere(bm, (0.06, 0.06, 0.2), loc=(math.sin(a) * 0.3, 0, -0.25 - abs(i - 3) * 0.03), rot=(0, a, 0), seg=10, rings=8)
-    obj("GQ_Int_Corn_Bunch", "挂着的玉米", [mat("Corn_Yellow", "#f0c943", rough=0.6)], corn,
-        loc=(3.15, -D / 2 + 0.25, 2.9), smooth_shade=True, note="U7、U4")
-    # 墙上碗架（U7）和储物木架、碗柜（U4，浅木色）
-    shelf_m = mat_noise("Wood_Shelf_Light", "#c19a6b", "#d2ac7d", scale=8)
+    def wall_cab(bm):
+        for xa, xb in ((-IN_X + 0.02, -3.85), (-2.95, -2.27)):
+            w = xb - xa
+            bm_cube(bm, (w, 0.34, 0.62), loc=((xa + xb) / 2, 0, 0), mi=0)
+            for i in range(2):
+                bm_cube(bm, (w / 2 - 0.03, 0.02, 0.56), loc=(xa + (i + 0.5) * w / 2, 0.18, 0), mi=1)
+        for i in range(4):
+            bm_sphere(bm, (0.09, 0.09, 0.05), loc=(-2.85 + i * 0.17, 0.0, 0.36), seg=10, rings=6, mi=2,
+                      deform=lambda co: Vector((co.x, co.y, max(co.z, -0.2))))
+    obj("Kitchen", "GQ_Kitchen_Wall_Cabinets_Blue", "蓝色吊柜（柜顶放碗）", [blue, blue_d, mat("Ceramic_Bowl", "#f2efe6", rough=0.3)],
+        wall_cab, loc=(0, -IN_Y + 0.18, 1.95), status="inferred", note="R8-a57 积木有吊柜；动画画面里没拍到这一段墙")
+    obj("Kitchen", "GQ_Kitchen_Microwave", "微波炉", [white, mat("Glass_Dark", "#2a3036", rough=0.2), steel],
+        lambda bm: (bm_cube(bm, (0.48, 0.36, 0.28), loc=(0, 0, 0.14), mi=0), bm_cube(bm, (0.3, 0.01, 0.2), loc=(-0.06, 0.18, 0.15), mi=1),
+                    bm_cube(bm, (0.08, 0.01, 0.2), loc=(0.17, 0.18, 0.15), mi=2)),
+        loc=(-IN_X + 0.3, cy, 0.87), status="inferred", note="R8-a59 积木有微波炉")
+
+    def stove(bm):
+        bm_cube(bm, (0.66, 0.46, 0.08), loc=(0, 0, 0.04), mi=0)
+        for x in (-0.17, 0.17):
+            bm_torus(bm, 0.1, 0.015, loc=(x, 0, 0.09), seg=14, rseg=4, mi=1)
+        bm_sphere(bm, (0.24, 0.24, 0.1), loc=(-0.17, 0, 0.2), seg=18, rings=8, mi=0, deform=lambda co: Vector((co.x, co.y, min(co.z, 0.0))))
+        bm_cyl(bm, 0.02, 0.02, 0.25, loc=(-0.45, 0, 0.18), rot=(0, math.pi / 2, 0), seg=6, mi=2)
+        bm_cyl(bm, 0.14, 0.13, 0.2, loc=(0.17, 0, 0.2), seg=14, mi=1)
+        bm_cyl(bm, 0.145, 0.145, 0.02, loc=(0.17, 0, 0.31), seg=14, mi=1)
+    obj("Kitchen", "GQ_Kitchen_Stove_Wok_Pot", "灶台、黑炒锅、汤锅", [iron, steel, wood_furn], stove, loc=(-3.4, cy - 0.02, 0.87), note="R8-a56：灶；U7：炒锅、汤锅")
+    obj("Kitchen", "GQ_Kitchen_Stove_Hood_Pipe", "灶上铁皮烟罩和烟管（通到烟囱）", [steel],
+        lambda bm: (bm_cyl(bm, 0.36, 0.08, 0.35, loc=(0, 0, 0.0), seg=12), bm_cyl(bm, 0.075, 0.075, 1.8, loc=(0, 0, 1.05), seg=10)),
+        loc=(-3.4, -IN_Y + 0.4, 1.75), status="inferred", note="烟囱位置依据 R1、R2；烟罩为推测")
+    obj("Kitchen", "GQ_Kitchen_CuttingBoard_Knife", "案板和菜刀", [wood_light, steel, wood_furn],
+        lambda bm: (bm_cube(bm, (0.45, 0.3, 0.04), loc=(0, 0, 0.02), mi=0), bm_cube(bm, (0.2, 0.08, 0.008), loc=(0.02, 0.0, 0.05), mi=1),
+                    bm_cube(bm, (0.1, 0.03, 0.025), loc=(-0.12, 0.0, 0.055), mi=2)), loc=(-2.75, cy, 0.87), note="R8-a59；U7：菜刀")
+    obj("Kitchen", "GQ_Kitchen_Bowls_Cups", "碗、杯子", [mat("Ceramic_Bowl", "#f2efe6", rough=0.3), mat("Cup_Green", "#3f8a4a", rough=0.4)],
+        lambda bm: ([bm_sphere(bm, (0.1, 0.1, 0.05), loc=(0, 0, 0.05 + i * 0.035), seg=12, rings=6, mi=0,
+                               deform=lambda co: Vector((co.x, co.y, min(co.z, 0.0)))) for i in range(3)],
+                    bm_cyl(bm, 0.04, 0.035, 0.1, loc=(0.0, 0.17, 0.05), seg=10, mi=1)), loc=(-2.42, cy - 0.05, 0.87), note="R8-a59")
+    obj("Kitchen", "GQ_Kitchen_Kettle_On_Counter", "水壶", [steel],
+        lambda bm: (bm_sphere(bm, (0.12, 0.12, 0.1), loc=(0, 0, 0.1), seg=14, rings=8), bm_cyl(bm, 0.015, 0.01, 0.15, loc=(0.13, 0, 0.12), rot=(0, 0.9, 0), seg=6),
+                    bm_torus(bm, 0.07, 0.01, loc=(0, 0, 0.22), rot=(math.pi / 2, 0, 0), seg=12, rseg=4, arc=math.pi)),
+        loc=(-3.88, cy + 0.12, 0.87 + 0.29), smooth_shade=True, note="R4/R8：水壶")
+    obj("Kitchen", "GQ_Kitchen_Chili_Strings_Window", "圆窗边的红辣椒串", [chili],
+        lambda bm: (chili_string(bm, 12), [bm_cyl(bm, 0.045, 0.0, 0.2, loc=(0.18 + math.sin(i * 1.3) * 0.05, 0.02, -i * 0.1), rot=(math.pi, 0, 0), seg=6) for i in range(10)]),
+        loc=(-0.95, -IN_Y + 0.15, 2.8), note="R3：窗左上方挂两串辣椒")
+    obj("Kitchen", "GQ_Kitchen_Corn_Hanging", "挂着的玉米", [corn_m],
+        lambda bm: [bm_sphere(bm, (0.06, 0.06, 0.2), loc=(math.sin((i - 3) * 0.12) * 0.3, 0, -0.25 - abs(i - 3) * 0.03), rot=(0, (i - 3) * 0.12, 0), seg=10, rings=8)
+                    for i in range(7)], loc=(-2.35, -IN_Y + 0.2, 2.85), smooth_shade=True, note="U7：窗右上挂玉米")
+    # 餐桌椅（R8-a52/a61：客厅中间木桌、木椅；R3 前景木椅）
+    tx, ty = -2.1, 0.55
+
+    def table(bm):
+        bm_cube(bm, (1.3, 0.8, 0.05), loc=(0, 0, 0.75), mi=0)
+        legs(bm, 1.3, 0.8, 0.73, 0.07, 0)
+        bm_cube(bm, (1.15, 0.05, 0.08), loc=(0, 0.33, 0.66), mi=0)
+        bm_cube(bm, (1.15, 0.05, 0.08), loc=(0, -0.33, 0.66), mi=0)
+    obj("Kitchen", "GQ_Dining_Table", "餐桌", [wood_furn], table, loc=(tx, ty, 0), floor=True, note="R8-a52；动画里未拍到餐桌全貌，尺寸为估算")
+    chair_m = mat_noise("Wood_Chair_Reddish", "#8a5440", "#9b634c", scale=8)
+    for i, (x, y, a) in enumerate(((tx - 0.35, ty - 0.68, 0.0), (tx + 0.35, ty - 0.66, 0.05), (tx, ty + 0.68, math.pi))):
+        obj("Kitchen", f"GQ_Dining_Chair_{i + 1}", "木椅", [chair_m], chair, loc=(x, y, 0), rot=(0, 0, a), floor=True, note="R3 前景木椅")
+    obj("Kitchen", "GQ_Dining_Table_Items", "桌上的暖水瓶、啤酒瓶、碗和筷子",
+        [mat("Thermos_Red", "#c23a2c", rough=0.4), mat("Glass_Beer_Green", "#2f6e3a", rough=0.15, transmission=0.3), mat("Ceramic_Bowl", "#f2efe6", rough=0.3), wood_light],
+        lambda bm: (bm_cyl(bm, 0.07, 0.07, 0.36, loc=(-0.4, 0.15, 0.18), seg=12, mi=0), bm_cyl(bm, 0.04, 0.03, 0.06, loc=(-0.4, 0.15, 0.39), seg=10, mi=0),
+                    [(bm_cyl(bm, 0.035, 0.035, 0.18, loc=(0.25 + k * 0.1, 0.18, 0.09), seg=10, mi=1),
+                      bm_cyl(bm, 0.012, 0.015, 0.08, loc=(0.25 + k * 0.1, 0.18, 0.22), seg=8, mi=1)) for k in range(2)],
+                    bm_sphere(bm, (0.11, 0.11, 0.05), loc=(0.0, -0.12, 0.05), seg=12, rings=6, mi=2, deform=lambda co: Vector((co.x, co.y, min(co.z, 0.0)))),
+                    [bm_cube(bm, (0.008, 0.22, 0.008), loc=(0.15 + k * 0.02, -0.12, 0.01), mi=3) for k in range(2)]),
+        loc=(tx, ty, 0.775), note="R8-a61：桌上暖水瓶")
+    obj("Kitchen", "GQ_Dining_Ceiling_Lamp", "餐桌上方吊灯", [lamp_metal, glow],
+        lambda bm: (bm_cyl(bm, 0.008, 0.008, 0.9, loc=(0, 0, 0.45), seg=4, mi=0), bm_cyl(bm, 0.26, 0.04, 0.14, loc=(0, 0, -0.04), seg=16, mi=0),
+                    bm_sphere(bm, (0.06, 0.06, 0.06), loc=(0, 0, -0.1), seg=10, rings=6, mi=1)), loc=(tx, ty, 2.55), status="inferred")
+    # 入口东侧小柜：篮子、南瓜（R8-a61：入口小柜和篮子）；门边墙上马灯（R3）
+    obj("Kitchen", "GQ_Entrance_Small_Cabinet_Basket", "入口小柜和篮子", [wood_furn, mat_noise("Wicker_Basket", "#b88a4a", "#c99b58", scale=20)],
+        lambda bm: (bm_cube(bm, (0.6, 0.45, 0.78), loc=(0, 0, 0.39), mi=0), bm_cube(bm, (0.26, 0.02, 0.5), loc=(-0.14, 0.235, 0.4), mi=0),
+                    bm_cube(bm, (0.26, 0.02, 0.5), loc=(0.14, 0.235, 0.4), mi=0),
+                    bm_cyl(bm, 0.17, 0.13, 0.16, loc=(0.0, 0, 0.86), seg=14, mi=1),
+                    bm_torus(bm, 0.14, 0.012, loc=(0, 0, 0.98), rot=(math.pi / 2, 0, 0), seg=14, rseg=4, mi=1, arc=math.pi)),
+        loc=(0.86, IN_Y - 0.25, 0), rot=(0, 0, math.pi), floor=True, status="observed", pos="inferred", note="R8-a61 积木")
+    obj("Kitchen", "GQ_Lantern_Bracket_BedroomDoor", "卧室门边墙上的马灯", [lamp_metal, glow, mat("Copper_Dish", "#b7643a", metal=0.6, rough=0.4)],
+        lambda bm: (bm_cube(bm, (0.3, 0.03, 0.03), loc=(-0.15, 0, 0.3), mi=0), bm_cyl(bm, 0.12, 0.1, 0.06, loc=(-0.25, 0, -0.05), seg=12, mi=2),
+                    bm_cyl(bm, 0.07, 0.07, 0.18, loc=(-0.25, 0, 0.09), seg=10, mi=1), bm_cyl(bm, 0.08, 0.03, 0.06, loc=(-0.25, 0, 0.21), seg=10, mi=0)),
+        loc=(PART_X - 0.09, -1.0, 1.6), note="R3：卧室门洞左边挂马灯")
+    pump = mat("Pumpkin_Orange", "#d9822b", rough=0.6)
+    obj("Kitchen", "GQ_Kitchen_Pumpkins", "南瓜", [pump, mat("Pumpkin_Stem", "#5a6a2a")],
+        lambda bm: (bm_sphere(bm, (0.2, 0.2, 0.15), loc=(0, 0, 0.15), seg=14, rings=8), bm_cyl(bm, 0.02, 0.02, 0.06, loc=(0, 0, 0.32), seg=6, mi=1),
+                    bm_sphere(bm, (0.14, 0.14, 0.11), loc=(0.3, 0.2, 0.11), seg=14, rings=8)),
+        loc=(0.75, -0.55, 0), smooth_shade=True, floor=True, note="R3：地上南瓜")
+    # 西北角烧水炉 + 柴火（R8 文字：客厅进门角落有烧水炉）；西墙碗柜（U4）；西墙碗架（U7）
+    obj("Kitchen", "GQ_Living_Kettle_Stove", "烧水炉（铁炉、水壶、烟管）", [iron, steel],
+        lambda bm: (bm_cyl(bm, 0.27, 0.27, 0.62, loc=(0, 0, 0.36), seg=16, mi=0), legs(bm, 0.4, 0.4, 0.06, 0.05, 0),
+                    bm_cyl(bm, 0.29, 0.29, 0.04, loc=(0, 0, 0.69), seg=16, mi=0),
+                    bm_sphere(bm, (0.15, 0.15, 0.12), loc=(0.05, 0, 0.82), seg=14, rings=8, mi=1),
+                    bm_cyl(bm, 0.02, 0.012, 0.16, loc=(0.2, 0, 0.84), rot=(0, 0.9, 0), seg=6, mi=1),
+                    bm_tube(bm, [(-0.12, 0, 0.6), (-0.12, 0, 2.3), (-0.3, 0, 2.6), (-0.3, 0, 3.4)], [0.06] * 4, seg=10, mi=0)),
+        loc=(-IN_X + 0.4, IN_Y - 0.42, 0), floor=True, status="observed", pos="inferred", note="R8 文字：进门角落的烧水炉（授权积木依据）")
+    obj("Kitchen", "GQ_Living_Firewood_Stack", "柴火堆", [MATS.get("Bark_Log") or mat_noise("Bark_Log", "#5d3f2a", "#7b573c", scale=6)],
+        lambda bm: [bm_cyl(bm, 0.07, 0.07, 0.55, loc=(-0.24 + i * 0.15 + row * 0.07, 0, 0.07 + row * 0.13), rot=(math.pi / 2, 0, 0), seg=8)
+                    for row in range(3) for i in range(4 - row)], loc=(-3.15, IN_Y - 0.32, 0), floor=True, note="U3：门内柴火")
+
+    def cupboard(bm):
+        bm_cube(bm, (1.0, 0.5, 1.7), loc=(0, 0, 0.85), mi=0)
+        for x in (-0.25, 0.25):
+            bm_cube(bm, (0.46, 0.03, 1.0), loc=(x, 0.26, 1.05), mi=1)
+            bm_cube(bm, (0.46, 0.03, 0.4), loc=(x, 0.26, 0.3), mi=1)
+    obj("Kitchen", "GQ_Living_Cupboard", "碗柜", [mat_noise("Wood_Cupboard", "#c9a77a", "#d6b88c", scale=8), mat_noise("Wood_Cupboard_Door", "#b8956a", "#c9a77a", scale=8)],
+        cupboard, loc=(-IN_X + 0.26, 1.3, 0), rot=(0, 0, -math.pi / 2), floor=True, pos="inferred", note="U4：碗柜；位置为推测")
 
     def wall_shelf(bm):
         for z in (0.0, 0.45):
-            bm_cube(bm, (1.2, 0.28, 0.04), loc=(0, 0, z), mi=0)
+            bm_cube(bm, (1.0, 0.26, 0.04), loc=(0, 0, z), mi=0)
         for i in range(4):
-            bm_sphere(bm, (0.1, 0.1, 0.06), loc=(-0.4 + i * 0.26, 0, 0.08), seg=10, rings=6, mi=1,
-                      deform=lambda co: Vector((co.x, co.y, max(co.z, -0.2))))
-        bm_cyl(bm, 0.07, 0.09, 0.22, loc=(0.3, 0, 0.56), seg=10, mi=2)
-    obj("GQ_Int_Wall_Shelf_Bowls", "墙上碗架", [shelf_m, mat("Ceramic_Bowl", "#f2efe6", rough=0.3), mat("Ceramic_Jar_Blue", "#7d98a6")],
-        wall_shelf, loc=(W / 2 - 0.3, -1.4, 1.6), rot=(0, 0, math.pi / 2), note="U7")
+            bm_sphere(bm, (0.09, 0.09, 0.055), loc=(-0.35 + i * 0.23, 0, 0.075), seg=10, rings=6, mi=1, deform=lambda co: Vector((co.x, co.y, max(co.z, -0.2))))
+        for i in range(3):
+            bm_cyl(bm, 0.04, 0.035, 0.1, loc=(-0.3 + i * 0.25, 0, 0.52), seg=10, mi=2)
+        for i in range(8):
+            bm_sphere(bm, (0.05, 0.05, 0.045), loc=(0.42, 0.05, -0.05 - i * 0.08), seg=8, rings=5, mi=3)
+    obj("Kitchen", "GQ_Living_Wall_Shelf_Bowls_Cups", "墙上碗架（碗、杯子、蒜辫）",
+        [wood_light, mat("Ceramic_Bowl", "#f2efe6", rough=0.3), mat("Cup_Green", "#3f8a4a", rough=0.4), mat("Garlic_White", "#ece6da", rough=0.6)],
+        wall_shelf, loc=(-IN_X + 0.15, -1.55, 1.55), rot=(0, 0, -math.pi / 2), pos="inferred", note="U7：碗架、蒜头")
+    DOOR_PASSAGES.append(("卧室门", "GQ_House_Root", (PART_X - 0.5, PART_X + 0.5, BED_DOOR[0] + 0.15, BED_DOOR[1] - 0.1, B + 0.05, B + 1.9)))
+    DOOR_PASSAGES.append(("卫生间门", "GQ_House_Root", (-W_HOUSE / 2 - 0.5, -W_HOUSE / 2 + 0.5, BATH_DOOR[0] + 0.1, BATH_DOOR[1] - 0.15, B + 0.05, B + 1.9)))
 
-    def storage_shelf(bm):
-        for z in (0.0, 0.6, 1.2, 1.8):
-            bm_cube(bm, (1.4, 0.4, 0.04), loc=(0, 0, z + 0.3), mi=0)
-        for x in (-0.68, 0.68):
-            bm_cube(bm, (0.05, 0.4, 2.1), loc=(x, 0, 1.05), mi=0)
+    # =============== B. 卧室（隔墙东侧）依据 R4、E44、R8-a62–a68 ===============
+    bx0, bx1 = PART_X + 0.075, IN_X
+    obj("Bedroom", "GQ_Bedroom_Floor_StoneTiles", "卧室方形石板地面", [mat_stone_floor()],
+        lambda bm: bm_cube(bm, (bx1 - bx0, 2 * IN_Y, 0.05), loc=((bx0 + bx1) / 2, 0, -0.025)), note="R4、E44：方形石板地")
+    # 卧室门：绿色门框、红色格子门扇，开向卧室（R3 左侧门洞）
+    bm = bmesh.new()
+    for y in BED_DOOR:
+        bm_cube(bm, (0.24, 0.1, 2.1), loc=(PART_X, y + math.copysign(0.05, y - sum(BED_DOOR) / 2), B + 1.05))
+    bm_cube(bm, (0.24, BED_DOOR[1] - BED_DOOR[0] + 0.2, 0.1), loc=(PART_X, sum(BED_DOOR) / 2, B + 2.1))
+    ob = new_obj("GQ_Bedroom_Door_Frame_Green", bm, ROOM["Bedroom"], [MATS["Paint_Door_Frame_Green"]], parent=root,
+                 props=dict(cn="卧室门绿色门框", status="observed", note="R3"))
+    dwb = BED_DOOR[1] - BED_DOOR[0] - 0.04
+
+    def bed_door(bm):
+        bm_cube(bm, (0.05, dwb, 0.95), loc=(0, dwb / 2, 0.48), mi=0)
+        for z in (1.0, 2.0):
+            bm_cube(bm, (0.06, dwb, 0.07), loc=(0, dwb / 2, z), mi=1)
+        for y in (0.03, dwb - 0.03):
+            bm_cube(bm, (0.06, 0.07, 1.05), loc=(0, y, 1.5), mi=1)
+        bm_cube(bm, (0.015, dwb - 0.06, 1.0), loc=(0, dwb / 2, 1.5), mi=2)
+        for t in (0.25, 0.5, 0.75):
+            bm_cube(bm, (0.05, 0.03, 1.0), loc=(0, dwb * t, 1.5), mi=1)
+        for z in (1.25, 1.5, 1.75):
+            bm_cube(bm, (0.05, dwb - 0.06, 0.03), loc=(0, dwb / 2, z), mi=1)
+        for xx in (-0.03, 0.03):
+            old = set(bm.verts)
+            paper_cut(bm, 0.0, r=0.16, mi=3)
+            bmesh.ops.transform(bm, matrix=Matrix.Translation((xx, dwb / 2, 1.5)) @ Matrix.Rotation(math.pi / 2, 4, "Z"),
+                                verts=[v for v in bm.verts if v not in old])
+    bm = bmesh.new()
+    bed_door(bm)
+    ob = new_obj("GQ_Bedroom_Door_Leaf_RedLattice", bm, ROOM["Bedroom"], [mat("Wood_Door_Pink_Red", "#a8574c", rough=0.7),
+                                                                            mat("Wood_Lattice_Red", "#8e3a30", rough=0.6), MATS["Paper_Window_Lattice"],
+                                                                            MATS["Paper_Red_Cut"]],
+                 parent=root, props=dict(cn="卧室红色格子门（已打开，开向卧室）", status="observed", note="R3：门洞里红色格子门、贴红窗花"))
+    ob.location = (PART_X + 0.08, BED_DOOR[0] + 0.02, B)
+    ob.rotation_euler = (0, 0, math.radians(-90))
+    # 土炕（R4：窗下，砖砌炕身，前面两级砖台阶；被子是叠好的格子被）
+    k0, k1, ky0 = 2.2, IN_X, 1.2
+    brick_k = mat_brick("Brick_Kang_Tan", "#b48a5e", "#a27a50", "#7e6a55", scale=2.6)
+
+    def kang(bm):
+        bm_cube(bm, (k1 - k0, IN_Y - ky0, 0.6), loc=(0, 0, 0.3), mi=0)
+        bm_cube(bm, (k1 - k0 + 0.02, 0.1, 0.08), loc=(0, -(IN_Y - ky0) / 2 + 0.05, 0.64), mi=1)
+        bm_cube(bm, (k1 - k0 - 0.1, IN_Y - ky0 - 0.1, 0.02), loc=(0, 0.05, 0.61), mi=2)
+    obj("Bedroom", "GQ_Bedroom_Kang_Brick", "土炕（砖砌炕身、炕沿、炕席）",
+        [brick_k, mat_noise("Wood_Kang_Edge", "#6b4a34", "#7d5940", scale=8), mat_stripes("Bamboo_Mat", "#c7b36a", "#a8934e", scale=60, axis="X")],
+        kang, loc=((k0 + k1) / 2, (IN_Y + ky0) / 2, 0), floor=True, note="R4：窗下土炕、砖砌；U6：竹席")
+    obj("Bedroom", "GQ_Bedroom_Kang_Steps", "炕前两级砖台阶", [brick_k],
+        lambda bm: [bm_cube(bm, (0.9, 0.3, h), loc=(0, -0.15 - i * 0.3, h / 2)) for i, h in enumerate((0.4, 0.2))],
+        loc=(3.12, ky0, 0), floor=True, note="R4：炕前砖台阶")
+    plaid = mat_checker("Fabric_Quilt_Plaid_Purple", "#5e3f62", "#b8a4b6", scale=14)
+    obj("Bedroom", "GQ_Bedroom_Kang_Quilt_Folded", "叠好的格子被", [plaid, mat_quilt()],
+        lambda bm: (bm_cube(bm, (0.9, 0.55, 0.12), loc=(0, 0, 0.06), mi=0), bm_cube(bm, (0.88, 0.53, 0.12), loc=(0.01, 0, 0.18), mi=0),
+                    bm_cube(bm, (0.86, 0.52, 0.11), loc=(0, 0, 0.295), mi=1)), loc=(k1 - 0.55, IN_Y - 0.45, 0.62), note="R4：炕上叠着紫色格子被；U6 蓝花被")
+    obj("Bedroom", "GQ_Bedroom_Kang_Pillow", "枕头", [mat("Fabric_Pillow_Red", "#8e2f2a", rough=0.85)],
+        lambda bm: bm_cube(bm, (0.32, 0.6, 0.16), loc=(0, 0, 0.08)), loc=(k1 - 0.25, 1.75, 0.62), note="U6；E44：枕头一头靠墙")
+    obj("Bedroom", "GQ_Bedroom_Kang_Tea_Table", "炕桌、白茶壶、茶杯", [wood_furn, white],
+        lambda bm: (bm_cube(bm, (0.8, 0.45, 0.04), loc=(0, 0, 0.3), mi=0), legs(bm, 0.8, 0.45, 0.28, 0.05, 0),
+                    bm_sphere(bm, (0.11, 0.11, 0.1), loc=(-0.15, 0, 0.42), seg=14, rings=8, mi=1),
+                    bm_cyl(bm, 0.03, 0.04, 0.05, loc=(-0.15, 0, 0.53), seg=10, mi=1),
+                    bm_cyl(bm, 0.015, 0.01, 0.12, loc=(-0.03, 0, 0.44), rot=(0, 0.9, 0), seg=6, mi=1),
+                    [bm_cyl(bm, 0.03, 0.025, 0.05, loc=(0.1 + k * 0.09, 0.05, 0.345), seg=10, mi=1) for k in range(3)]),
+        loc=(2.9, IN_Y - 0.35, 0.62), smooth_shade=False, note="R4：窗前炕桌上白茶壶、茶杯")
+    obj("Bedroom", "GQ_Bedroom_Slippers", "炕台阶上的拖鞋", [mat("Rubber_Slipper_Brown", "#6a4a2a", rough=0.6)],
+        lambda bm: (bm_cube(bm, (0.11, 0.26, 0.04), loc=(-0.08, 0, 0.02)), bm_cube(bm, (0.11, 0.26, 0.04), loc=(0.1, 0.03, 0.02))),
+        loc=(3.0, ky0 - 0.15, 0.4), note="R4：台阶上的拖鞋")
+    # 炕边铁炉 + 水壶 + 烟管（R4）
+    obj("Bedroom", "GQ_Bedroom_Iron_Stove_Kettle", "炕边铁炉、水壶和烟管", [iron, steel],
+        lambda bm: (bm_cyl(bm, 0.3, 0.28, 0.72, loc=(0, 0, 0.4), seg=16, mi=0), legs(bm, 0.4, 0.4, 0.06, 0.05, 0),
+                    bm_cyl(bm, 0.32, 0.32, 0.04, loc=(0, 0, 0.78), seg=16, mi=0),
+                    bm_sphere(bm, (0.17, 0.17, 0.12), loc=(0.03, 0, 0.92), seg=14, rings=8, mi=1),
+                    bm_cyl(bm, 0.02, 0.012, 0.18, loc=(0.2, 0, 0.95), rot=(0, 0.9, 0), seg=6, mi=1),
+                    bm_tube(bm, [(-0.12, -0.05, 0.75), (-0.12, -0.05, 3.6)], [0.06, 0.06], seg=10, mi=0)),
+        loc=(1.82, IN_Y - 0.55, 0), floor=True, note="R4：炕边带烟管的铁炉，上面坐着水壶")
+    # 床头柜 + 绿色电话、水杯（E44）；炕头墙上日历、旧衣服、辣椒串、蒜辫（E44）
+    obj("Bedroom", "GQ_Bedroom_Bedside_Table_Phone", "床头柜、绿色电话和水杯",
+        [wood_furn, mat("Phone_Teal", "#3e9a86", rough=0.4), mat("Glass_Cup", "#d8e6ea", rough=0.1, transmission=0.6)],
+        lambda bm: (bm_cube(bm, (0.45, 0.42, 0.55), loc=(0, 0, 0.275), mi=0), bm_cube(bm, (0.22, 0.17, 0.08), loc=(-0.05, 0, 0.59), mi=1),
+                    bm_cube(bm, (0.2, 0.05, 0.05), loc=(-0.05, -0.04, 0.655), rot=(0.4, 0, 0), mi=1),
+                    bm_cyl(bm, 0.035, 0.03, 0.11, loc=(0.13, 0.08, 0.605), seg=10, mi=2)),
+        loc=(IN_X - 0.25, ky0 - 0.32, 0), floor=True, status="observed", pos="inferred", note="E44：炕头边的绿色电话和水杯；R8-a64 积木床头柜")
+    ew = IN_X - 0.03
+    obj("Bedroom", "GQ_Bedroom_Wall_Calendar_Clothes", "炕头墙上的日历和旧衣服",
+        [mat_noise("Wood_Calendar_Board", "#9b7a52", "#ab8a60", scale=8), mat("Paper_Calendar", "#efe8d6"), mat_noise("Fabric_Old_Grey", "#9aa0a6", "#b0b5ba", scale=12)],
+        lambda bm: (bm_cube(bm, (0.03, 0.42, 0.55), loc=(0, -0.5, 0), mi=0), bm_cube(bm, (0.012, 0.36, 0.4), loc=(-0.02, -0.5, -0.04), mi=1),
+                    bm_cube(bm, (0.06, 0.42, 0.9), loc=(-0.02, 0.35, -0.05), mi=2), bm_cube(bm, (0.05, 0.12, 0.8), loc=(-0.02, 0.09, -0.03), mi=2),
+                    bm_cube(bm, (0.05, 0.12, 0.8), loc=(-0.02, 0.61, -0.03), mi=2)),
+        loc=(ew, 1.75, 1.75), note="E44：炕头那面墙挂日历、旧衣服")
+    obj("Bedroom", "GQ_Bedroom_Wall_Chili_Garlic", "炕头墙上的辣椒串和蒜辫", [chili, mat("Garlic_White", "#ece6da", rough=0.6)],
+        lambda bm: (chili_string(bm, 13), [bm_sphere(bm, (0.06, 0.06, 0.055), loc=(math.sin(i * 2.1) * 0.03, 0.35, -i * 0.11), seg=10, rings=6, mi=1) for i in range(11)]),
+        loc=(ew - 0.05, 0.45, 2.55), note="E44")
+    # 绿色单人沙发朝电视，红地毯（R4）
+    soft(obj("Bedroom", "GQ_Bedroom_Armchair_Green", "绿色单人沙发", [green_furn],
+             lambda bm: (bm_cube(bm, (0.8, 0.78, 0.42), loc=(0, 0, 0.21)), bm_cube(bm, (0.8, 0.2, 0.62), loc=(0, -0.3, 0.72)),
+                         [bm_cube(bm, (0.17, 0.78, 0.26), loc=(sx * 0.36, 0, 0.55)) for sx in (-1, 1)]),
+             loc=(2.3, -0.55, 0), rot=(0, 0, -math.pi / 2), floor=True, note="R4：绿沙发放在红地毯上，对着电视"), 0.06, 3)
+    obj("Bedroom", "GQ_Bedroom_Rug_Red", "红地毯", [mat_noise("Fabric_Rug_Red", "#b8473a", "#c85a48", scale=14)],
+        lambda bm: bm_cube(bm, (2.0, 1.4, 0.015), loc=(0, 0, 0.0075)), loc=(3.0, -0.55, 0), floor=True, overlap=False, note="R4")
+    obj("Bedroom", "GQ_Bedroom_TV_On_Stand", "木架上的老电视", [wood_furn, mat("Plastic_TV_Red", "#8a3a33", rough=0.5), mat("Screen_TV", "#3a4a46", emit="#8fb8a8", emit_strength=0.4), steel],
+        lambda bm: (bm_cube(bm, (0.5, 0.75, 0.04), loc=(0, 0, 0.55), mi=0), legs(bm, 0.5, 0.75, 0.53, 0.05, 0),
+                    bm_cube(bm, (0.45, 0.6, 0.48), loc=(0.02, 0, 0.81), mi=1), bm_cube(bm, (0.02, 0.48, 0.36), loc=(-0.215, -0.03, 0.82), mi=2),
+                    bm_cyl(bm, 0.006, 0.006, 0.45, loc=(0.05, 0.12, 1.2), rot=(0.4, 0, 0), seg=4, mi=3),
+                    bm_cyl(bm, 0.006, 0.006, 0.45, loc=(0.05, -0.12, 1.2), rot=(-0.4, 0, 0), seg=4, mi=3)),
+        loc=(IN_X - 0.3, -0.55, 0), floor=True, note="R4：木架上的红色老电视，带天线")
+    obj("Bedroom", "GQ_Bedroom_Cans", "电视边的易拉罐", can_ms, lambda bm: cans(bm, 5, 8), loc=(3.7, 0.4, 0), floor=True, overlap=False, note="R4")
+    # 衣柜（推测）、红木箱（E44）
+    obj("Bedroom", "GQ_Bedroom_Wardrobe", "衣柜（推测）", [mat_noise("Wood_Wardrobe", "#9a6a44", "#a97a52", scale=8), wood_furn],
+        lambda bm: (bm_cube(bm, (1.15, 0.55, 1.95), loc=(0, 0, 0.975), mi=0),
+                    [bm_cube(bm, (0.54, 0.02, 1.7), loc=(sx * 0.285, 0.285, 1.0), mi=1) for sx in (-1, 1)],
+                    [bm_cube(bm, (0.03, 0.03, 0.2), loc=(sx * 0.04, 0.3, 1.05), mi=0) for sx in (-1, 1)]),
+        loc=(3.05, -IN_Y + 0.3, 0), floor=True, status="inferred", pos="inferred", note="剧照里没有衣柜；按本轮要求补做，标为推测")
+    obj("Bedroom", "GQ_Bedroom_Chest_Red", "红棕色木箱", [mat_noise("Wood_Chest_Red", "#7a3328", "#8c3e30", scale=8), steel],
+        lambda bm: (bm_cube(bm, (0.7, 0.42, 0.48), loc=(0, 0, 0.24), mi=0), bm_cube(bm, (0.08, 0.02, 0.06), loc=(0, 0.22, 0.38), mi=1)),
+        loc=(IN_X - 0.24, -IN_Y + 0.5, 0), rot=(0, 0, math.pi / 2), floor=True, pos="inferred", note="E44：红棕色木箱；R4 左下角也有红箱子")
+    # 隔墙一侧：书桌、飞镖靶、相框、猎枪（R4、R8-a66/a67）
+    obj("Bedroom", "GQ_Bedroom_Desk", "靠墙书桌", [wood_furn, mat("Toolbox_Red", "#9a3a2c", rough=0.5)],
+        lambda bm: (bm_cube(bm, (0.5, 1.0, 0.04), loc=(0, 0, 0.74), mi=0), legs(bm, 0.5, 1.0, 0.72, 0.05, 0),
+                    bm_cube(bm, (0.25, 0.35, 0.18), loc=(0, 0.2, 0.85), mi=1)),
+        loc=(bx0 + 0.27, 0.65, 0), floor=True, pos="inferred", note="R4：画面左边桌子和工具箱")
+    obj("Bedroom", "GQ_Bedroom_Dartboard", "飞镖靶", [wood_light, mat("Target_Red", "#b83228"), white],
+        lambda bm: (bm_cube(bm, (0.03, 0.42, 0.5), loc=(0, 0, 0), mi=0),
+                    [bm_cyl(bm, r, r, 0.012, loc=(0.02 + k * 0.003, 0, 0), rot=(0, math.pi / 2, 0), seg=20, mi=1 + k % 2) for k, r in enumerate((0.17, 0.13, 0.09, 0.05))]),
+        loc=(bx0 + 0.03, -0.45, 1.65), note="R4：墙上的飞镖靶")
+    obj("Bedroom", "GQ_Bedroom_Portrait_Frame", "相框", [wood_furn, mat("Photo_Sepia", "#c9a97a")],
+        lambda bm: (bm_cube(bm, (0.03, 0.4, 0.5), loc=(0, 0, 0), mi=0), bm_cube(bm, (0.012, 0.32, 0.42), loc=(0.02, 0, 0), mi=1)),
+        loc=(bx0 + 0.03, 0.6, 1.7), status="observed", pos="inferred", note="R8-a66 积木相框")
+    obj("Bedroom", "GQ_Bedroom_Hunting_Rifle_Rack", "墙上的猎枪", [wood_furn, iron],
+        lambda bm: (bm_cube(bm, (0.04, 0.05, 0.05), loc=(0, -0.45, 0.0), mi=0), bm_cube(bm, (0.04, 0.05, 0.05), loc=(0, 0.45, 0.0), mi=0),
+                    bm_cube(bm, (0.04, 0.35, 0.09), loc=(0.04, -0.4, 0.04), mi=0), bm_cyl(bm, 0.015, 0.015, 0.75, loc=(0.04, 0.17, 0.05), rot=(math.pi / 2, 0, 0), seg=8, mi=1)),
+        loc=(ew - 0.02, -0.55, 1.95), pos="inferred", note="R8-a67 积木猎枪架；电视上方位置为推测")
+    obj("Bedroom", "GQ_Bedroom_Hanging_Lamp_Green", "绿色灯罩吊灯", [mat("Lamp_Shade_Green", "#3f7a62", rough=0.4), glow, lamp_metal],
+        lambda bm: (bm_cyl(bm, 0.006, 0.006, 0.9, loc=(0, 0, 0.45), seg=4, mi=2),
+                    bm_sphere(bm, (0.26, 0.26, 0.12), loc=(0, 0, 0), seg=16, rings=8, mi=0, deform=lambda co: Vector((co.x, co.y, max(co.z, 0.0)))),
+                    bm_sphere(bm, (0.06, 0.06, 0.06), loc=(0, 0, -0.02), seg=10, rings=6, mi=1)), loc=(3.0, 0.3, 2.6), note="R4：天花板吊下的绿色灯罩")
+    obj("Bedroom", "GQ_Bedroom_Window_Curtains", "卧室窗帘（推测）", [mat_noise("Fabric_Curtain_Floral", "#c8b07a", "#b89a62", scale=12), wood_furn],
+        lambda bm: (bm_cyl(bm, 0.015, 0.015, 1.7, loc=(0, 0, 0.0), rot=(0, math.pi / 2, 0), seg=6, mi=1),
+                    [bm_cyl(bm, 0.035, 0.045, 1.05, loc=(sx * (0.66 + k * 0.06), 0.0, -0.53), seg=8, mi=0) for sx in (-1, 1) for k in range(4)]),
+        loc=(sum(WIN_FRONT[1]) / 2, IN_Y - 0.06, WIN_Z[1] + 0.12), smooth_shade=True, status="inferred", note="剧照里没看到窗帘，按要求补做，收在两侧")
+    obj("Bedroom", "GQ_Bedroom_Ceramic_Teapot_Shelf", "隔墙上的小茶壶搁板", [wood_light, white],
+        lambda bm: (bm_cube(bm, (0.25, 0.6, 0.03), loc=(0, 0, 0), mi=0), bm_sphere(bm, (0.08, 0.08, 0.07), loc=(0, -0.15, 0.08), seg=12, rings=6, mi=1),
+                    bm_cyl(bm, 0.03, 0.025, 0.06, loc=(0, 0.12, 0.045), seg=10, mi=1)), loc=(bx0 + 0.13, 1.6, 1.25), pos="inferred")
+
+    # =============== C. 卫生间（侧翼，单独的墙和门）依据 R5、R8 文字 ===============
+    wx0, wx1, wy0, wy1 = WING["x0"] + 0.155, -W_HOUSE / 2 - 0.155, WING["y0"] + 0.155, WING["y1"] - 0.155
+    floor_bath = [mat_noise(f"Wood_Floor_Bathroom_{i}", c1, c2, scale=8, stretch=(1.0, 0.25, 1.0)) for i, (c1, c2) in enumerate(
+        (("#b9996e", "#c8a87c"), ("#a8885e", "#b7976c"), ("#c2a57c", "#d0b38a")))]
+    obj("Bathroom", "GQ_Bathroom_Floor_Planks", "卫生间木地板", floor_bath, lambda bm: planks(bm, wx0, wx1, wy0, wy1, along="X"), note="R5：浅木色地面")
+    bm = bmesh.new()
+    dwb2 = BATH_DOOR[1] - BATH_DOOR[0] - 0.04
+    bm_cube(bm, (0.04, dwb2, 2.0), loc=(0, -dwb2 / 2, 1.0), mi=0)
+    for z in (0.35, 1.0, 1.65):
+        bm_cube(bm, (0.05, dwb2 - 0.06, 0.1), loc=(-0.03, -dwb2 / 2, z), mi=1)
+    bm_cube(bm, (0.05, 0.08, 0.95), loc=(-0.03, -dwb2 / 2, 0.68), rot=(-0.62, 0, 0), mi=1)
+    bm_cyl(bm, 0.025, 0.025, 0.06, loc=(0.04, -dwb2 + 0.08, 1.0), rot=(0, math.pi / 2, 0), seg=8, mi=2)
+    ob = new_obj("GQ_Bathroom_Door_Leaf", bm, ROOM["Bathroom"], [mat_noise("Wood_Door_Bathroom", "#b08356", "#c09264", scale=8, stretch=(1.0, 1.0, 0.3)),
+                                                                mat_noise("Wood_Door_Batten", "#8a6644", "#9a7450", scale=8), steel],
+                 parent=root, props=dict(cn="卫生间木板门（已打开，开向卫生间）", status="inferred", note="R8 积木：卫生间单独有门；门的样子为推测"))
+    ob.location = (-W_HOUSE / 2 - 0.12, BATH_DOOR[1] - 0.02, B)
+    ob.rotation_euler = (0, 0, math.radians(-88))
+    bm = bmesh.new()
+    for y in BATH_DOOR:
+        bm_cube(bm, (0.36, 0.08, 2.1), loc=(-W_HOUSE / 2, y + math.copysign(0.04, y - sum(BATH_DOOR) / 2), B + 1.05))
+    bm_cube(bm, (0.36, BATH_DOOR[1] - BATH_DOOR[0] + 0.16, 0.08), loc=(-W_HOUSE / 2, sum(BATH_DOOR) / 2, B + 2.09))
+    new_obj("GQ_Bathroom_Door_Frame", bm, ROOM["Bathroom"], [mat_noise("Wood_Door_Frame_Plain", "#7a5a3e", "#8a6a4a", scale=8)], parent=root,
+            props=dict(cn="卫生间门框", status="inferred"))
+
+    def toilet(bm):
+        bm_cyl(bm, 0.14, 0.18, 0.38, loc=(0, 0.05, 0.19), seg=16, mi=0)
+        bm_sphere(bm, (0.2, 0.25, 0.08), loc=(0, 0.1, 0.4), seg=16, rings=8, mi=0)
+        bm_sphere(bm, (0.19, 0.24, 0.02), loc=(0, 0.1, 0.48), seg=16, rings=6, mi=1)
+        bm_cube(bm, (0.42, 0.18, 0.4), loc=(0, -0.2, 0.62), mi=0)
+        bm_cube(bm, (0.44, 0.2, 0.04), loc=(0, -0.2, 0.84), mi=0)
+        bm_cube(bm, (0.06, 0.02, 0.02), loc=(0.14, -0.1, 0.78), mi=2)
+    obj("Bathroom", "GQ_Bathroom_Toilet", "马桶", [white, mat("Plastic_Seat_Wood", "#b88a5a", rough=0.5), steel], toilet,
+        loc=(-5.75, wy0 + 0.3, 0), smooth_shade=True, floor=True, note="R5：大马桶")
+    obj("Bathroom", "GQ_Bathroom_Corner_Sink_Mirror", "墙角小洗手池和镜子", [white, steel, mat("Mirror", "#dfe8ee", metal=1.0, rough=0.05), wood_furn],
+        lambda bm: (bm_cyl(bm, 0.05, 0.07, 0.7, loc=(0, 0, 0.35), seg=10, mi=0), bm_sphere(bm, (0.24, 0.2, 0.1), loc=(0, 0, 0.78), seg=16, rings=8, mi=0),
+                    bm_cyl(bm, 0.012, 0.012, 0.18, loc=(-0.15, 0, 0.92), seg=6, mi=1), bm_cyl(bm, 0.01, 0.01, 0.12, loc=(-0.1, 0, 1.0), rot=(0, math.pi / 2, 0), seg=6, mi=1),
+                    bm_cube(bm, (0.02, 0.42, 0.55), loc=(-0.24, 0, 1.45), mi=3), bm_cube(bm, (0.022, 0.36, 0.48), loc=(-0.225, 0, 1.45), mi=2)),
+        loc=(wx0 + 0.25, wy1 - 0.45, 0), smooth_shade=False, floor=True, note="R5：角落小洗手池；镜子为推测")
+    obj("Bathroom", "GQ_Bathroom_Towel_Bar", "毛巾杆和毛巾", [steel, mat("Fabric_Towel_Striped", "#d8574a", rough=0.9)],
+        lambda bm: (bm_cyl(bm, 0.012, 0.012, 0.55, loc=(0, 0, 0), rot=(0, math.pi / 2, 0), seg=6, mi=0),
+                    bm_cube(bm, (0.4, 0.03, 0.55), loc=(0, 0.0, -0.26), mi=1)), loc=(-5.6, wy1 - 0.05, 1.35), note="R5：墙上毛巾")
+    obj("Bathroom", "GQ_Bathroom_Toilet_Paper", "厕纸", [white, wood_furn],
+        lambda bm: (bm_cube(bm, (0.04, 0.16, 0.03), loc=(0, 0, 0.07), mi=1), bm_cyl(bm, 0.055, 0.055, 0.1, loc=(0.06, 0, 0.0), rot=(math.pi / 2, 0, 0), seg=12, mi=0)),
+        loc=(wx0 + 0.02, wy0 + 0.75, 0.68), note="R5：墙上厕纸")
+    obj("Bathroom", "GQ_Bathroom_Wooden_Cabinet", "木柜（放清洁用品）", [wood_furn, mat("Bottle_Blue", "#3a6fb0", rough=0.3), mat("Bottle_Yellow", "#e0b83a", rough=0.3)],
+        lambda bm: (bm_cube(bm, (0.42, 0.7, 0.9), loc=(0, 0, 0.45), mi=0), bm_cube(bm, (0.02, 0.32, 0.7), loc=(0.215, -0.17, 0.45), mi=0),
+                    bm_cube(bm, (0.02, 0.32, 0.7), loc=(0.215, 0.17, 0.45), mi=0),
+                    bm_cyl(bm, 0.05, 0.05, 0.22, loc=(0, -0.2, 1.01), seg=10, mi=1), bm_cyl(bm, 0.045, 0.045, 0.18, loc=(0.0, 0.0, 0.99), seg=10, mi=2),
+                    bm_cyl(bm, 0.04, 0.05, 0.16, loc=(0.02, 0.2, 0.98), seg=10, mi=1)),
+        loc=(wx0 + 0.22, -1.6, 0), floor=True, note="R5：木柜；柜上的清洁瓶子为推测")
+    obj("Bathroom", "GQ_Bathroom_Broom", "门口的扫帚", [wood_light, mat_noise("Broom_Straw", "#c9a75a", "#d8b86a", scale=20)],
+        lambda bm: (bm_cyl(bm, 0.018, 0.018, 1.2, loc=(0, 0, 0.75), seg=6, mi=0), bm_cyl(bm, 0.05, 0.14, 0.32, loc=(0, 0, 0.16), seg=10, mi=1)),
+        loc=(wx1 - 0.18, -1.0, 0.0), rot=(0, 0.12, 0), floor=True, overlap=False, note="R5：门口扫帚")
+    obj("Bathroom", "GQ_Bathroom_Bucket_Brush", "水桶和刷子", [mat("Metal_Galvanized", "#9aa1a6", metal=0.7, rough=0.4), mat("Plastic_Brush_Red", "#c03a2a")],
+        lambda bm: (bm_cyl(bm, 0.15, 0.12, 0.3, loc=(0, 0, 0.15), seg=14, mi=0), bm_cube(bm, (0.2, 0.06, 0.05), loc=(0.25, 0.0, 0.025), mi=1)),
+        loc=(-5.2, wy1 - 0.4, 0), floor=True, status="inferred", note="清洁用品为推测")
+    # 灯
+    for nm, loc, energy in (("GQ_Light_Kitchen_Dining", (-1.9, 0.2, B + 2.4), 140), ("GQ_Light_Kitchen_Counter", (-3.2, -1.7, B + 2.3), 60),
+                            ("GQ_Light_Bedroom", (3.0, 0.3, B + 2.35), 110), ("GQ_Light_Bathroom", (-5.75, -0.5, B + 2.1), 55)):
+        li = bpy.data.lights.new(nm, "POINT")
+        li.energy = energy
+        li.color = (1.0, 0.84, 0.64)
+        li.shadow_soft_size = 0.3
+        lo = bpy.data.objects.new(nm, li)
+        (ROOM["Bedroom"] if "Bedroom" in nm else ROOM["Bathroom"] if "Bathroom" in nm else ROOM["Kitchen"]).objects.link(lo)
+        lo.parent = root
+        lo.location = loc
+
+
+def build_warehouse():
+    """光头强的独立仓库（整栋为推测：动画里没有可用画面；R7 玩家复刻只用来理解“高山墙木板仓库、正中一扇门”的结构）。
+    局部坐标：+Y 为正面（大门），根物体旋转后大门朝向木屋（世界 -X）。"""
+    WC = COLL["GuangtouQiang_Warehouse"]
+    WR = COLL["WH_Roof_Removable"]
+    WI = COLL["WH_Interior"]
+    P = WAREHOUSE
+    W, D, H, rise, Bw = P["W"], P["D"], P["H"], P["rise"], P["floor"]
+    wx, wy = HOUSE["x"] + P["lx"], HOUSE["y"] + P["ly"]
+    c, s = math.cos(P["rot"]), math.sin(P["rot"])
+
+    def to_world(x, y):
+        return (wx + c * x - s * y, wy + s * x + c * y)
+    gz = max(ground(*to_world(x, y)) for x in (-W / 2, W / 2) for y in (-D / 2, D / 2 + 1.0))
+    root = empty("Warehouse_Root", WC, (wx, wy, gz), (0, 0, P["rot"]), size=1.5,
+                 props=dict(cn="光头强的仓库（根，整栋推测）", status="inferred",
+                            note="动画中没有仓库的可用画面；R7 玩家复刻只用于理解结构；外观、门窗位置和内部全部是推测"))
+    rnd = random.Random(31)
+
+    def legs(bm, w, d, h, t=0.05, mi=0):
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                bm_cube(bm, (t, t, h), loc=(sx * (w / 2 - t / 2 - 0.02), sy * (d / 2 - t / 2 - 0.02), h / 2), mi=mi)
+
+    def lg(x, y):
+        return ground(*to_world(x, y)) - gz
+    planks_m = [mat_noise(f"Wood_Warehouse_Weathered_{i}", c1, c2, scale=9, bump=0.2, stretch=(1.0, 1.0, 0.25)) for i, (c1, c2) in enumerate(
+        (("#6b5a48", "#7a6854"), ("#5e4e3e", "#6c5a48"), ("#7a6650", "#88735c"), ("#544538", "#625244")))]
+    frame_m = mat_noise("Wood_Warehouse_Frame", "#4e3b2c", "#5c4636", scale=8)
+    roof_m = [mat_noise(f"Roof_Warehouse_Board_{i}", c1, c2, scale=7, bump=0.2, stretch=(0.3, 1.0, 1.0)) for i, (c1, c2) in enumerate(
+        (("#4a6a80", "#567689"), ("#5a6e78", "#667a84"), ("#3f5c70", "#4a687c")))]
+    patch_m = [MATS["Roof_Patch_Pale_Blue"], MATS["Roof_Patch_Tan_Wood"], MATS["Roof_Patch_Grey"]]
+    moss_m = [MATS["Roof_Moss_Grass"], MATS["Roof_Twig"]]
+    stone = MATS["Stone_Base_Grey"]
+    core = MATS["Stone_Base_Core"]
+    floor_ms = [mat_noise(f"Wood_Warehouse_Floor_{i}", c1, c2, scale=8, stretch=(1.0, 0.25, 1.0)) for i, (c1, c2) in enumerate(
+        (("#7a6248", "#866d52"), ("#6c563e", "#7a6248"), ("#86705a", "#937c64")))]
+    steel = MATS["Steel_Pot"]
+    iron = MATS["Iron_Wok"]
+    cut = MATS["Wood_Cut_End"]
+    bark = MATS.get("Bark_Log") or mat_noise("Bark_Log", "#5d3f2a", "#7b573c", scale=6)
+    glow = MATS["Lantern_Glow"]
+    lumber = [mat_noise(f"Wood_Lumber_{i}", c1, c2, scale=8, stretch=(0.2, 1.0, 1.0)) for i, (c1, c2) in enumerate(
+        (("#c9a06a", "#d6b07a"), ("#b88c58", "#c69a66"), ("#d8b886", "#e3c696"), ("#a67a4a", "#b48858")))]
+    crate_m = mat_noise("Wood_Crate", "#a8824e", "#b8925c", scale=9)
+
+    def wobj(name, cn, mats, build, loc=(0, 0, 0), rot=(0, 0, 0), C=None, floor=False, overlap=True, smooth_shade=False, note=None):
+        bm = bmesh.new()
+        build(bm)
+        ob = new_obj(name, bm, C or WI, mats, smooth_shade=smooth_shade, parent=root, props=dict(cn=cn, status="inferred", note=note))
+        ob.location = (loc[0], loc[1], loc[2] + (Bw if C in (None, WI) else 0.0))
+        ob.rotation_euler = rot
+        ob["position_status"] = "inferred"
+        if floor:
+            ob["room"] = "Warehouse"
+            ob["floor_item"] = True
+            ob["floor_z_world"] = gz + Bw
+            ob["overlap_check"] = overlap
+        return ob
+
+    # 基座：石头墙基 + 内芯
+    bm = bmesh.new()
+    zb = min(lg(x, y) for x in (-W / 2, W / 2) for y in (-D / 2, D / 2)) - 0.5
+    bm_cube(bm, (W + 0.1, D + 0.1, Bw - 0.04 - zb), loc=(0, 0, (Bw - 0.04 + zb) / 2), mi=0)
+    for (ax, ay), (bx, by) in zip([(-W / 2, -D / 2), (W / 2, -D / 2), (W / 2, D / 2), (-W / 2, D / 2)],
+                                  [(W / 2, -D / 2), (W / 2, D / 2), (-W / 2, D / 2), (-W / 2, -D / 2)]):
+        L = math.hypot(bx - ax, by - ay)
+        n = int(L / 0.6)
+        along_x = abs(bx - ax) > 0.1
+        for i in range(n + 1):
+            t = i / n
+            px, py = ax + (bx - ax) * t, ay + (by - ay) * t
+            px += 0.06 * (1 if px > 0 else -1) * (0 if along_x else 1)
+            py += 0.06 * (1 if py > 0 else -1) * (1 if along_x else 0)
+            z0 = lg(px, py)
+            bm_ico(bm, rnd.uniform(0.22, 0.3), loc=(px, py, (z0 + Bw) / 2 - 0.05), scale=(1.2, 0.6, 0.8) if along_x else (0.6, 1.2, 0.8),
+                   subdiv=1, rough=0.25, seed=i, mi=1)
+    new_obj("Warehouse_Stone_Footing", bm, WC, [core, stone], parent=root, props=dict(cn="仓库石头墙基", status="inferred"))
+    # 竖木板墙：前后山墙（前面开大门），两侧各两扇小窗
+    door_w, door_h = 2.6, 2.7
+    side_holes = [(-2.4, -1.3, 1.35, 2.25), (1.3, 2.4, 1.35, 2.25)]
+    top_fn = lambda x: H + rise * (1 - abs(x) / (W / 2))
+    for nm, cn, M, L, holes, top in (("Front", "仓库正面山墙（大门）", Matrix.Translation((0, D / 2, Bw)), W, [(-door_w / 2, door_w / 2, 0.0, door_h)], top_fn),
+                                     ("Back", "仓库背面山墙", Matrix.Translation((0, -D / 2, Bw)) @ Matrix.Rotation(math.pi, 4, "Z"), W, [(-0.35, 0.35, 3.3, 3.9)], top_fn),
+                                     ("East", "仓库东墙（两扇小窗）", Matrix.Translation((W / 2, 0, Bw)) @ Matrix.Rotation(math.pi / 2, 4, "Z"), D, side_holes, None),
+                                     ("West", "仓库西墙（两扇小窗）", Matrix.Translation((-W / 2, 0, Bw)) @ Matrix.Rotation(-math.pi / 2, 4, "Z"), D, side_holes, None)):
+        bm = bmesh.new()
+        vplank_wall(bm, L, H, holes, len(planks_m), rnd, top=top)
+        bmesh.ops.transform(bm, matrix=M, verts=bm.verts[:])
+        new_obj(f"Warehouse_Wall_{nm}", bm, WC, planks_m, parent=root, props=dict(cn=cn, status="inferred", note="风化的竖木板墙；R7 只用于理解结构"))
+    # 木构架：转角柱、中间柱、顶梁、斜撑、门框
+    bm = bmesh.new()
+    for x in (-W / 2 + 0.1, W / 2 - 0.1):
+        for y in (-D / 2 + 0.1, -D / 2 + D / 3, D / 2 - D / 3, D / 2 - 0.1):
+            bm_cube(bm, (0.16, 0.16, H), loc=(x, y, Bw + H / 2))
+        bm_cube(bm, (0.16, D, 0.16), loc=(x, 0, Bw + H - 0.08))
+        for y0 in (-D / 2 + 0.1, D / 2 - D / 3):
+            bm_cube(bm, (0.08, 0.1, math.hypot(D / 3 - 0.1, 1.2)), loc=(x, y0 + (D / 3 - 0.1) / 2, Bw + H - 0.7),
+                    rot=(math.atan2(D / 3 - 0.1, 1.2), 0, 0))
+    for y in (-D / 2 + D / 3, D / 2 - D / 3):
+        bm_cube(bm, (W, 0.14, 0.16), loc=(0, y, Bw + H - 0.08))
+        bm_cube(bm, (0.12, 0.12, rise - 0.2), loc=(0, y, Bw + H + (rise - 0.2) / 2))
+    for x in (-door_w / 2 - 0.08, door_w / 2 + 0.08):
+        bm_cube(bm, (0.16, 0.2, door_h + 0.1), loc=(x, D / 2, Bw + (door_h + 0.1) / 2))
+    bm_cube(bm, (door_w + 0.32, 0.2, 0.16), loc=(0, D / 2, Bw + door_h + 0.08))
+    for (y0, y1) in [(h[0], h[1]) for h in side_holes]:
+        for x in (-W / 2, W / 2):
+            bm_cube(bm, (0.2, y1 - y0 + 0.12, 0.08), loc=(x, (y0 + y1) / 2, Bw + 1.31))
+            bm_cube(bm, (0.2, y1 - y0 + 0.12, 0.08), loc=(x, (y0 + y1) / 2, Bw + 2.29))
+            for yy in (y0 - 0.03, y1 + 0.03):
+                bm_cube(bm, (0.2, 0.06, 0.98), loc=(x, yy, Bw + 1.8))
+    new_obj("Warehouse_Timber_Frame", bm, WC, [frame_m], parent=root, props=dict(cn="仓库木构架（柱、梁、斜撑、门窗框）", status="inferred"))
+    # 窗：脏玻璃 + 十字木条；东侧一扇木百叶打开
+    bm = bmesh.new()
+    for (y0, y1) in [(h[0], h[1]) for h in side_holes]:
+        for x in (-W / 2, W / 2):
+            yc, ln = (y0 + y1) / 2, y1 - y0
+            bm_cube(bm, (0.02, ln, 0.9), loc=(x, yc, Bw + 1.8), mi=0)
+            bm_cube(bm, (0.05, ln, 0.04), loc=(x, yc, Bw + 1.8), mi=1)
+            bm_cube(bm, (0.05, 0.04, 0.9), loc=(x, yc, Bw + 1.8), mi=1)
+    bm_cube(bm, (0.04, 0.55, 0.95), loc=(W / 2 + 0.35, 2.4 + 0.15, Bw + 1.8), rot=(0, 0, 0.9), mi=2)
+    new_obj("Warehouse_Windows", bm, WC, [mat("Glass_Dusty", "#9aa59a", rough=0.5, transmission=0.4), frame_m, planks_m[2]], parent=root,
+            props=dict(cn="仓库小窗（脏玻璃、木百叶）", status="inferred"))
+    # 屋顶（可隐藏）：屋脊沿局部 Y，木板屋顶 + 补丁
+    rot90 = Matrix.Rotation(math.pi / 2, 4, "Z")
+    x0r, x1r = -D / 2 - 0.5, D / 2 + 0.5
+    Sr = roof_surface(x0r, x1r, 0.0, W / 2, 0.55, Bw + H, rise, lift_hi=0.3, lift_lo=0.2)
+    bm = bmesh.new()
+    roof_boards(bm, Sr, x0r, x1r, rnd, len(roof_m), tiers=3)
+    for side in (-1, 1):
+        surf_box(bm, lambda u, xx, side=side: Sr(xx, side, u) + Vector((0, 0, 0.15)), 0.0, 0.07, x0r - 0.1, x1r + 0.1, 0.05, nu=1, nv=10, mi=1)
+        surf_box(bm, lambda u, xx, side=side: Sr(xx, side, u) - Vector((0, 0, 0.03)), 0.0, 1.0, x0r, x1r, 0.04, nu=4, nv=10, mi=len(roof_m))
+    for side, u in ((1, 0.0), (1, 0.5), (-1, 0.5)):
+        p = Sr(0.0, side, u)
+        bm_cyl(bm, 0.12, 0.12, x1r - x0r, loc=(0, p.y, p.z - 0.15), rot=(0, math.pi / 2, 0), seg=10, mi=len(roof_m) + 1)
+    bmesh.ops.transform(bm, matrix=rot90, verts=bm.verts[:])
+    new_obj("Warehouse_Roof_Boards", bm, WR, roof_m + [mat_noise("Wood_Warehouse_Ceiling", "#5a4a3c", "#665546", scale=8), frame_m], parent=root,
+            props=dict(cn="仓库木板屋顶（可隐藏）", status="inferred", note="按木屋屋顶的做法推测"))
+    bm_p, bm_m = bmesh.new(), bmesh.new()
+    roof_extras(bm_p, bm_m, Sr, x0r, x1r, rnd, 9, n_moss=16, n_twig=3)
+    bmesh.ops.transform(bm_p, matrix=rot90, verts=bm_p.verts[:])
+    bmesh.ops.transform(bm_m, matrix=rot90, verts=bm_m.verts[:])
+    new_obj("Warehouse_Roof_Patches", bm_p, WR, patch_m, parent=root, props=dict(cn="仓库屋顶补丁", status="inferred"))
+    new_obj("Warehouse_Roof_Moss", bm_m, WR, moss_m, parent=root, props=dict(cn="仓库屋顶苔藓和树枝", status="inferred"))
+    # 大门：两扇竖木板谷仓门（Z 字斜撑），向外打开
+    for side, hx_ in (("North", door_w / 2), ("South", -door_w / 2)):
+        bm = bmesh.new()
+        sgn = -1 if side == "North" else 1
+        lw = door_w / 2 - 0.02
+        x = 0.0
+        while x < lw - 0.01:
+            w = min(0.22, lw - x)
+            bm_cube(bm, (w - 0.012, 0.05, door_h - 0.05), loc=(sgn * (x + w / 2), 0, (door_h - 0.05) / 2 + 0.03), mi=rnd.randrange(2))
+            x += w
+        for z in (0.35, door_h - 0.4):
+            bm_cube(bm, (lw, 0.06, 0.14), loc=(sgn * lw / 2, 0.05, z), mi=2)
+        ang = math.atan2(door_h - 0.75, lw - 0.1)
+        bm_cube(bm, (math.hypot(door_h - 0.75, lw - 0.1), 0.06, 0.12), loc=(sgn * lw / 2, 0.05, door_h / 2), rot=(0, -sgn * ang, 0), mi=2)
+        bm_cyl(bm, 0.05, 0.05, 0.02, loc=(sgn * (lw - 0.15), 0.09, 1.2), rot=(math.pi / 2, 0, 0), seg=10, mi=3)
+        ob = new_obj(f"Warehouse_Barn_Door_{side}", bm, WC, [planks_m[0], planks_m[2], frame_m, steel], parent=root,
+                     props=dict(cn="仓库对开大门（已打开）", status="inferred"))
+        ob.location = (hx_, D / 2 + 0.12, Bw)
+        ob.rotation_euler = (0, 0, math.radians(-105) if side == "North" else math.radians(105))
+    # 门前坡道
+    yr0, yr1 = D / 2, D / 2 + 1.3
+    zr1 = lg(0, yr1 + 0.2) - 0.05
+    bm = bmesh.new()
+    for i in range(7):
+        xa = -1.25 + i * 0.36
+        surf_box(bm, lambda u, v: Vector((v, lerp(yr0, yr1, u), lerp(Bw - 0.05, zr1, u))), 0.0, 1.0, xa, xa + 0.34, 0.05, nu=2, nv=1, mi=rnd.randrange(2))
+    for x in (-1.2, 1.2):
+        bm_cube(bm, (0.12, yr1 - yr0, 0.2), loc=(x, (yr0 + yr1) / 2, (Bw + zr1) / 2 - 0.12), rot=(-math.atan2(Bw - zr1, yr1 - yr0), 0, 0), mi=2)
+    new_obj("Warehouse_Entrance_Ramp", bm, WC, [planks_m[2], planks_m[0], frame_m], parent=root, props=dict(cn="仓库门前木坡道", status="inferred"))
+    DOOR_PASSAGES.append(("仓库大门", "Warehouse_Root", (-door_w / 2 + 0.2, door_w / 2 - 0.2, D / 2 - 1.2, D / 2 + 1.0, Bw + 0.05, Bw + 2.4)))
+
+    # ---- 内部（可进入）：地板、木料悬臂架、原木堆、木箱、货架、工作台和工具、钉板、靠墙旧木板、油桶、吊灯
+    IX, IY = W / 2 - 0.2, D / 2 - 0.15
+
+    def wplanks(bm):
+        x = -IX
+        while x < IX - 0.01:
+            w = min(rnd.uniform(0.2, 0.28), IX - x)
+            bm_cube(bm, (w - 0.01, 2 * IY, 0.05), loc=(x + w / 2, 0, -0.025), mi=rnd.randrange(3))
+            x += w
+    wobj("Warehouse_Floor_Planks", "仓库旧木地板", floor_ms, wplanks)
+
+    def lumber_rack(bm):
+        for y in (-3.4, -1.6, 0.2, 1.6):
+            bm_cube(bm, (0.14, 0.14, 2.5), loc=(0.35, y, 1.25), mi=0)
+            bm_cube(bm, (0.9, 0.5, 0.08), loc=(0.0, y, 0.04), mi=0)
+            for z in (0.45, 1.05, 1.65, 2.25):
+                bm_cube(bm, (0.85, 0.08, 0.07), loc=(-0.08, y, z), rot=(0, -0.04, 0), mi=0)
+        rr = random.Random(5)
+        for z in (0.45, 1.05, 1.65, 2.25):
+            n = rr.randint(3, 6)
+            for k in range(n):
+                th = rr.choice((0.04, 0.05, 0.1, 0.15))
+                wdt = rr.choice((0.15, 0.2, 0.25)) if th < 0.1 else th
+                L = rr.uniform(3.8, 5.4)
+                bm_cube(bm, (wdt, L, th), loc=(-0.4 + k * 0.13 + rr.uniform(-0.02, 0.02), -0.85 + rr.uniform(-0.3, 0.3), z + 0.035 + th / 2 + (k % 2) * 0.0),
+                        rot=(0, 0, rr.uniform(-0.01, 0.01)), mi=1 + rr.randrange(4))
+    wobj("Warehouse_Lumber_Cantilever_Rack", "木料悬臂架和板材、方木", [frame_m] + lumber, lumber_rack, loc=(IX - 0.5, 0, 0), floor=True,
+         note="木料堆放为推测")
+
+    def log_pile(bm, n=4, L=2.6, r=0.2):
+        for row in range(n):
+            for i in range(n - row):
+                x = (i - (n - row - 1) / 2) * r * 2.05
+                z = r + row * r * 1.75
+                bm_cyl(bm, r, r, L, loc=(0, x, z), rot=(0, math.pi / 2, 0), seg=10, mi=0, caps=False)
+                for e in (-1, 1):
+                    bm_cyl(bm, r * 0.97, r * 0.97, 0.02, loc=(e * L / 2, x, z), rot=(0, math.pi / 2, 0), seg=10, mi=1)
+    wobj("Warehouse_Log_Pile", "原木堆", [bark, cut], lambda bm: log_pile(bm), loc=(0.3, -IY + 0.72, 0), floor=True)
+
+    def crates(bm):
+        for (x, y, z, sz) in ((0, 0, 0, 0.6), (0.65, 0.05, 0, 0.6), (0.3, 0.0, 0.6, 0.6), (0.05, 0.65, 0, 0.55)):
+            bm_cube(bm, (sz, sz, sz), loc=(x, y, z + sz / 2), rot=(0, 0, rnd.uniform(-0.08, 0.08)), mi=0)
+            for zz in (0.12, sz - 0.12):
+                bm_cube(bm, (sz + 0.02, sz + 0.02, 0.05), loc=(x, y, z + zz), mi=1)
+    wobj("Warehouse_Crate_Stack", "木箱堆", [crate_m, frame_m], crates, loc=(-IX + 0.45, -IY + 0.45, 0), floor=True)
+
+    def shelving(bm):
+        rr = random.Random(9)
+        for z in (0.05, 0.6, 1.15, 1.7):
+            bm_cube(bm, (0.45, 1.6, 0.04), loc=(0, 0, z), mi=0)
+        for y in (-0.78, 0.78):
+            for x in (-0.2, 0.2):
+                bm_cube(bm, (0.05, 0.05, 2.0), loc=(x, y, 1.0), mi=0)
+        for z in (0.07, 0.62, 1.17, 1.72):
+            y = -0.7
+            while y < 0.6:
+                k = rr.random()
+                if k < 0.4:
+                    s = rr.uniform(0.2, 0.32)
+                    bm_cube(bm, (0.3, s, s * 0.8), loc=(0, y + s / 2, z + 0.02 + s * 0.4), mi=1)
+                    y += s + 0.04
+                elif k < 0.7:
+                    for j in range(3):
+                        bm_cyl(bm, 0.05, 0.05, 0.13, loc=(-0.08 + (j % 2) * 0.12, y + 0.06 + j * 0.06, z + 0.085), seg=10, mi=2)
+                    y += 0.25
+                else:
+                    bm_torus(bm, 0.13, 0.04, loc=(0, y + 0.15, z + 0.06), seg=16, rseg=6, mi=3)
+                    y += 0.32
+    wobj("Warehouse_Shelving_Boxes_Cans_Rope", "货架（纸箱、罐头、绳子）", [frame_m, mat("Cardboard_Box_Tan", "#b8955e", rough=0.8),
+                                                                     mat("Can_Paint_Blue", "#3b6e9e", metal=0.4, rough=0.4), mat("Rope_Hemp", "#b49a68", rough=0.9)],
+         shelving, loc=(-IX + 0.25, 1.9, 0), floor=True)
+
+    def workbench(bm):
+        bm_cube(bm, (0.8, 2.0, 0.08), loc=(0, 0, 0.88), mi=0)
+        legs(bm, 0.8, 2.0, 0.84, 0.09, 1)
+        bm_cube(bm, (0.7, 1.9, 0.04), loc=(0, 0, 0.25), mi=0)
+        bm_cube(bm, (0.2, 0.18, 0.12), loc=(0.35, -0.75, 0.98), mi=2)
+        bm_cube(bm, (0.08, 0.18, 0.12), loc=(0.48, -0.75, 0.98), mi=2)
+        bm_cyl(bm, 0.015, 0.015, 0.3, loc=(0.55, -0.75, 0.98), rot=(0, 0, math.pi / 2), seg=6, mi=2)
+        for i in range(4):
+            bm_cube(bm, (0.5, 0.12, 0.05), loc=(-0.1, 0.4 + i * 0.13, 0.3), mi=3)
+    wobj("Warehouse_Workbench_Vise", "工作台和台钳", [mat_noise("Wood_Workbench_Top", "#8a6a48", "#9a7854", scale=8), frame_m, iron, lumber[0]], workbench,
+         loc=(-IX + 0.45, -1.3, 0), floor=True)
+
+    def tools(bm):
+        # 电锯（橙色机身、银色导板）、锤子、斧头、手锯
+        bm_cube(bm, (0.22, 0.38, 0.22), loc=(0.0, 0.0, 0.11), mi=0)
+        bm_cube(bm, (0.04, 0.6, 0.1), loc=(0.0, 0.48, 0.1), mi=1)
+        bm_torus(bm, 0.09, 0.015, loc=(0, -0.08, 0.27), rot=(0, math.pi / 2, 0), seg=12, rseg=4, mi=2, arc=math.pi)
+        bm_cyl(bm, 0.018, 0.018, 0.32, loc=(0.1, 0.9, 0.02), rot=(math.pi / 2, 0, 0.3), seg=6, mi=3)
+        bm_cube(bm, (0.12, 0.04, 0.04), loc=(0.15, 1.05, 0.02), rot=(0, 0, 0.3), mi=1)
+        bm_cyl(bm, 0.02, 0.022, 0.6, loc=(-0.15, -0.6, 0.02), rot=(math.pi / 2, 0, -0.2), seg=6, mi=3)
+        bm_cube(bm, (0.16, 0.03, 0.12), loc=(-0.21, -0.88, 0.02), rot=(math.pi / 2, 0, -0.2), mi=1)
+    wobj("Warehouse_Tools_On_Bench", "台面上的电锯、锤子、斧头", [mat("Plastic_Chainsaw_Orange", "#e0761e", rough=0.4), MATS["Steel_Axe_Head"] if "Steel_Axe_Head" in MATS else steel,
+                                                       iron, mat_noise("Wood_Axe_Handle", "#9b7347", "#b08455", scale=10)],
+         tools, loc=(-IX + 0.5, -1.3, 0.92), note="光头强常用电锯（第一季截图 S1E1-28/66）；放在工作台上为推测")
+
+    def pegboard(bm):
+        bm_cube(bm, (0.03, 1.8, 1.0), loc=(0, 0, 0), mi=0)
+        for i in range(5):
+            bm_cube(bm, (0.04, 0.03, 0.03), loc=(0.03, -0.7 + i * 0.35, 0.3), mi=1)
+        bm_cube(bm, (0.01, 0.55, 0.12), loc=(0.05, -0.55, 0.05), rot=(0.1, 0, 0), mi=2)
+        bm_cube(bm, (0.03, 0.05, 0.12), loc=(0.05, -0.85, 0.05), mi=3)
+        for i, (y, ln) in enumerate(((0.0, 0.35), (0.3, 0.28), (0.6, 0.4))):
+            bm_cyl(bm, 0.015, 0.015, ln, loc=(0.05, y, 0.1), seg=6, mi=3)
+            bm_cube(bm, (0.04, 0.1, 0.05), loc=(0.05, y, 0.1 + ln / 2), mi=1)
+        bm_torus(bm, 0.12, 0.02, loc=(0.06, 0.35, -0.3), rot=(0, math.pi / 2, 0), seg=14, rseg=4, mi=4)
+    wobj("Warehouse_Pegboard_Hand_Tools", "墙上钉板和手工具（手锯、锤子、扳手、绳圈）",
+         [mat("Pegboard_Brown", "#7a5e40", rough=0.8), iron, steel, MATS["Wood_Axe_Handle"], MATS["Rope_Hemp"]],
+         pegboard, loc=(-W / 2 + 0.075, -1.3, 1.65))
+
+    def leaning(bm):
+        rr = random.Random(3)
         for i in range(6):
-            bm_cube(bm, (0.08, 0.25, 0.3), loc=(-0.5 + i * 0.1, 0, 1.07), mi=1 + i % 3)
-        bm_cyl(bm, 0.11, 0.13, 0.3, loc=(0.4, 0, 0.47), seg=12, mi=4)
-        bm_cyl(bm, 0.09, 0.09, 0.2, loc=(0.3, 0, 1.67), seg=12, mi=4)
-    obj("GQ_Int_Storage_Shelf", "储物木架（书和罐子）", [shelf_m, mat("Book_Red", "#8a3a2a"), mat("Book_Blue", "#3b5a7a"),
-                                                       mat("Book_Tan", "#c9b07a"), mat("Jar_Grey_Green", "#8aa3a0")],
-        storage_shelf, loc=(-W / 2 + 0.35, 1.2, 0), rot=(0, 0, -math.pi / 2), status="observed",
-        note="U4：储物架；它在屋里的位置为推测")
-
-    def cupboard(bm):
-        bm_cube(bm, (1.1, 0.55, 1.7), loc=(0, 0, 0.85), mi=0)
-        for x in (-0.27, 0.27):
-            bm_cube(bm, (0.5, 0.03, 1.1), loc=(x, 0.29, 1.0), mi=1)
-            bm_cube(bm, (0.04, 0.04, 0.12), loc=(x * 0.2, 0.32, 1.0), mi=1)
-    obj("GQ_Int_Cupboard", "碗柜", [mat_noise("Wood_Cupboard", "#c9a77a", "#d6b88c", scale=8), mat_noise("Wood_Cupboard_Door", "#b8956a", "#c9a77a", scale=8)],
-        cupboard, loc=(W / 2 - 0.4, 2.1, 0), rot=(0, 0, math.pi / 2), status="observed", note="U4；位置为推测")
-    # 门内柴火堆（U3：门里能看到柴火）
-
-    def firewood(bm):
-        rnd = random.Random(9)
-        for row in range(4):
-            for i in range(5 - row):
-                bm_cyl(bm, 0.1, 0.1, 0.7, loc=(-0.4 + i * 0.2 + row * 0.1, 0, 0.1 + row * 0.18),
-                       rot=(math.pi / 2, 0, rnd.uniform(-0.05, 0.05)), seg=8, mi=0)
-    obj("GQ_Int_Firewood_Stack", "门内柴火堆", [MATS.get("Bark_Log") or mat_noise("Bark_Log", "#5d3f2a", "#7b573c", scale=6)],
-        firewood, loc=(1.6, D / 2 - 0.55, 0), note="U3")
-    # 马灯（U4）
-    obj("GQ_Int_Lantern", "马灯", [mat("Lantern_Metal", "#5a5f62", metal=0.6, rough=0.4), mat("Lantern_Glow", "#ffd38a", emit="#ffb44a", emit_strength=3.0)],
-        lambda bm: (bm_cyl(bm, 0.09, 0.09, 0.03, loc=(0, 0, 0), seg=10, mi=0), bm_cyl(bm, 0.07, 0.07, 0.18, loc=(0, 0, 0.11), seg=10, mi=1),
-                    bm_cyl(bm, 0.09, 0.03, 0.06, loc=(0, 0, 0.23), seg=10, mi=0)), loc=(-0.5, 0.3, 2.55), note="U4")
-    # 室内补光
-    li = bpy.data.lights.new("GQ_Int_Light_Warm", "POINT")
-    li.energy = 120
-    li.color = (1.0, 0.82, 0.6)
-    li.shadow_soft_size = 0.4
-    lo = bpy.data.objects.new("GQ_Int_Light_Warm", li)
-    INT.objects.link(lo)
-    lo.parent = root
-    lo.location = (-0.5, 0.3, B + 2.35)
-    la = bpy.data.lights.new("GQ_Int_Light_Fill", "AREA")
-    la.energy = 220
-    la.size = 3.0
-    lao = bpy.data.objects.new("GQ_Int_Light_Fill", la)
-    INT.objects.link(lao)
-    lao.parent = root
-    lao.location = (0.5, 0.0, B + 2.9)
+            L = rr.uniform(1.8, 2.5)
+            bm_cube(bm, (rr.uniform(0.15, 0.25), 0.035, L), loc=(i * 0.2, 0.0, L / 2 * math.cos(0.2)), rot=(-0.2, 0, rr.uniform(-0.05, 0.05)), mi=rr.randrange(2))
+    wobj("Warehouse_Old_Boards_Leaning", "靠墙的旧木板", [planks_m[1], planks_m[3]], leaning, loc=(-2.6, IY - 0.32, 0), floor=True, overlap=False)
+    wobj("Warehouse_Oil_Drums", "油桶", [mat("Paint_Drum_Red", "#a8382c", metal=0.4, rough=0.5), mat("Paint_Drum_Blue", "#2f5e8a", metal=0.4, rough=0.5)],
+         lambda bm: (bm_cyl(bm, 0.29, 0.29, 0.88, loc=(0, 0, 0.44), seg=16, mi=0), bm_cyl(bm, 0.29, 0.29, 0.88, loc=(0.62, 0.05, 0.44), seg=16, mi=1),
+                     bm_torus(bm, 0.295, 0.015, loc=(0, 0, 0.3), seg=16, rseg=4, mi=0), bm_torus(bm, 0.295, 0.015, loc=(0, 0, 0.6), seg=16, rseg=4, mi=0)),
+         loc=(IX - 1.2, IY - 0.55, 0), floor=True)
+    wobj("Warehouse_Sawhorse_Plank", "锯木架和木板", [frame_m, lumber[2]],
+         lambda bm: ([bm_cube(bm, (0.06, 0.06, 0.8), loc=(sx * 0.12, y, 0.38), rot=(0, sx * 0.25, 0), mi=0) for sx in (-1, 1) for y in (-0.5, 0.5)],
+                     [bm_cube(bm, (0.1, 0.06, 0.08), loc=(0, y, 0.78), mi=0) for y in (-0.5, 0.5)],
+                     bm_cube(bm, (0.25, 1.6, 0.05), loc=(0, 0.1, 0.845), rot=(0, 0, 0.08), mi=1)),
+         loc=(0.6, -1.0, 0), floor=True)
+    wobj("Warehouse_Hanging_Lamp", "吊灯", [MATS["Lantern_Metal"], glow],
+         lambda bm: (bm_cyl(bm, 0.006, 0.006, 1.2, loc=(0, 0, 0.6), seg=4, mi=0), bm_cyl(bm, 0.3, 0.05, 0.16, loc=(0, 0, -0.05), seg=16, mi=0),
+                     bm_sphere(bm, (0.07, 0.07, 0.07), loc=(0, 0, -0.12), seg=10, rings=6, mi=1)), loc=(0, 0.0, H - 0.3))
+    for nm, loc, e in (("Warehouse_Light_Main", (0, 0, Bw + H - 0.6), 260), ("Warehouse_Light_Fill", (0, -2.5, Bw + 2.4), 120)):
+        li = bpy.data.lights.new(nm, "POINT")
+        li.energy = e
+        li.color = (1.0, 0.86, 0.68)
+        li.shadow_soft_size = 0.4
+        lo = bpy.data.objects.new(nm, li)
+        WI.objects.link(lo)
+        lo.parent = root
+        lo.location = loc
+    return root
 
 
-def build_yard(root):
-    """U3/U4 门前和院子里的东西：铁盆、木桶、木墩和斧头、原木、轮胎、绿水管、原木堆；围栏为推测。"""
+def build_yard(root, lg, y_stair):
+    """院子（R1：歪斜木栅栏、蓝顶院门、轮胎堆、原木、水缸；U3：门前铁盆、木桶、木墩斧头）。坐标用木屋局部坐标，物体放在世界坐标里贴地。"""
     P = COLL["Props"]
     hx, hy = HOUSE["x"], HOUSE["y"]
     log_bark = MATS.get("Bark_Log") or mat_noise("Bark_Log", "#5d3f2a", "#7b573c", scale=6)
-    cut = MATS.get("Wood_Cut_End") or mat_noise("Wood_Cut_End", "#d7b07a", "#e6c696", scale=12)
+    cut = MATS["Wood_Cut_End"]
     metal = mat("Metal_Galvanized", "#9aa1a6", metal=0.7, rough=0.4)
 
-    def put(name, cn, mats, build, x, y, rot=0.0, status="observed", note=None, smooth_shade=False, sink=0.02):
+    def put(name, cn, mats, build, lx, ly, rot=0.0, status="observed", note=None, smooth_shade=False, sink=0.02, world=False):
+        x, y = (lx, ly) if world else (hx + lx, hy + ly)
         bm = bmesh.new()
         build(bm)
         ob = new_obj(name, bm, P, mats, smooth_shade=smooth_shade, props=dict(cn=cn, status=status, note=note))
@@ -1612,27 +2630,26 @@ def build_yard(root):
         ob.rotation_euler = (0, 0, rot)
         return ob
 
-    put("Prop_Washtub_Galvanized", "铁皮洗衣盆", [metal],
-        lambda bm: bm_cyl(bm, 0.45, 0.38, 0.32, loc=(0, 0, 0.16), seg=20), hx - 3.6, hy + 4.0, note="U3：门左侧")
-    put("Prop_Bucket_Galvanized", "铁桶（倒放）", [metal],
-        lambda bm: bm_cyl(bm, 0.18, 0.15, 0.36, loc=(0, 0, 0.18), rot=(0, 0, 0), seg=16), hx - 2.9, hy + 4.6, rot=0.3, note="U3")
+    put("Prop_Washtub_Galvanized", "铁皮洗衣盆", [metal], lambda bm: bm_cyl(bm, 0.45, 0.38, 0.32, loc=(0, 0, 0.16), seg=20), 2.6, 8.1,
+        note="U3：门前铁皮盆；R1：楼梯左侧的盆")
+    put("Prop_Bucket_Galvanized", "铁桶", [metal], lambda bm: bm_cyl(bm, 0.18, 0.15, 0.36, loc=(0, 0, 0.18), seg=16), 1.7, 8.8, rot=0.3, note="U3")
     put("Prop_Wooden_Barrel", "木桶", [mat_noise("Wood_Barrel", "#8a5a33", "#a06b3f", scale=10), metal],
-        lambda bm: (bm_sphere(bm, (0.34, 0.34, 0.45), loc=(0, 0, 0.45), seg=16, rings=10,
-                              deform=lambda co: Vector((co.x, co.y, clamp(co.z, -0.85, 0.85)))),
+        lambda bm: (bm_sphere(bm, (0.34, 0.34, 0.45), loc=(0, 0, 0.45), seg=16, rings=10, deform=lambda co: Vector((co.x, co.y, clamp(co.z, -0.85, 0.85)))),
                     bm_torus(bm, 0.36, 0.02, loc=(0, 0, 0.2), mi=1), bm_torus(bm, 0.36, 0.02, loc=(0, 0, 0.7), mi=1)),
-        hx + 3.5, hy + 3.7, smooth_shade=True, note="U3：门右侧")
-    # 木墩 + 斧头
-    blk = put("Prop_Chopping_Block", "劈柴木墩", [log_bark, cut],
-              lambda bm: (bm_cyl(bm, 0.36, 0.4, 0.55, loc=(0, 0, 0.275), seg=12, mi=0), bm_cyl(bm, 0.355, 0.355, 0.01, loc=(0, 0, 0.555), seg=12, mi=1)),
-              hx + 5.2, hy + 5.0, note="U3")
+        -5.6, 3.3, smooth_shade=True, note="U3")
+    put("Prop_Water_Jar_Clay", "水缸", [mat_noise("Clay_Water_Jar", "#6a5444", "#7a6252", scale=5), mat_water("Water_Jar_Surface", "#4a7a8a", "#2e5866")],
+        lambda bm: (bm_sphere(bm, (0.42, 0.42, 0.4), loc=(0, 0, 0.4), seg=18, rings=10, deform=lambda co: Vector((co.x, co.y, min(co.z, 0.85)))),
+                    bm_cyl(bm, 0.36, 0.36, 0.01, loc=(0, 0, 0.72), seg=18, mi=1)),
+        -6.7, 3.1, smooth_shade=True, note="R1：院子里的水缸")
+    put("Prop_Chopping_Block", "劈柴木墩", [log_bark, cut],
+        lambda bm: (bm_cyl(bm, 0.36, 0.4, 0.55, loc=(0, 0, 0.275), seg=12, mi=0), bm_cyl(bm, 0.355, 0.355, 0.01, loc=(0, 0, 0.555), seg=12, mi=1)),
+        6.4, 7.0, note="U3")
     put("Prop_Axe", "斧头", [mat_noise("Wood_Axe_Handle", "#9b7347", "#b08455", scale=10), mat("Steel_Axe_Head", "#9fa6ab", metal=0.8, rough=0.3)],
-        lambda bm: (bm_cyl(bm, 0.025, 0.03, 0.75, loc=(0, 0, 0.6 + 0.3), rot=(0, 0.45, 0), seg=8, mi=0),
-                    bm_cube(bm, (0.2, 0.04, 0.12), loc=(-0.12, 0, 0.56), rot=(0, 0.45, 0), mi=1)),
-        hx + 5.2, hy + 5.0, sink=0.0 - 0.0, note="U3：斧头插在木墩上")
-    # 门前的原木、原木堆
-    put("Prop_Logs_Front", "门前的原木", [log_bark, cut],
-        lambda bm: [(bm_cyl(bm, 0.16, 0.16, 1.6, loc=(0, i * 0.34, 0.16), rot=(0, math.pi / 2, 0), seg=10, mi=0)) for i in range(3)],
-        hx + 4.6, hy + 6.6, rot=0.2, note="U3")
+        lambda bm: (bm_cyl(bm, 0.025, 0.03, 0.75, loc=(0, 0, 0.9), rot=(0, 0.45, 0), seg=8, mi=0),
+                    bm_cube(bm, (0.2, 0.04, 0.12), loc=(-0.12, 0, 0.56), rot=(0, 0.45, 0), mi=1)), 6.4, 7.0, sink=0.0, note="U3：斧头插在木墩上")
+    put("Prop_Logs_Front", "院里的原木", [log_bark, cut],
+        lambda bm: [bm_cyl(bm, 0.16, 0.16, 1.6, loc=(0, i * 0.34, 0.16), rot=(0, math.pi / 2, 0), seg=10, mi=0) for i in range(3)],
+        8.0, 5.8, rot=0.2, note="U3、R1")
 
     def log_pile(bm, n=5, L=4.0, r=0.3):
         for row in range(n):
@@ -1642,10 +2659,9 @@ def build_yard(root):
                 bm_cyl(bm, r, r, L, loc=(x, 0, z), rot=(math.pi / 2, 0, 0), seg=10, mi=0, caps=False)
                 bm_cyl(bm, r * 0.97, r * 0.97, 0.02, loc=(x, L / 2, z), rot=(math.pi / 2, 0, 0), seg=10, mi=1)
                 bm_cyl(bm, r * 0.97, r * 0.97, 0.02, loc=(x, -L / 2, z), rot=(math.pi / 2, 0, 0), seg=10, mi=1)
-    put("Prop_Log_Pile_A", "原木堆", [log_bark, cut], lambda bm: log_pile(bm, 5), LOGYARD[0], LOGYARD[1], rot=0.4,
-        note="U4：窗外能看到原木堆")
-    put("Prop_Log_Pile_B", "原木堆", [log_bark, cut], lambda bm: log_pile(bm, 4, 3.4, 0.26), LOGYARD[0] + 3.5, LOGYARD[1] + 5.0, rot=1.2,
-        note="U4")
+    put("Prop_Log_Pile_A", "原木堆", [log_bark, cut], lambda bm: log_pile(bm, 5), LOGYARD[0], LOGYARD[1], rot=0.4, world=True, note="U4：窗外能看到原木堆")
+    put("Prop_Log_Pile_B", "原木堆", [log_bark, cut], lambda bm: log_pile(bm, 4, 3.4, 0.26), LOGYARD[0] + 3.0, LOGYARD[1] + 4.0, rot=1.2, world=True, note="U4")
+    put("Prop_Log_Pile_Yard", "院子后面的原木堆", [log_bark, cut], lambda bm: log_pile(bm, 3, 3.0, 0.22), -8.0, -3.5, rot=0.05, note="R1：院子里有原木堆")
     rnd = random.Random(17)
     for k in range(8):
         a = rnd.uniform(0, 6.28)
@@ -1654,41 +2670,126 @@ def build_yard(root):
         rr = rnd.uniform(0.3, 0.5)
         put(f"Prop_Stump_{k}", "树桩", [log_bark, cut],
             lambda bm, rr=rr: (bm_cyl(bm, rr, rr * 1.2, 0.5, loc=(0, 0, 0.25), seg=12, mi=0), bm_cyl(bm, rr * 0.98, rr * 0.98, 0.01, loc=(0, 0, 0.505), seg=12, mi=1)),
-            x, y, status="inferred")
-    # 轮胎堆和绿色水管（U4 窗外）
+            x, y, status="inferred", world=True)
     tire = mat("Rubber_Tire", "#232426", rough=0.9)
-    put("Prop_Tire_Stack", "轮胎堆", [tire],
-        lambda bm: [bm_torus(bm, 0.36, 0.14, loc=(0, 0, 0.14 + i * 0.27), seg=20, rseg=8) for i in range(3)],
-        hx - 6.2, hy - 1.0, smooth_shade=True, note="U4")
+    put("Prop_Tire_Stack", "轮胎堆", [tire], lambda bm: [bm_torus(bm, 0.36, 0.14, loc=(0, 0, 0.14 + i * 0.27), seg=20, rseg=8) for i in range(4)],
+        -3.5, 6.6, smooth_shade=True, note="R1：楼梯右侧的轮胎堆；U4")
+    put("Prop_Tires_Lying", "地上的轮胎", [tire], lambda bm: (bm_torus(bm, 0.36, 0.14, loc=(0, 0, 0.14), seg=20, rseg=8),
+                                                        bm_torus(bm, 0.36, 0.14, loc=(0.8, 0.3, 0.14), rot=(0.15, 0, 0), seg=20, rseg=8)),
+        -4.7, 7.6, smooth_shade=True, note="R1")
 
     def hose(bm):
-        pts = []
-        for i in range(60):
-            a = i * 0.42
-            r = 0.32 + i * 0.002
-            pts.append((math.cos(a) * r, math.sin(a) * r, 0.03 + (i % 15) * 0.0))
+        pts = [(math.cos(i * 0.42) * (0.32 + i * 0.002), math.sin(i * 0.42) * (0.32 + i * 0.002), 0.03) for i in range(60)]
         bm_tube(bm, pts, [0.025] * len(pts), seg=6, mi=0)
-    put("Prop_Garden_Hose_Green", "绿色水管", [mat("Rubber_Hose_Green", "#2f8a4e", rough=0.5)], hose, hx - 5.4, hy + 1.2,
-        smooth_shade=True, note="U4")
-    # 围栏（推测：合影背景里有木栅栏，但那张图与四季篇木屋有冲突）
-    rail = mat_noise("Wood_Fence", "#9b7650", "#ae8960", scale=8)
-    pts = [(hx - 8, hy + 8), (hx - 8, hy - 5), (hx + 6, hy - 6), (hx + 10, hy - 3)]
-    for i, ((ax, ay), (bx, by)) in enumerate(zip(pts[:-1], pts[1:])):
+    put("Prop_Garden_Hose_Green", "绿色水管", [mat("Rubber_Hose_Green", "#2f8a4e", rough=0.5)], hose, -8.2, 0.6, smooth_shade=True, note="U4")
+    # 歪斜、高低不一的木板栅栏（R1），正面西段有带蓝色木板小屋顶的院门，东段留出车道
+    fence_ms = [mat_noise("Wood_Fence_A", "#9b7650", "#ae8960", scale=8), mat_noise("Wood_Fence_B", "#7e5e3e", "#8e6c4a", scale=8),
+                mat_noise("Wood_Fence_C", "#b08a5e", "#c09a6c", scale=8)]
+    F = dict(x0=-10.0, x1=20.0, y0=-6.0, y1=12.0)
+    gate = (-9.3, -6.9)
+    drive = (13.0, 18.5)
+    runs = [((F["x0"], F["y1"]), (gate[0], F["y1"])), ((gate[1], F["y1"]), (drive[0], F["y1"])), ((drive[1], F["y1"]), (F["x1"], F["y1"])),
+            ((F["x1"], F["y1"]), (F["x1"], F["y0"])), ((F["x1"], F["y0"]), (F["x0"], F["y0"])), ((F["x0"], F["y0"]), (F["x0"], F["y1"]))]
+    for i, ((ax, ay), (bx, by)) in enumerate(runs):
         L = math.hypot(bx - ax, by - ay)
-        n = max(1, int(L / 1.8))
-        bm = bmesh.new()
         ang = math.atan2(by - ay, bx - ax)
-        for k in range(n + 1):
-            t = k / n
-            x, y = ax + (bx - ax) * t, ay + (by - ay) * t
-            bm_cube(bm, (0.12, 0.12, 1.3), loc=(x, y, ground(x, y) + 0.5))
-        for k in range(n):
-            t = (k + 0.5) / n
-            x, y = ax + (bx - ax) * t, ay + (by - ay) * t
-            for zz in (0.45, 0.95):
-                bm_cube(bm, (L / n + 0.1, 0.06, 0.1), loc=(x, y, ground(x, y) + zz), rot=(0, 0, ang))
-        new_obj(f"Prop_Fence_Segment_{i}", bm, P, [rail], props=dict(cn="木栅栏", status="inferred",
-                                                                   note="合影背景有木栅栏，但该图与 U3 木屋有冲突，按推测处理"))
+        bm = bmesh.new()
+        n_post = max(1, int(L / 2.2))
+        for k in range(n_post + 1):
+            t = k / n_post
+            lx, ly = ax + (bx - ax) * t, ay + (by - ay) * t
+            z = lg(lx, ly)
+            bm_cyl(bm, 0.08, 0.09, 1.5, loc=(lx, ly, z + 0.55), rot=(rnd.uniform(-0.06, 0.06), rnd.uniform(-0.06, 0.06), 0), seg=8, mi=1)
+        for k in range(n_post):
+            for zz in (0.35, 0.85):
+                t0, t1 = k / n_post, (k + 1) / n_post
+                pa = (ax + (bx - ax) * t0, ay + (by - ay) * t0)
+                pb = (ax + (bx - ax) * t1, ay + (by - ay) * t1)
+                za, zb_ = lg(*pa) + zz + rnd.uniform(-0.06, 0.06), lg(*pb) + zz + rnd.uniform(-0.06, 0.06)
+                bm_tube(bm, [(pa[0], pa[1], za), ((pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, (za + zb_) / 2 - 0.05), (pb[0], pb[1], zb_)], [0.04] * 3, seg=6, mi=1)
+        t = 0.0
+        while t < L - 0.1:
+            w = rnd.uniform(0.12, 0.2)
+            t += w / 2
+            lx, ly = ax + math.cos(ang) * t, ay + math.sin(ang) * t
+            if rnd.random() > 0.12:
+                h = rnd.uniform(0.85, 1.35)
+                z = lg(lx, ly)
+                bm_cube(bm, (w, 0.035, h), loc=(lx - math.sin(ang) * 0.06, ly + math.cos(ang) * 0.06, z + h / 2 - 0.1),
+                        rot=(rnd.uniform(-0.05, 0.05), rnd.uniform(-0.15, 0.15), ang + rnd.uniform(-0.04, 0.04)),
+                        mi=rnd.randrange(3))
+            t += w / 2 + rnd.uniform(0.02, 0.12)
+        ob = new_obj(f"Prop_Fence_Crooked_{i}", bm, P, fence_ms, props=dict(cn="歪斜木板栅栏", status="observed",
+                                                                           note="R1：高低不一、歪斜的木板栅栏；完整走向只看到正面，其余为推测"))
+        ob.location = (hx, hy, root.location.z)
+    # 院门：两根柱子 + 蓝色木板小屋顶（R1 左侧）
+    gz0 = lg(sum(gate) / 2, F["y1"])
+    bm = bmesh.new()
+    for x in gate:
+        bm_cyl(bm, 0.12, 0.13, 2.7, loc=(x, F["y1"], gz0 + 1.25), seg=10)
+    bm_cube(bm, (gate[1] - gate[0] + 0.6, 0.16, 0.16), loc=(sum(gate) / 2, F["y1"], gz0 + 2.55))
+    ob = new_obj("Prop_Yard_Gate_Posts", bm, P, [fence_ms[1]], props=dict(cn="院门门柱和横梁", status="observed", note="R1"))
+    ob.location = (hx, hy, root.location.z)
+    Sg = roof_surface(gate[0] - 0.5, gate[1] + 0.5, F["y1"], 0.6, 0.15, gz0 + 2.6, 0.55, lift_hi=0.18, lift_lo=0.18)
+    bm = bmesh.new()
+    roof_boards(bm, Sg, gate[0] - 0.5, gate[1] + 0.5, rnd, 2, tiers=1, thick=0.04, wmin=0.25, wmax=0.35)
+    ob = new_obj("Prop_Yard_Gate_Roof_Blue", bm, P, [MATS["Roof_Board_BlueGrey_1"], MATS["Roof_Board_BlueGrey_3"]],
+                 props=dict(cn="院门上的蓝色木板小屋顶", status="observed", note="R1"))
+    ob.location = (hx, hy, root.location.z)
+
+
+def mat_brick(name, c1, c2, mortar, scale=3.0, rough=0.85):
+    """砖墙（烟囱、炕身）：在竖直面上用 (x+y, z) 作为砖纹坐标。"""
+    if name in MATS:
+        return MATS[name]
+    m = _new_mat(name)
+    nodes, links = _nodes(m)
+    b = nodes.get("Principled BSDF")
+    tc = nodes.new("ShaderNodeTexCoord")
+    sep = nodes.new("ShaderNodeSeparateXYZ")
+    add = nodes.new("ShaderNodeMath")
+    cmb = nodes.new("ShaderNodeCombineXYZ")
+    links.new(tc.outputs["Object"], sep.inputs[0])
+    links.new(sep.outputs["X"], add.inputs[0])
+    links.new(sep.outputs["Y"], add.inputs[1])
+    links.new(add.outputs[0], cmb.inputs["X"])
+    links.new(sep.outputs["Z"], cmb.inputs["Y"])
+    br = nodes.new("ShaderNodeTexBrick")
+    br.inputs["Color1"].default_value = srgb(c1)
+    br.inputs["Color2"].default_value = srgb(c2)
+    br.inputs["Mortar"].default_value = srgb(mortar)
+    br.inputs["Scale"].default_value = scale
+    br.inputs["Mortar Size"].default_value = 0.012
+    links.new(cmb.outputs["Vector"], br.inputs["Vector"])
+    links.new(br.outputs["Color"], b.inputs["Base Color"])
+    bp = nodes.new("ShaderNodeBump")
+    bp.inputs["Strength"].default_value = 0.3
+    links.new(br.outputs["Fac"], bp.inputs["Height"])
+    links.new(bp.outputs["Normal"], b.inputs["Normal"])
+    _set(b, "Roughness", rough)
+    m.diffuse_color = srgb(c1)
+    MATS[name] = m
+    return m
+
+
+def mat_checker(name, c1, c2, scale=10.0, rough=0.9):
+    """格子布（炕上叠着的格子被，R4）。"""
+    if name in MATS:
+        return MATS[name]
+    m = _new_mat(name)
+    nodes, links = _nodes(m)
+    b = nodes.get("Principled BSDF")
+    tc = nodes.new("ShaderNodeTexCoord")
+    ck = nodes.new("ShaderNodeTexChecker")
+    ck.inputs["Color1"].default_value = srgb(c1)
+    ck.inputs["Color2"].default_value = srgb(c2)
+    ck.inputs["Scale"].default_value = scale
+    links.new(tc.outputs["Object"], ck.inputs["Vector"])
+    links.new(ck.outputs["Color"], b.inputs["Base Color"])
+    _set(b, "Roughness", rough)
+    m.diffuse_color = srgb(c1)
+    MATS[name] = m
+    return m
 
 
 # ------------------------------------------------------------------------------------------------
@@ -2274,7 +3375,7 @@ def build_characters():
          fur="#9b4f2e", fur_dark="#7c3a20", bib="#efdcc2", belly=None, muzzle="#f1e2cf", nose="#d4424a")
     bear("XiongEr", "熊二", CH["Characters_XiongEr"], (m[0] + 1.6, m[1] + 1.6), math.radians(-12),
          fur="#d6a356", fur_dark="#b9853c", bib=None, belly="#ecca8c", muzzle="#f2ddb0", nose="#5e6683", plump=1.15, eye_patch="#f0dfb2")
-    guangtouqiang(CH["Characters_GuangtouQiang"], (HOUSE["x"] + 1.8, HOUSE["y"] + 5.4), math.radians(160))
+    guangtouqiang(CH["Characters_GuangtouQiang"], (HOUSE["x"] + 0.6, HOUSE["y"] + 9.2), math.radians(160))
     bx, by = lake_point(math.radians(-62), 1.33)
     tutu(CH["Characters_TuTu"], (bx - 0.75, by), math.radians(-12))
     luobotou(CH["Characters_LuoBoTou"], (bx, by + 0.15), math.radians(0))
@@ -2358,8 +3459,9 @@ def build_lights_cameras():
     ov = cam("Cam_Map_Overview", "地图总览", (34, -88, 118), (-6, -2, 0), 28)
     hx, hy = HOUSE["x"], HOUSE["y"]
     gz = ground(hx, hy)
-    cam("Cam_House_Interior", "木屋室内（看炕、冰箱、灶台）", (hx + 3.6, hy + 2.5, gz + FOUND + 2.1),
-        (hx - 1.8, hy - 2.4, gz + FOUND + 0.7), 16)
+    hz = bpy.data.objects["GQ_House_Root"].location.z
+    cam("Cam_House_Interior", "木屋室内：客厅/厨房（看冰箱、水槽、圆窗、蓝色橱柜）", (hx + 0.95, hy + 2.45, hz + FOUND + 1.7),
+        (hx - 2.6, hy - 2.3, hz + FOUND + 0.9), 14)
     cam("Cam_House_Exterior", "木屋正面（参照 U3）", (hx + 3.0, hy + 15.0, gz + 2.4), (hx, hy, gz + 2.0), 28)
     lx, ly = lake_point(math.radians(-55), 1.35)
     cx, cy = lake_point(CLIFF["fall"], 1.1)
@@ -2419,14 +3521,68 @@ def build_check_cameras():
         bpy.data.objects[a].name = b
     for n, cn in (("Check_Pickup_Front", "皮卡 正面"), ("Check_Pickup_Back", "皮卡 车尾"), ("Check_Pickup_Side", "皮卡 侧面"), ("Check_Pickup_Top", "皮卡 俯视")):
         bpy.data.objects[n]["name_cn"] = cn
-    views("GQ_House_Root", "House", 5.4, 10.5, 6.5, kinds=("Front", "Side", "Back", "Top"), res="1100x700")
+    views("GQ_House_Root", "House", 8.6, 14.5, 9.0, kinds=("Front", "Side", "Back", "Top"), res="1100x700")
     for a, b in (("Check_House_Front", "Check_House_Back_tmp"), ("Check_House_Back", "Check_House_Front"), ("Check_House_Back_tmp", "Check_House_Back")):
         bpy.data.objects[a].name = b
     for n, cn in (("Check_House_Front", "木屋 正面"), ("Check_House_Back", "木屋 背面"), ("Check_House_Side", "木屋 侧面（东）"), ("Check_House_Top", "木屋 俯视")):
         bpy.data.objects[n]["name_cn"] = cn
     hr = bpy.data.objects["GQ_House_Root"]
-    ortho("Check_House_Interior_Plan", "木屋室内平面（隐藏屋顶）", hr.location + Vector((0, 0, 1.0)), (0, 0, 1), 12, 10.5, 10.6, "1100x800")
+    ortho("Check_House_Interior_Plan", "木屋室内平面（隐藏屋顶）", hr.location + Vector((-1.2, 0.4, 1.0)), (0, 0, 1), 12, 13.2, 10.6, "1100x800")
     ortho("Check_Map_Top", "地图俯视", (0, 0, 0), (0, 0, 1), 260, 205, 300, "1400x1050")
+    build_acceptance_cameras()
+
+
+def build_acceptance_cameras():
+    """验收相机（render_acceptance.py 渲染）：木屋四面、屋顶近景、室内俯视、三个房间、仓库四面、仓库内部、储物细节、院子全景。
+    hide_collections 里的集合在渲染这台相机时隐藏（例如拆掉屋顶看室内）。室外相机的 clip_start 用来切掉挡在前面的树和另一栋建筑。"""
+    AC = coll("Acceptance_Cameras", COLL["Lights_and_Cameras"])
+    bpy.context.view_layer.update()
+    hr = bpy.data.objects["GQ_House_Root"]
+    wr = bpy.data.objects["Warehouse_Root"]
+    B, Bw = FOUND, WAREHOUSE["floor"]
+
+    def cam(name, cn, root, loc, tgt, lens=40, clip=0.1, hide="", res="1600x1000", ortho=None, clear=False):
+        cd = bpy.data.cameras.new(name)
+        cd.lens = lens
+        cd.clip_start = clip
+        cd.clip_end = 1500
+        co = bpy.data.objects.new(name, cd)
+        AC.objects.link(co)
+        M = root.matrix_world
+        co.location = M @ Vector(loc)
+        if ortho:
+            cd.type = "ORTHO"
+            cd.ortho_scale = ortho
+            cd.clip_start, cd.clip_end = 1.0, 30.0
+            co.rotation_euler = (0, 0, root.rotation_euler.z)
+        else:
+            look_at(co, M @ Vector(tgt))
+            co["view_target"] = list(M @ Vector(tgt))
+        co["clear_trees"] = clear
+        co["name_cn"] = cn
+        co["hide_collections"] = hide
+        co["acc_res"] = res
+        return co
+    roof_h, roof_w = "GQ_House_Roof_Removable", "WH_Roof_Removable"
+    wh = "GuangtouQiang_Warehouse"
+    house = "GuangtouQiang_House_Exterior,GuangtouQiang_House_Interior"
+    cam("Acc_01_House_Front", "木屋正面", hr, (-1.0, 19.0, 4.6), (-1.2, 0.0, 3.4), clear=True)
+    cam("Acc_02_House_Back", "木屋背面", hr, (-1.5, -17.5, 4.6), (-1.2, 0.0, 3.2), clear=True)
+    cam("Acc_03_House_East_Side", "木屋东侧（站在门前看是左侧，卧室一侧；渲染时隐藏仓库）", hr, (18.5, 0.8, 4.6), (0.0, 0.8, 3.2), hide=wh, clear=True)
+    cam("Acc_04_House_West_Side", "木屋西侧（站在门前看是右侧，卫生间侧翼）", hr, (-21.0, 0.8, 4.6), (-2.0, 0.8, 3.0), clear=True)
+    cam("Acc_05_House_Roof_Closeup", "屋顶近景（烟囱、天线、补丁、上翘屋檐）", hr, (-8.5, 9.0, 10.5), (-1.6, -0.6, 5.2), lens=32, clip=2.0)
+    cam("Acc_06_House_Interior_Top", "木屋室内俯视（拆掉屋顶）", hr, (-1.2, 0.4, 13.0), None, hide=roof_h, res="1500x1000", ortho=13.6)
+    cam("Acc_07_Kitchen_Dining", "客厅/厨房/餐厅", hr, (0.95, 2.45, B + 1.7), (-2.6, -2.3, B + 0.9), lens=14)
+    cam("Acc_08_Bedroom", "卧室", hr, (1.75, -1.6, B + 1.7), (3.6, 1.5, B + 0.8), lens=14)
+    cam("Acc_09_Bathroom", "卫生间", hr, (-4.62, -0.35, B + 1.65), (-6.4, -1.9, B + 0.7), lens=13)
+    cam("Acc_10_Warehouse_Front", "仓库正面（大门朝向木屋；渲染时隐藏木屋）", wr, (0.0, 17.0, 3.6), (0.0, 0.0, 2.6), hide=house, clear=True)
+    cam("Acc_11_Warehouse_Back", "仓库背面", wr, (0.0, -17.0, 3.6), (0.0, 0.0, 2.6), clear=True)
+    cam("Acc_12_Warehouse_East", "仓库东侧", wr, (16.0, 0.0, 3.6), (0.0, 0.0, 2.4), clear=True)
+    cam("Acc_13_Warehouse_West", "仓库西侧", wr, (-16.0, 0.0, 3.6), (0.0, 0.0, 2.4), clear=True)
+    cam("Acc_14_Warehouse_Interior", "仓库内部（从大门往里看）", wr, (0.5, 3.6, Bw + 1.7), (-0.5, -2.5, Bw + 0.9), lens=14)
+    cam("Acc_15_Warehouse_Storage_Detail", "仓库储物细节（木料架）", wr, (0.2, 0.6, Bw + 1.6), (2.3, -1.6, Bw + 1.1), lens=20)
+    cam("Acc_16_Warehouse_Interior_Top", "仓库室内俯视（拆掉屋顶）", wr, (0.0, 0.0, 12.0), None, hide=roof_w, res="1200x1400", ortho=9.6)
+    cam("Acc_17_Yard_Overview", "院子全景（木屋、仓库、小路、栅栏、院门）", hr, (-14.0, 26.0, 17.0), (5.5, -1.0, 1.0), lens=28, clip=2.0)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -2468,6 +3624,41 @@ def quality_checks():
         r, g, b, _ = m.diffuse_color
         if max(r, g, b) < 0.003 and m.name not in ("Shadow_Opening",):
             report.append(f"近黑色材质: {m.name}")
+    # 室内家具：落地物体的底面要贴地板；同一房间里的落地家具在平面上不能互相穿插；门洞里不能有家具
+    bpy.context.view_layer.update()
+
+    def wbox(ob):
+        cs = [ob.matrix_world @ Vector(c) for c in ob.bound_box]
+        return (min(c.x for c in cs), max(c.x for c in cs), min(c.y for c in cs), max(c.y for c in cs), min(c.z for c in cs), max(c.z for c in cs))
+    items = [o for o in bpy.data.objects if o.get("floor_item")]
+    boxes = {o.name: wbox(o) for o in items}
+    for o in items:
+        dz = boxes[o.name][4] - o["floor_z_world"]
+        if abs(dz) > 0.03:
+            report.append(f"家具没贴地板: {o.name} dz={dz:.3f}")
+    for i, a in enumerate(items):
+        for b in items[i + 1:]:
+            if a["room"] != b["room"] or not (a.get("overlap_check") and b.get("overlap_check")):
+                continue
+            A, Bx = boxes[a.name], boxes[b.name]
+            ox = min(A[1], Bx[1]) - max(A[0], Bx[0])
+            oy = min(A[3], Bx[3]) - max(A[2], Bx[2])
+            if ox > 0.02 and oy > 0.02:
+                report.append(f"家具互相穿插: {a.name} / {b.name} ({ox:.2f}×{oy:.2f} m)")
+    for nm, root_name, (x0, x1, y0, y1, z0, z1) in DOOR_PASSAGES:
+        M = bpy.data.objects[root_name].matrix_world
+        cs = [M @ Vector((x, y, z)) for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)]
+        P = (min(c.x for c in cs), max(c.x for c in cs), min(c.y for c in cs), max(c.y for c in cs), min(c.z for c in cs), max(c.z for c in cs))
+        for o in bpy.data.objects:
+            if o.type != "MESH" or not (o.get("floor_item") or "Leaf" in o.name or "Barn_Door" in o.name):
+                continue
+            A = boxes.get(o.name) or wbox(o)
+            if all(min(A[2 * k + 1], P[2 * k + 1]) - max(A[2 * k], P[2 * k]) > 0.0 for k in range(3)):
+                report.append(f"门洞被挡住: {nm} ← {o.name}")
+    # 缺失贴图（本脚本不用外部贴图，应为 0）
+    for im in bpy.data.images:
+        if im.source == "FILE" and not os.path.isfile(bpy.path.abspath(im.filepath)):
+            report.append(f"缺失贴图: {im.name}")
     # 地图范围
     for ob in bpy.data.objects:
         if ob.parent is None and ob.type in ("MESH", "EMPTY") and not ob.name.startswith(("Terrain_", "Proto_")):
@@ -2540,6 +3731,7 @@ def main():
     n = step("forest", build_forest)
     print("  trees:", n, flush=True)
     step("house", build_house)
+    step("warehouse", build_warehouse)
     step("bears home", build_bears_home)
     step("pickup", build_pickup)
     step("characters", build_characters)
