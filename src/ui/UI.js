@@ -126,9 +126,9 @@ export class UI {
 
 <div class="hud" id="hud">
   <div class="viewctl" role="group" aria-label="视角">
-    <button class="viewctl__btn" id="turn-ccw" type="button" title="沙盘逆时针转 45°（Q）" aria-label="沙盘逆时针转 45 度">${SVG.turnCcw}</button>
+    <button class="viewctl__btn" id="turn-ccw" type="button" title="沙盘逆时针转 5°，按住连续旋转（Q）" aria-label="沙盘逆时针转 5 度，按住连续旋转">${SVG.turnCcw}</button>
     <button class="compass" id="compass" type="button" title="回到正北" aria-label="指北针：点击回到正北"><span class="compass__rose" id="compass-rose"><span>北</span></span></button>
-    <button class="viewctl__btn" id="turn-cw" type="button" title="沙盘顺时针转 45°（E）" aria-label="沙盘顺时针转 45 度">${SVG.turnCw}</button>
+    <button class="viewctl__btn" id="turn-cw" type="button" title="沙盘顺时针转 5°，按住连续旋转（E）" aria-label="沙盘顺时针转 5 度，按住连续旋转">${SVG.turnCw}</button>
     <button class="viewctl__flip" id="flip-view" type="button" title="翻转视角 180°（R）" aria-label="翻转视角 180 度">${SVG.flip}<span>翻转</span></button>
   </div>
   <div class="scalebar" id="scalebar"><div class="scalebar__bar" id="scalebar-bar"></div><div class="scalebar__label" id="scalebar-label"></div></div>
@@ -166,7 +166,7 @@ export class UI {
     <section>
       <h3>示意与推定</h3>
       <p>史书只记大势，各部的具体营址、队形与行军道路多为据史文与地形所作的推定，例如晋军大营按“去洛涧二十五里”（一晋里约435米）定位，青冈仅知“去寿春三十里”，方位为示意。兵俑、舟船与旗帜均经放大，数量不代表实际人数。</p>
-      <p>操作：拖动平移沙盘，右键拖动（或按住 Ctrl / Shift 拖动）旋转与俯仰，滚轮向指针处缩放；触屏单指平移、双指缩放旋转。指北针两旁的按钮把沙盘逆时针或顺时针转 45°，「翻转」转 180° 看向对面（快捷键 Q、E、R），点击指北针回到正北。空格播放或暂停，左右方向键切换时间节点。</p>
+      <p>操作：拖动平移沙盘，右键拖动（或按住 Ctrl / Shift 拖动）旋转与俯仰，滚轮向指针处缩放；触屏单指平移、双指缩放旋转。指北针两旁的按钮每按一下把沙盘逆时针或顺时针转 5°，按住则连续旋转；「翻转」转 180° 看向对面（快捷键 Q、E、R），点击指北针回到正北。空格播放或暂停，左右方向键切换时间节点。</p>
     </section>
   </div>
 </dialog>
@@ -217,8 +217,30 @@ export class UI {
     this.$('tl-next').addEventListener('click', () => app.stepEpisode(1));
     this.$('tl-speed').addEventListener('change', (e) => (app.speed = Number(e.target.value)));
     this.$('compass').addEventListener('click', () => app.rig.faceNorth());
-    this.$('turn-ccw').addEventListener('click', () => app.rig.turn(45));
-    this.$('turn-cw').addEventListener('click', () => app.rig.turn(-45));
+    // turn buttons and Q / E: one press turns 5°, holding keeps turning until release
+    const STEP = 5;
+    const SPIN = 60; // degrees per second while held
+    const startTurn = (dir) => {
+      app.rig.turn(dir * STEP);
+      app.rig.setSpin(dir * SPIN, 0.4); // only if still held by then
+    };
+    const stopTurn = () => {
+      if (app.rig.spin) app.rig.setSpin(0);
+    };
+    for (const [id, dir] of [['turn-ccw', 1], ['turn-cw', -1]]) {
+      const btn = this.$(id);
+      btn.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        btn.setPointerCapture?.(e.pointerId);
+        startTurn(dir);
+      });
+      for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) btn.addEventListener(ev, stopTurn);
+      btn.addEventListener('contextmenu', (e) => e.preventDefault()); // long press on touch screens
+      // Enter or Space on a focused button arrives as a click with no pointer
+      btn.addEventListener('click', (e) => e.detail === 0 && app.rig.turn(dir * STEP));
+    }
+    window.addEventListener('blur', stopTurn);
+    window.addEventListener('keyup', (e) => (e.code === 'KeyQ' || e.code === 'KeyE') && stopTurn());
     this.$('flip-view').addEventListener('click', () => app.rig.turn(180));
     this.$('tl-nodes').addEventListener('click', (e) => {
       const b = e.target.closest('.tl-node__btn');
@@ -340,8 +362,9 @@ export class UI {
       } else if (e.code === 'ArrowRight') app.stepEpisode(1);
       else if (e.code === 'ArrowLeft') app.stepEpisode(-1);
       else if (e.ctrlKey || e.metaKey || e.altKey) return;
-      else if (e.code === 'KeyQ') app.rig.turn(45);
-      else if (e.code === 'KeyE') app.rig.turn(-45);
+      else if (e.code === 'KeyQ' || e.code === 'KeyE') {
+        if (!e.repeat) startTurn(e.code === 'KeyQ' ? 1 : -1);
+      }
       else if (e.code === 'KeyR') app.rig.turn(180);
     });
   }

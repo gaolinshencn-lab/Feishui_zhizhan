@@ -27,9 +27,12 @@ export class CameraRig {
     this.flyDur = 2.4;
     this.pose = { target: new THREE.Vector3(), dist: 100, yaw: 0, pitch: 50 };
     this.listeners = new Set();
+    this.spin = 0;
+    this.spinDelay = 0;
     this.controls.addEventListener('start', () => {
       if (this._programmatic) return;
       this.manual = null;
+      this.spin = 0;
       this.setAuto(false);
     });
   }
@@ -39,7 +42,10 @@ export class CameraRig {
   }
 
   setAuto(v) {
-    if (v) this.manual = null;
+    if (v) {
+      this.manual = null;
+      this.spin = 0;
+    }
     if (this.auto === v) return;
     this.auto = v;
     if (v) this.beginFly();
@@ -129,6 +135,7 @@ export class CameraRig {
   /** Turn the view back to north-up (from the compass), keeping centre, distance and tilt. */
   faceNorth() {
     this.setAuto(false);
+    this.spin = 0;
     const from = this.currentPose();
     this.manual = { from, to: { ...from, target: from.target.clone(), yaw: 0 }, t: 0, dur: 0.8, turning: true };
   }
@@ -139,10 +146,22 @@ export class CameraRig {
    */
   turn(deg) {
     this.setAuto(false);
+    this.spin = 0;
     const from = this.currentPose();
     const base = this.manual?.turning ? this.manual.to.yaw : from.yaw;
     const to = { ...from, target: from.target.clone(), yaw: base + deg };
-    this.manual = { from, to, t: 0, dur: Math.abs(deg) >= 180 ? 1.1 : 0.6, turning: true };
+    const dur = Math.abs(deg) >= 180 ? 1.1 : Math.abs(deg) <= 10 ? 0.22 : 0.6;
+    this.manual = { from, to, t: 0, dur, turning: true };
+  }
+
+  /**
+   * Keep turning at `rate` degrees per second while a turn button or key is held; 0 stops. The
+   * `delay` runs on the animation clock, so a stalled frame can't turn a quick tap into a spin.
+   */
+  setSpin(rate, delay = 0) {
+    if (rate) this.setAuto(false);
+    this.spin = rate;
+    this.spinDelay = delay;
   }
 
   /** Free camera: keep the orbit centre over the table and on the terrain surface. */
@@ -163,6 +182,7 @@ export class CameraRig {
   /** Fly (with auto camera off) to look at a world point, e.g. from the place index. */
   flyToPoint(x, y, z, dist) {
     this.setAuto(false);
+    this.spin = 0;
     const from = this.currentPose();
     const to = { target: new THREE.Vector3(x, y, z), dist, yaw: from.yaw, pitch: Math.max(38, Math.min(60, from.pitch)) };
     this.manual = { from, to, t: 0, dur: 1.8 };
@@ -170,6 +190,15 @@ export class CameraRig {
 
   update(dt, episode, progress) {
     if (!this.proj) return;
+    if (this.spin && (this.spinDelay -= dt) <= 0) {
+      this.manual = null; // carry on smoothly from wherever a single-step turn had reached
+      const p = this.currentPose();
+      p.yaw += this.spin * dt;
+      this._programmatic = true;
+      this.apply(p);
+      this._programmatic = false;
+      return;
+    }
     if (this.manual) {
       const m = this.manual;
       m.t = Math.min(1, m.t + dt / m.dur);
