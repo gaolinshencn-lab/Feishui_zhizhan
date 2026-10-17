@@ -126,6 +126,28 @@ export class CameraRig {
     this.flyT = 1;
   }
 
+  /** Turn the view back to north-up (from the compass), keeping centre, distance and tilt. */
+  faceNorth() {
+    this.setAuto(false);
+    const from = this.currentPose();
+    this.manual = { from, to: { ...from, target: from.target.clone(), yaw: 0 }, t: 0, dur: 0.8 };
+  }
+
+  /** Free camera: keep the orbit centre over the table and on the terrain surface. */
+  keepOnTable(dt) {
+    const t = this.controls.target;
+    const x = THREE.MathUtils.clamp(t.x, -this.proj.width / 2, this.proj.width / 2);
+    const z = THREE.MathUtils.clamp(t.z, -this.proj.depth / 2, this.proj.depth / 2);
+    const ground = Math.max(this.proj.groundY(x, z), 0);
+    // rise quickly out of hills, settle slowly into valleys
+    const y = t.y + (ground - t.y) * Math.min(1, dt * (ground > t.y ? 8 : 3));
+    const d = this._shift || (this._shift = new THREE.Vector3());
+    d.set(x - t.x, y - t.y, z - t.z);
+    if (d.lengthSq() < 1e-10) return;
+    t.add(d);
+    this.camera.position.add(d);
+  }
+
   /** Fly (with auto camera off) to look at a world point, e.g. from the place index. */
   flyToPoint(x, y, z, dist) {
     this.setAuto(false);
@@ -147,6 +169,7 @@ export class CameraRig {
     }
     if (!this.auto || !episode) {
       this.controls.update();
+      this.keepOnTable(dt);
       return;
     }
     const a = this.poseFrom(episode.camera);

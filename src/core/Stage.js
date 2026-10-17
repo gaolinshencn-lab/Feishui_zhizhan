@@ -72,6 +72,11 @@ export class Stage {
     this.camera.position.set(0, 80, 90);
 
     this.controls = new OrbitControls(this.camera, renderer.domElement);
+    // map-style: dragging moves across the table, right-drag (or Ctrl / Shift / ⌘ + drag) turns and
+    // tilts, the wheel zooms toward the pointer; on touch one finger moves, two fingers zoom and turn
+    this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    this.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    this.controls.zoomToCursor = true;
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
     this.controls.screenSpacePanning = false;

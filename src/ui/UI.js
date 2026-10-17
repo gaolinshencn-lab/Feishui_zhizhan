@@ -114,11 +114,12 @@ export class UI {
     <div class="legend__row"><span class="ar ar--plan"></span>计划 / 意图<span class="lg-flag"></span>主将牙旗</div>
     <div class="legend__row"><span class="mk mk--battle"></span>交战<span class="mk mk--death"></span>阵亡<span class="mk mk--seal">成</span>成语典故</div>
     <p class="legend__note">兵俑与舟船为示意，大小经放大；地形垂直比例经夸张。</p>
+    <p class="legend__note legend__keys">拖动平移 · 右键或 Ctrl 拖动旋转 · 滚轮缩放</p>
   </div>
 </section>
 
 <div class="hud" id="hud">
-  <div class="compass" id="compass" aria-label="指北针"><div class="compass__rose" id="compass-rose"><span>北</span></div></div>
+  <button class="compass" id="compass" type="button" title="回到正北" aria-label="指北针：点击回到正北"><span class="compass__rose" id="compass-rose"><span>北</span></span></button>
   <div class="scalebar" id="scalebar"><div class="scalebar__bar" id="scalebar-bar"></div><div class="scalebar__label" id="scalebar-label"></div></div>
 </div>
 
@@ -154,7 +155,7 @@ export class UI {
     <section>
       <h3>示意与推定</h3>
       <p>史书只记大势，各部的具体营址、队形与行军道路多为据史文与地形所作的推定，例如晋军大营按“去洛涧二十五里”（一晋里约435米）定位，青冈仅知“去寿春三十里”，方位为示意。兵俑、舟船与旗帜均经放大，数量不代表实际人数。</p>
-      <p>操作：拖动旋转、滚轮缩放、右键平移；空格播放或暂停，左右方向键切换时间节点。</p>
+      <p>操作：拖动平移沙盘，右键拖动（或按住 Ctrl / Shift 拖动）旋转与俯仰，滚轮向指针处缩放；触屏单指平移、双指缩放旋转；点击指北针回到正北。空格播放或暂停，左右方向键切换时间节点。</p>
     </section>
   </div>
 </dialog>
@@ -169,6 +170,9 @@ export class UI {
       this.$('episode').classList.add('is-collapsed');
       this.$('episode-toggle').setAttribute('aria-expanded', 'false');
       this.$('legend').classList.add('is-collapsed');
+    }
+    if (window.matchMedia?.('(pointer: coarse)').matches) {
+      this.root.querySelector('.legend__keys').textContent = '单指平移 · 双指缩放与旋转';
     }
     this.buildTimeline();
     this.bind();
@@ -201,6 +205,7 @@ export class UI {
     this.$('tl-prev').addEventListener('click', () => app.stepEpisode(-1));
     this.$('tl-next').addEventListener('click', () => app.stepEpisode(1));
     this.$('tl-speed').addEventListener('change', (e) => (app.speed = Number(e.target.value)));
+    this.$('compass').addEventListener('click', () => app.rig.faceNorth());
     this.$('tl-nodes').addEventListener('click', (e) => {
       const b = e.target.closest('.tl-node__btn');
       if (b) app.jumpTo(Number(b.dataset.i));

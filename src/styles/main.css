@@ -844,8 +844,21 @@ button {
   place-items: center;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.compass:hover {
+  border-color: var(--gold);
+}
+.compass:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 .compass__rose {
+  display: block;
   width: 40px;
   height: 40px;
   position: relative;
