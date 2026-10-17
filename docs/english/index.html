@@ -1,0 +1,1518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>English Check-in</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: a daily study log; the selected day on the left, calendar and history on the right. */
+  :root {
+    --bg: #f3f5f7;
+    --card: #ffffff;
+    --ink: #1c2330;
+    --muted: #677184;
+    --line: #dfe4ea;
+    --field: #f7f9fb;
+    --accent: #2d62c9;
+    --accent-soft: #e3ebfa;
+    --accent-ink: #ffffff;
+    --good: #23885a;
+    --good-soft: #d9f0e3;
+    --part: #b98512;
+    --part-soft: #f6ead0;
+    --danger: #c0392f;
+    --shadow: 0 1px 2px rgba(20, 30, 50, .05), 0 4px 16px rgba(20, 30, 50, .04);
+    --font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #13161c; --card: #1c2028; --ink: #e6e9ee; --muted: #98a1b0; --line: #2c323d; --field: #161a21;
+      --accent: #6c9bf2; --accent-soft: #22304a; --accent-ink: #0c1220; --good: #4cc286; --good-soft: #1b3428;
+      --part: #e0b04a; --part-soft: #382f1c; --danger: #ec6e63; --shadow: none; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #13161c; --card: #1c2028; --ink: #e6e9ee; --muted: #98a1b0; --line: #2c323d; --field: #161a21;
+    --accent: #6c9bf2; --accent-soft: #22304a; --accent-ink: #0c1220; --good: #4cc286; --good-soft: #1b3428;
+    --part: #e0b04a; --part-soft: #382f1c; --danger: #ec6e63; --shadow: none; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font); }
+  .wrap {
+    max-width: 980px; margin: 0 auto; padding-block: 24px 56px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+  h2 { font-size: 12.5px; margin: 0 0 10px; color: var(--muted); font-weight: 650; text-transform: uppercase; letter-spacing: .08em; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .hdr-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .sync { font-size: 12px; color: var(--muted); }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+  .stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; line-height: 1.25; }
+  .stat span { color: var(--muted); font-size: 13px; }
+
+  .grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .col { display: grid; gap: 16px; min-width: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); min-width: 0; }
+  .section + .section { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+
+  .dayhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+  .dayhead .date { font-size: 19px; font-weight: 650; }
+  .nav { display: flex; gap: 4px; align-items: center; }
+
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .icon-btn { background: transparent; border: 1px solid var(--line); border-radius: 8px; width: 34px; height: 34px; }
+  .icon-btn:hover:not(:disabled) { border-color: var(--muted); }
+  .btn { border: 1px solid var(--line); background: var(--card); border-radius: 9px; padding: 8px 14px; }
+  .btn:hover:not(:disabled) { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.good { background: var(--good); border-color: var(--good); color: var(--accent-ink); font-weight: 600; }
+  .btn.small { padding: 4px 10px; font-size: 13px; }
+  .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+
+  input, select, textarea {
+    font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line);
+    border-radius: 9px; padding: 8px 10px; min-width: 0;
+  }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .add input[type=text] { flex: 1 1 200px; }
+  input[type=number] { width: 80px; }
+  textarea { width: 100%; min-height: 84px; resize: vertical; }
+  label.lbl { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 14px; }
+  .chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; font-size: 13px; color: var(--muted); }
+  .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  .progress { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 8px; }
+  .progress > div { height: 100%; background: var(--good); width: 0; transition: width .25s; }
+  ul.plan { list-style: none; margin: 0 0 10px; padding: 0; }
+  ul.plan li { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--line); }
+  ul.plan li:last-child { border-bottom: 0; }
+  ul.plan input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--good); flex: none; margin: 0; }
+  ul.plan .txt { flex: 1; min-width: 0; overflow-wrap: anywhere; cursor: text; }
+  ul.plan li.done .txt { color: var(--muted); text-decoration: line-through; }
+  ul.plan .edit { flex: 1; min-width: 0; padding: 4px 8px; }
+  .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; flex: none; }
+  .mins { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+  .del { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; padding: 0 4px; flex: none; }
+  .del:hover { color: var(--danger); }
+  .empty { color: var(--muted); font-size: 14px; padding: 6px 0 10px; }
+
+  .rating { display: flex; gap: 6px; flex-wrap: wrap; }
+  .rating button { border: 1px solid var(--line); background: transparent; border-radius: 9px; padding: 6px 12px; font-size: 14px; }
+  .rating button.on { border-color: var(--good); background: var(--good-soft); color: var(--good); font-weight: 600; }
+  .submitted { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--good-soft); color: var(--good);
+    border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-top: 14px; }
+  .submitted b { font-weight: 650; }
+  .submit-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  .hint { color: var(--muted); font-size: 13px; }
+
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .cal-head b { font-size: 16px; }
+  .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .cal .dow { text-align: center; font-size: 12px; color: var(--muted); padding-bottom: 4px; }
+  .cal .d {
+    aspect-ratio: 1; max-width: 100%; border-radius: 8px; border: 1px solid transparent; background: transparent;
+    display: flex; align-items: center; justify-content: center; font-size: 13px; font-variant-numeric: tabular-nums; padding: 0;
+  }
+  .cal .d:hover { border-color: var(--line); }
+  .cal .d.out { visibility: hidden; }
+  .cal .d.future { color: var(--muted); }
+  .cal .d.plan { background: var(--part-soft); color: var(--ink); }
+  .cal .d.checked { background: var(--good-soft); color: var(--good); font-weight: 650; }
+  .cal .d.today { border-color: var(--accent); }
+  .cal .d.sel { outline: 2px solid var(--ink); outline-offset: -2px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  .history .hrow { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid var(--line);
+    font-size: 14px; cursor: pointer; background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; text-align: left; }
+  .history .hrow:last-child { border-bottom: 0; }
+  .history .hrow .meta { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+  .history .hrow .rep { grid-column: 1 / -1; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+  /* photo import */
+  .drop { border: 1.5px dashed var(--line); border-radius: 12px; padding: 16px; text-align: center; color: var(--muted); font-size: 14px; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; justify-content: center; }
+  .thumbs img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+  .range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+  .range label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+  .range input { width: 100%; }
+  .status { font-size: 14px; color: var(--muted); margin-top: 10px; }
+  .status.err { color: var(--danger); }
+  .preview { margin-top: 12px; max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .preview .pday { position: sticky; top: 0; background: var(--field); font-size: 12px; font-weight: 650; color: var(--muted);
+    padding: 6px 10px; border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: .06em; }
+  .preview .pitem { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); align-items: center; }
+  .preview .pitem input[type=text] { width: 100%; padding: 4px 8px; }
+  .preview .pitem input[type=number] { width: 64px; padding: 4px 6px; }
+  .preview .pitem input[type=date] { padding: 3px 6px; font-size: 13px; }
+  .preview .pitem .pmeta { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .preview .pitem select { padding: 3px 6px; font-size: 13px; }
+
+  .banner { background: var(--part-soft); color: var(--ink); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-top: 10px; display: grid; gap: 8px; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; overflow-x: auto; }
+  .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; padding: 2px; gap: 2px; }
+  .seg button { background: none; border: 0; border-radius: 8px; padding: 6px 14px; color: var(--muted); }
+  .seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .full { width: 100%; }
+
+  /* file picker */
+  .picker { border: 1.5px dashed var(--line); border-radius: 10px; padding: 10px; margin-top: 8px; }
+  .picker.over { border-color: var(--accent); background: var(--accent-soft); }
+  .flist { display: flex; gap: 6px; flex-wrap: wrap; }
+  .flist:not(:empty) { margin-top: 8px; }
+  .fchip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 3px 4px 3px 3px; font-size: 13px; max-width: 100%; background: var(--card); }
+  .fchip img, .fchip .ficon { width: 32px; height: 32px; border-radius: 5px; object-fit: cover; flex: none; }
+  .fchip .ficon { display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; }
+  .fchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 160px; }
+
+  /* criteria list */
+  .rubric { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: center; }
+  .rubric:last-of-type { border-bottom: 0; }
+  .rubric .rname { font-weight: 600; overflow-wrap: anywhere; }
+  .rubric .rmeta { grid-column: 1 / 2; font-size: 12.5px; color: var(--muted); }
+  .rubric .ract { grid-row: 1 / 3; grid-column: 2; display: flex; gap: 6px; }
+  .kind { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; border-radius: 5px; padding: 1px 6px; margin-right: 6px; }
+  .kind.writing { background: var(--accent-soft); color: var(--accent); }
+  .kind.reading { background: var(--part-soft); color: var(--part); }
+  .editor { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .editor textarea { min-height: 180px; font-size: 14px; }
+
+  /* results */
+  .score { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 4px 0 14px; }
+  .score b { font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .score .of { font-size: 18px; color: var(--muted); }
+  .badge { font-size: 13px; border-radius: 999px; padding: 2px 10px; background: var(--good-soft); color: var(--good); font-weight: 600; }
+  .crit { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .crit .cname { font-weight: 600; }
+  .crit .cscore { font-variant-numeric: tabular-nums; font-weight: 650; }
+  .crit .cbar { grid-column: 1 / -1; height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; }
+  .crit .cbar div { height: 100%; background: var(--accent); }
+  .crit .ccom { grid-column: 1 / -1; font-size: 14px; color: var(--muted); }
+  .rlist { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14.5px; }
+  .rsec { margin-top: 18px; }
+  .corr { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; display: grid; gap: 3px; }
+  .corr:last-child { border-bottom: 0; }
+  .corr .o { color: var(--danger); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .corr .c { color: var(--good); font-weight: 600; }
+  .corr .w { color: var(--muted); font-size: 13.5px; }
+  details { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  details summary { cursor: pointer; font-weight: 600; }
+  details .pre { white-space: pre-wrap; margin-top: 8px; font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table.items { border-collapse: collapse; width: 100%; font-size: 14px; }
+  table.items th, table.items td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.items th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; background: var(--field); }
+  table.items tr:last-child td { border-bottom: 0; }
+  table.items td.q { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  table.items .ok { color: var(--good); font-weight: 700; }
+  table.items .no { color: var(--danger); font-weight: 700; }
+  table.items .why { color: var(--muted); min-width: 200px; }
+  .warn { background: var(--part-soft); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-bottom: 12px; }
+  .ghrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; width: 100%; text-align: left; background: none; border: 0;
+    border-bottom: 1px solid var(--line); padding: 9px 0; }
+  .ghrow:last-child { border-bottom: 0; }
+  .ghrow .gt { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ghrow .gs { font-variant-numeric: tabular-nums; font-weight: 650; }
+  .ghrow .gm { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
+  .ghrow.cur .gt { color: var(--accent); }
+  a.btn { text-decoration: none; display: inline-block; }
+
+  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 9px 16px; border-radius: 10px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: calc(100% - 32px); }
+  .toast.show { opacity: 1; }
+  @media (max-width: 780px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>English Check-in</h1>
+      <div class="sub" id="greeting">Loading your records…</div>
+    </div>
+    <div class="hdr-tools">
+      <span class="sync" id="sync"></span>
+      <button class="btn small" id="themeBtn" type="button">Theme</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" id="tabBtnCheckin" aria-selected="true" aria-controls="tabCheckin">Daily check-in</button>
+    <button type="button" role="tab" id="tabBtnGrade" aria-selected="false" aria-controls="tabGrade">Homework marking 作业批改</button>
+  </nav>
+
+  <div id="tabCheckin" role="tabpanel">
+  <section class="stats">
+    <div class="stat"><b id="sStreak">0</b><span>day streak</span></div>
+    <div class="stat"><b id="sBest">0</b><span>best streak</span></div>
+    <div class="stat"><b id="sDays">0</b><span>days submitted</span></div>
+    <div class="stat"><b id="sHours">0</b><span>hours studied</span></div>
+  </section>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card">
+        <div class="dayhead">
+          <div>
+            <div class="date" id="dayTitle"></div>
+            <div class="sub" id="daySub"></div>
+          </div>
+          <div class="nav">
+            <button class="icon-btn" id="prevDay" type="button" title="Previous day" aria-label="Previous day">‹</button>
+            <button class="btn small" id="toToday" type="button">Today</button>
+            <button class="icon-btn" id="nextDay" type="button" title="Next day" aria-label="Next day">›</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Plan</h2>
+          <form class="row add" id="addForm">
+            <input type="text" id="taskText" placeholder="e.g. Learn 30 new words" maxlength="200" autocomplete="off" aria-label="New task">
+            <input type="number" id="taskMin" placeholder="min" min="0" max="600" aria-label="Planned minutes">
+            <button class="btn primary" type="submit">Add</button>
+          </form>
+          <div class="chips" id="cats"></div>
+          <div class="progress"><div id="bar"></div></div>
+          <ul class="plan" id="plan"></ul>
+          <div class="row">
+            <button class="btn small" id="copyPrev" type="button">Copy plan from previous day</button>
+          </div>
+        </div>
+
+        <div class="section" id="progressSection">
+          <h2>Daily progress</h2>
+          <label class="lbl" for="minutes">Minutes studied</label>
+          <div class="row">
+            <input type="number" id="minutes" min="0" max="1440" placeholder="0">
+            <span class="hint" id="minutesHint"></span>
+          </div>
+          <label class="lbl">How did it go?</label>
+          <div class="rating" id="rating"></div>
+          <label class="lbl" for="note">What did you do and learn? New words, sentences, problems</label>
+          <textarea id="note" placeholder="Finished Unit 4 listening. New words: reluctant, commute, take over…"></textarea>
+          <div class="submit-row" id="submitRow">
+            <button class="btn primary" id="submitBtn" type="button">Submit progress</button>
+            <span class="hint" id="submitHint"></span>
+          </div>
+          <div class="submitted" id="submitted" hidden>
+            <span id="submittedText"></span>
+            <button class="linkbtn" id="undoBtn" type="button">Undo check-in</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="col">
+      <section class="card" id="scanCard">
+        <h2>Plan from a photo</h2>
+        <div class="sub" style="margin-bottom:10px">Take a photo of your paper weekly or monthly plan. Claude reads it and puts each task on the right day. You check the list before anything is added.</div>
+        <div id="scanUnavailable" class="hint" hidden>Photo reading works when this page is opened on claude.ai. In this copy, type your plan in by hand.</div>
+        <div id="scanBody">
+          <div class="drop" id="drop">
+            <div>Drop photos here, or</div>
+            <div style="margin-top:6px"><button class="btn small" id="pickBtn" type="button">Choose photos</button></div>
+            <input type="file" id="photoFile" accept="image/*" multiple hidden>
+            <div class="thumbs" id="thumbs"></div>
+          </div>
+          <label class="lbl" for="rangeSel">This plan is for</label>
+          <select id="rangeSel" style="width:100%">
+            <option value="thisWeek">This week</option>
+            <option value="nextWeek">Next week</option>
+            <option value="thisMonth">This month</option>
+            <option value="nextMonth">Next month</option>
+            <option value="custom">Custom dates</option>
+          </select>
+          <div class="range">
+            <label>From<input type="date" id="rangeStart"></label>
+            <label>To<input type="date" id="rangeEnd"></label>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn primary" id="readBtn" type="button" disabled>Read plan</button>
+            <button class="btn" id="stopBtn" type="button" hidden>Stop</button>
+          </div>
+          <div class="status" id="scanStatus" hidden></div>
+          <div id="previewWrap" hidden>
+            <div class="preview" id="preview"></div>
+            <div class="row" style="margin-top:10px">
+              <button class="btn good" id="applyBtn" type="button">Add tasks</button>
+              <button class="btn" id="discardBtn" type="button">Discard</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="cal-head">
+          <button class="icon-btn" id="prevMonth" type="button" title="Previous month" aria-label="Previous month">‹</button>
+          <b id="monthTitle"></b>
+          <button class="icon-btn" id="nextMonth" type="button" title="Next month" aria-label="Next month">›</button>
+        </div>
+        <div class="cal" id="cal"></div>
+        <div class="legend">
+          <span><i style="background:var(--good-soft);border:1px solid var(--good)"></i>Progress submitted</span>
+          <span><i style="background:var(--part-soft)"></i>Planned</span>
+          <span><i style="border:1px solid var(--accent)"></i>Today</span>
+        </div>
+      </section>
+
+      <section class="card history">
+        <h2>Recent progress</h2>
+        <div id="history"></div>
+        <div class="tools">
+          <button class="btn small" id="exportBtn" type="button">Export backup</button>
+          <button class="btn small" id="importBtn" type="button">Import backup</button>
+          <input type="file" id="importFile" accept="application/json,.json" hidden>
+        </div>
+        <div class="banner" id="importBanner" hidden>
+          <span id="importText"></span>
+          <div class="row">
+            <button class="btn small primary" id="importYes" type="button">Merge backup</button>
+            <button class="btn small" id="importNo" type="button">Cancel</button>
+          </div>
+        </div>
+        <div class="hint" id="storageNote" style="font-size:12px;margin-top:8px"></div>
+      </section>
+    </aside>
+  </div>
+  </div>
+
+  <div id="tabGrade" role="tabpanel" hidden>
+    <section class="card" id="gradeUnavailable" hidden>
+      <h2>Homework marking</h2>
+      <p style="margin:0">Marking uses Claude, so it only works when this page is opened on claude.ai.
+        <a href="https://claude.ai/artifact/L4KAeMk63qdW8bjUvDyg9d" target="_blank" rel="noopener">Open English Check-in on claude.ai</a>.</p>
+    </section>
+    <div class="grid" id="gradeMain">
+      <div class="col">
+        <section class="card">
+          <h2>Mark my homework</h2>
+          <div class="seg" id="gKind" role="group" aria-label="Homework type">
+            <button type="button" data-k="writing" class="on">Writing 写作</button>
+            <button type="button" data-k="reading">Reading 阅读理解</button>
+          </div>
+
+          <label class="lbl" for="gRubric">Marking criteria 评分标准</label>
+          <select id="gRubric" class="full"></select>
+          <div class="hint" id="gRubricHint" style="margin-top:4px"></div>
+
+          <label class="lbl" for="gTitle">Homework title (optional)</label>
+          <input type="text" id="gTitle" class="full" maxlength="120" placeholder="e.g. Unit 5 essay: Should students wear uniforms?">
+
+          <div id="gWritingFields">
+            <label class="lbl" for="gTask">Writing task or question</label>
+            <textarea id="gTask" placeholder="Paste the task here, or attach a photo of it below."></textarea>
+            <div id="gTaskFiles"></div>
+            <label class="lbl" for="gAnswer">My writing</label>
+            <textarea id="gAnswer" style="min-height:170px" placeholder="Type or paste your writing, or attach photos of your handwritten work below."></textarea>
+            <div id="gAnswerFiles"></div>
+          </div>
+
+          <div id="gReadingFields" hidden>
+            <label class="lbl">Reading text, questions and my answers</label>
+            <div class="hint">Upload the pages with the passage, the questions and your answers. Photos or a PDF both work.</div>
+            <div id="gPaperFiles"></div>
+            <label class="lbl" for="gReadAnswers">My answers as text (optional)</label>
+            <textarea id="gReadAnswers" placeholder="1 B&#10;2 D&#10;3 True&#10;4 because the writer moved to London"></textarea>
+          </div>
+
+          <label class="lbl" for="gExtra">Notes for the marker (optional)</label>
+          <input type="text" id="gExtra" class="full" maxlength="300" placeholder="e.g. B2 First Part 2 article, 140–190 words. Be strict.">
+
+          <label class="lbl" for="gLang">Feedback language</label>
+          <select id="gLang" class="full">
+            <option value="zh">中文讲解，英文例句</option>
+            <option value="en">English</option>
+          </select>
+
+          <div class="row" style="margin-top:16px">
+            <button class="btn primary" id="gGo" type="button" disabled>Mark homework</button>
+            <button class="btn" id="gStop" type="button" hidden>Stop</button>
+          </div>
+          <div class="status" id="gStatus" hidden></div>
+        </section>
+
+        <section class="card" id="gResultCard" hidden>
+          <div id="gResult"></div>
+        </section>
+      </div>
+
+      <aside class="col">
+        <section class="card">
+          <h2>Marking criteria 评分标准</h2>
+          <div class="sub">Add your marking criteria first: the band descriptors for writing, or the answer key for a reading test. Homework is marked against the criteria you pick.</div>
+          <div id="rList" style="margin-top:8px"></div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn small primary" id="rNew" type="button">Add criteria</button>
+          </div>
+          <div class="editor" id="rEditor" hidden>
+            <label class="lbl" for="rName" style="margin-top:0">Name</label>
+            <input type="text" id="rName" class="full" maxlength="100" placeholder="e.g. B2 First Writing, or Unit 3 reading answer key">
+            <label class="lbl" for="rKind">Used for</label>
+            <select id="rKind" class="full">
+              <option value="writing">Writing</option>
+              <option value="reading">Reading (answer key or marking scheme)</option>
+            </select>
+            <label class="lbl">Upload the criteria</label>
+            <div class="hint">Photos, a PDF or a text file. Claude copies them into the box below, where you can check and edit them.</div>
+            <div id="rFiles"></div>
+            <div class="row" style="margin-top:8px">
+              <button class="btn small" id="rRead" type="button" disabled>Copy text from files</button>
+              <button class="btn small" id="rPreset" type="button">Use Cambridge writing scale</button>
+            </div>
+            <label class="lbl" for="rText">Criteria text</label>
+            <textarea id="rText" placeholder="Paste or type the criteria here, or upload them above."></textarea>
+            <div class="status" id="rStatus" hidden></div>
+            <div class="row" style="margin-top:10px">
+              <button class="btn small good" id="rSave" type="button">Save criteria</button>
+              <button class="btn small" id="rCancel" type="button">Cancel</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Cambridge Write &amp; Improve</h2>
+          <div class="sub">Cambridge's free automatic writing checker. Other sites cannot send work to it, so open it in a new tab and paste your writing there for a second score.</div>
+          <div class="row" style="margin-top:10px">
+            <a class="btn small" href="https://writeandimprove.com/" target="_blank" rel="noopener">Open Write &amp; Improve</a>
+            <button class="btn small" id="wiCopy" type="button">Copy my writing</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Marked homework</h2>
+          <div id="gHistory"></div>
+        </section>
+      </aside>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const KEY = 'english-checkin-v1';
+  const CATS = ['Vocabulary', 'Listening', 'Speaking', 'Reading', 'Writing', 'Grammar'];
+  const RATINGS = ['Hard', 'OK', 'Good', 'Great'];
+  const $ = (id) => document.getElementById(id);
+  const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  // ---------- dates ----------
+  const pad = (n) => String(n).padStart(2, '0');
+  const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+  const addDays = (k, n) => { const d = parse(k); d.setDate(d.getDate() + n); return keyOf(d); };
+  const todayKey = () => keyOf(new Date());
+  const weekday = (k) => parse(k).toLocaleDateString('en-US', { weekday: 'long' });
+  const fmtLong = (k) => parse(k).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const fmtShort = (k) => parse(k).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  // ---------- state ----------
+  const state = { days: {}, rubrics: {}, grades: {} };
+  const bucketOf = (id) => DAY_RE.test(id) ? 'days' : /^rubric-/.test(id) ? 'rubrics' : /^grade-/.test(id) ? 'grades' : null;
+  const copy = (o) => JSON.parse(JSON.stringify(o || {}));
+  let sel = todayKey();
+  let viewMonth = parse(sel); viewMonth.setDate(1);
+  let cat = '';
+  let editing = null;
+
+  const blank = () => ({ plan: [], note: '', minutes: null, rating: null, checked: false });
+  const day = (k) => state.days[k] || blank();
+  function ensure(k) { if (!state.days[k]) state.days[k] = blank(); return state.days[k]; }
+  const isEmpty = (d) => !d.plan.length && !(d.note || '').trim() && !d.checked && d.minutes == null && d.rating == null;
+  const taskMinutes = (d) => d.plan.filter(t => t.done).reduce((s, t) => s + (t.min || 0), 0);
+  const studied = (d) => d.minutes != null ? d.minutes : taskMinutes(d);
+  function clean(d) {
+    return {
+      plan: Array.isArray(d.plan) ? d.plan.filter(t => t && typeof t.text === 'string').map(t => ({
+        id: String(t.id || uid()), text: t.text.slice(0, 300), cat: CATS.includes(t.cat) ? t.cat : '',
+        min: Math.max(0, Math.min(600, Number(t.min) || 0)), done: !!t.done })) : [],
+      note: typeof d.note === 'string' ? d.note : '',
+      minutes: Number.isFinite(d.minutes) ? d.minutes : null,
+      rating: Number.isInteger(d.rating) && d.rating >= 0 && d.rating < RATINGS.length ? d.rating : null,
+      checked: !!d.checked,
+      ...(d.checkedAt ? { checkedAt: String(d.checkedAt) } : {}),
+    };
+  }
+
+  // ---------- storage: claude.ai account store when available, else this browser ----------
+  const store = { mode: 'local', db: null, uid: null, dirty: new Set(), inflight: new Set(), timer: null };
+
+  function loadLocal() {
+    try {
+      const d = JSON.parse(localStorage.getItem(KEY));
+      if (d && d.days) for (const k of Object.keys(d.days)) if (DAY_RE.test(k)) state.days[k] = clean(d.days[k]);
+      for (const b of ['rubrics', 'grades']) if (d && d[b]) for (const k of Object.keys(d[b])) if (bucketOf(k) === b) state[b][k] = copy(d[b][k]);
+    } catch (e) {}
+  }
+  function saveLocal() {
+    try { localStorage.setItem(KEY, JSON.stringify({ days: state.days, rubrics: state.rubrics, grades: state.grades })); }
+    catch (e) { toast('Could not save. This browser is blocking storage.'); }
+  }
+
+  function save(k) {
+    const d = state.days[k];
+    if (d && bucketOf(k) === 'days' && isEmpty(d)) delete state.days[k];
+    if (store.mode === 'local') { saveLocal(); return; }
+    store.dirty.add(k);
+    clearTimeout(store.timer);
+    store.timer = setTimeout(flush, 400);
+    setSync('Saving…');
+  }
+  async function flush() {
+    for (const k of [...store.dirty]) {
+      if (store.inflight.has(k)) continue;
+      store.dirty.delete(k); store.inflight.add(k);
+      const ref = store.db.collection('data/users/' + store.uid).doc(k);
+      try {
+        const b = bucketOf(k), d = state[b][k];
+        if (d) await ref.set(b === 'days' ? clean(d) : copy(d)); else await ref.delete();
+      } catch (e) {
+        if (e && e.code === 'unavailable') store.dirty.add(k);
+        else if (e && e.code === 'quota_exceeded') toast('Storage is full. Export a backup and remove old days.');
+        else toast('Could not save this change. Check your connection.');
+      } finally {
+        store.inflight.delete(k);
+      }
+    }
+    if (store.dirty.size) { clearTimeout(store.timer); store.timer = setTimeout(flush, 1500); }
+    else setSync('Saved to your Claude account');
+  }
+
+  async function connect() {
+    if (!window.claude || typeof window.claude.use !== 'function') return startLocal();
+    let dbx = null, user = null;
+    try { [dbx, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) {}
+    const id = user ? await user.id().catch(() => null) : null;
+    if (!dbx || !id) return startLocal();
+    store.mode = 'cloud'; store.db = dbx; store.uid = id;
+    $('storageNote').textContent = 'Saved to your Claude account. It follows you to any device where you open this page signed in.';
+    setSync('Loading…');
+    let first = true;
+    dbx.collection('data/users/' + id).onSnapshot((snap) => {
+      const seen = new Set();
+      snap.docs.forEach(doc => {
+        const b = bucketOf(doc.id);
+        if (!b) return;
+        seen.add(doc.id);
+        if (store.dirty.has(doc.id) || store.inflight.has(doc.id)) return;   // keep local edits not yet saved
+        state[b][doc.id] = b === 'days' ? clean(doc.data() || {}) : copy(doc.data());
+      });
+      for (const b of ['days', 'rubrics', 'grades']) for (const k of Object.keys(state[b])) {
+        if (!seen.has(k) && !store.dirty.has(k) && !store.inflight.has(k)) delete state[b][k];
+      }
+      if (first) { first = false; setSync('Saved to your Claude account'); }
+      renderAll();
+    }, () => {
+      setSync('Offline. Reload the page to reconnect.');
+    });
+  }
+  function startLocal() {
+    store.mode = 'local';
+    loadLocal();
+    $('storageNote').textContent = 'Saved in this browser only. Export a backup now and then.';
+    renderAll();
+  }
+  const setSync = (t) => { $('sync').textContent = t; };
+
+  // ---------- stats ----------
+  function streaks() {
+    const checked = new Set(Object.keys(state.days).filter(k => state.days[k].checked));
+    let cur = 0, k = todayKey();
+    if (!checked.has(k)) k = addDays(k, -1);   // today not submitted yet still keeps the streak alive
+    while (checked.has(k)) { cur++; k = addDays(k, -1); }
+    let best = 0, run = 0, prev = null;
+    [...checked].sort().forEach(k2 => {
+      run = prev && addDays(prev, 1) === k2 ? run + 1 : 1;
+      best = Math.max(best, run); prev = k2;
+    });
+    let mins = 0;
+    Object.values(state.days).forEach(d => { if (d.checked) mins += studied(d); });
+    return { cur, best, days: checked.size, hours: Math.round(mins / 6) / 10 };
+  }
+
+  // ---------- render ----------
+  function renderStats() {
+    const s = streaks();
+    $('sStreak').textContent = s.cur;
+    $('sBest').textContent = s.best;
+    $('sDays').textContent = s.days;
+    $('sHours').textContent = s.hours;
+    const t = day(todayKey());
+    $('greeting').textContent = t.checked ? 'Today\'s progress is in. See you tomorrow.'
+      : s.cur ? `You're on a ${s.cur}-day streak. Submit today's progress to keep it.`
+      : 'Write today\'s plan, study, then submit your progress.';
+  }
+
+  function renderCats() {
+    $('cats').innerHTML = '';
+    CATS.forEach(c => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip' + (cat === c ? ' on' : ''); b.textContent = c;
+      b.setAttribute('aria-pressed', cat === c);
+      b.onclick = () => { cat = cat === c ? '' : c; renderCats(); $('taskText').focus(); };
+      $('cats').appendChild(b);
+    });
+  }
+
+  function renderPlan() {
+    const d = day(sel);
+    const ul = $('plan'); ul.innerHTML = '';
+    if (!d.plan.length) {
+      const li = document.createElement('li'); li.className = 'empty'; li.style.border = '0';
+      li.textContent = 'No plan for this day yet. Add a task above, or read one from a photo of your paper plan.';
+      ul.appendChild(li);
+    }
+    d.plan.forEach(item => {
+      const li = document.createElement('li'); if (item.done) li.className = 'done';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!item.done;
+      cb.setAttribute('aria-label', 'Done: ' + item.text);
+      cb.onchange = () => { item.done = cb.checked; save(sel); renderAll(); };
+      li.append(cb);
+      if (editing === item.id) {
+        const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'edit'; inp.value = item.text; inp.maxLength = 300;
+        const finish = (keep) => {
+          if (editing !== item.id) return;
+          editing = null;
+          const v = inp.value.trim();
+          if (keep && v && v !== item.text) { item.text = v; save(sel); }
+          renderPlan();
+        };
+        inp.onkeydown = (e) => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+        inp.onblur = () => finish(true);
+        li.append(inp);
+        setTimeout(() => { inp.focus(); inp.select(); }, 0);
+      } else {
+        const txt = document.createElement('span'); txt.className = 'txt'; txt.textContent = item.text; txt.title = 'Click to edit';
+        txt.onclick = () => { editing = item.id; renderPlan(); };
+        li.append(txt);
+      }
+      if (item.cat) { const tg = document.createElement('span'); tg.className = 'tag'; tg.textContent = item.cat; li.append(tg); }
+      if (item.min) { const m = document.createElement('span'); m.className = 'mins'; m.textContent = item.min + ' min'; li.append(m); }
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '×';
+      del.title = 'Remove'; del.setAttribute('aria-label', 'Remove ' + item.text);
+      del.onclick = () => { d.plan = d.plan.filter(x => x !== item); save(sel); renderAll(); };
+      li.append(del);
+      ul.appendChild(li);
+    });
+    const done = d.plan.filter(x => x.done).length;
+    $('bar').style.width = d.plan.length ? (done / d.plan.length * 100) + '%' : '0';
+    $('copyPrev').hidden = d.plan.length > 0;
+  }
+
+  function renderProgress() {
+    const d = day(sel), t = todayKey(), future = sel > t;
+    $('progressSection').hidden = future;
+    if (future) return;
+    if (document.activeElement !== $('note')) $('note').value = d.note || '';
+    if (document.activeElement !== $('minutes')) $('minutes').value = d.minutes != null ? d.minutes : '';
+    const tm = taskMinutes(d);
+    $('minutes').placeholder = tm ? String(tm) : '0';
+    $('minutesHint').textContent = tm && d.minutes == null ? `${tm} min from finished tasks` : '';
+    const r = $('rating'); r.innerHTML = '';
+    RATINGS.forEach((label, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+      b.className = d.rating === i ? 'on' : ''; b.setAttribute('aria-pressed', d.rating === i);
+      b.onclick = () => { ensure(sel).rating = d.rating === i ? null : i; save(sel); renderAll(); };
+      r.appendChild(b);
+    });
+    const done = d.plan.filter(x => x.done).length;
+    $('submitRow').hidden = d.checked;
+    $('submitted').hidden = !d.checked;
+    if (d.checked) {
+      const when = d.checkedAt ? new Date(d.checkedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+      const bits = [`<b>Progress submitted</b>${when ? ' at ' + when : ''}`];
+      if (d.plan.length) bits.push(`${done}/${d.plan.length} tasks`);
+      if (studied(d)) bits.push(`${studied(d)} min`);
+      if (d.rating != null) bits.push(RATINGS[d.rating]);
+      $('submittedText').innerHTML = bits.join(' · ');
+    } else {
+      $('submitHint').textContent = d.plan.length ? `${done} of ${d.plan.length} tasks done` : '';
+    }
+  }
+
+  function renderDay() {
+    const t = todayKey();
+    $('dayTitle').textContent = sel === t ? 'Today' : sel === addDays(t, -1) ? 'Yesterday' : sel === addDays(t, 1) ? 'Tomorrow' : fmtShort(sel);
+    $('daySub').textContent = fmtLong(sel);
+    $('toToday').style.visibility = sel === t ? 'hidden' : 'visible';
+    renderPlan();
+    renderProgress();
+  }
+
+  function renderCal() {
+    const y = viewMonth.getFullYear(), m = viewMonth.getMonth();
+    $('monthTitle').textContent = viewMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const cal = $('cal'); cal.innerHTML = '';
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(w => {
+      const e = document.createElement('div'); e.className = 'dow'; e.textContent = w; cal.appendChild(e);
+    });
+    const lead = (new Date(y, m, 1).getDay() + 6) % 7;
+    for (let i = 0; i < lead; i++) { const e = document.createElement('div'); e.className = 'd out'; cal.appendChild(e); }
+    const n = new Date(y, m + 1, 0).getDate(), t = todayKey();
+    for (let i = 1; i <= n; i++) {
+      const k = `${y}-${pad(m + 1)}-${pad(i)}`, d = state.days[k];
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'd'; b.textContent = i;
+      if (d && d.checked) b.classList.add('checked'); else if (d && d.plan.length) b.classList.add('plan');
+      if (k === t) b.classList.add('today');
+      if (k > t) b.classList.add('future');
+      if (k === sel) b.classList.add('sel');
+      b.title = fmtLong(k) + (d && d.checked ? ', progress submitted' : d && d.plan.length ? `, ${d.plan.length} tasks planned` : '');
+      b.onclick = () => { sel = k; editing = null; renderAll(); };
+      cal.appendChild(b);
+    }
+  }
+
+  function renderHistory() {
+    const keys = Object.keys(state.days).filter(k => state.days[k].checked).sort().reverse().slice(0, 7);
+    const h = $('history'); h.innerHTML = '';
+    if (!keys.length) { h.innerHTML = '<div class="empty">Each day you submit progress shows up here.</div>'; return; }
+    keys.forEach(k => {
+      const d = state.days[k], done = d.plan.filter(x => x.done).length, mins = studied(d);
+      const r = document.createElement('button'); r.type = 'button'; r.className = 'hrow';
+      const a = document.createElement('span'); a.textContent = fmtShort(k);
+      const b = document.createElement('span'); b.className = 'meta';
+      b.textContent = [d.plan.length ? `${done}/${d.plan.length} tasks` : '', mins ? mins + ' min' : '', d.rating != null ? RATINGS[d.rating] : ''].filter(Boolean).join(' · ');
+      r.append(a, b);
+      if ((d.note || '').trim()) { const c = document.createElement('span'); c.className = 'rep'; c.textContent = d.note.trim().split('\n')[0]; r.append(c); }
+      r.onclick = () => go(k);
+      h.appendChild(r);
+    });
+  }
+
+  function renderAll() { renderStats(); renderDay(); renderCal(); renderHistory(); renderGradeSide(); }
+
+  // ---------- day actions ----------
+  function go(k) {
+    sel = k; editing = null;
+    const d = parse(k);
+    if (d.getMonth() !== viewMonth.getMonth() || d.getFullYear() !== viewMonth.getFullYear()) { viewMonth = d; viewMonth.setDate(1); }
+    renderAll();
+  }
+
+  $('addForm').onsubmit = (e) => {
+    e.preventDefault();
+    const text = $('taskText').value.trim();
+    if (!text) { $('taskText').focus(); return; }
+    const min = Math.max(0, Math.min(600, parseInt($('taskMin').value, 10) || 0));
+    ensure(sel).plan.push({ id: uid(), text, cat, min, done: false });
+    save(sel);
+    $('taskText').value = ''; $('taskMin').value = ''; $('taskText').focus();
+    renderAll();
+  };
+
+  $('copyPrev').onclick = () => {
+    let k = addDays(sel, -1);
+    for (let i = 0; i < 60; i++, k = addDays(k, -1)) {
+      const d = state.days[k];
+      if (d && d.plan.length) {
+        ensure(sel).plan = d.plan.map(x => ({ ...x, id: uid(), done: false }));
+        save(sel); renderAll(); toast('Copied the plan from ' + fmtShort(k)); return;
+      }
+    }
+    toast('No plan found in the last 60 days');
+  };
+
+  let noteTimer;
+  const commitNote = () => { clearTimeout(noteTimer); const d = ensure(sel); if (d.note !== $('note').value) { d.note = $('note').value; save(sel); } };
+  $('note').oninput = () => { clearTimeout(noteTimer); noteTimer = setTimeout(() => { commitNote(); renderCal(); }, 500); };
+  $('note').onblur = () => { commitNote(); renderAll(); };
+  const commitMinutes = () => {
+    const raw = $('minutes').value.trim();
+    const v = raw === '' ? null : Math.max(0, Math.min(1440, parseInt(raw, 10) || 0));
+    const d = ensure(sel); if (d.minutes !== v) { d.minutes = v; save(sel); }
+  };
+  $('minutes').onchange = () => { commitMinutes(); renderAll(); };
+
+  $('submitBtn').onclick = () => {
+    if (sel > todayKey()) return;
+    commitNote(); commitMinutes();
+    const d = ensure(sel);
+    if (d.minutes == null && taskMinutes(d)) d.minutes = taskMinutes(d);
+    d.checked = true; d.checkedAt = new Date().toISOString();
+    save(sel); renderAll();
+    const s = streaks().cur;
+    toast(sel === todayKey() && s > 1 ? `Progress submitted. ${s}-day streak!` : 'Progress submitted');
+  };
+  $('undoBtn').onclick = () => {
+    const d = ensure(sel); d.checked = false; delete d.checkedAt;
+    save(sel); renderAll(); toast('Check-in undone. Your notes are kept.');
+  };
+
+  $('prevDay').onclick = () => go(addDays(sel, -1));
+  $('nextDay').onclick = () => go(addDays(sel, 1));
+  $('toToday').onclick = () => go(todayKey());
+  $('prevMonth').onclick = () => { viewMonth.setMonth(viewMonth.getMonth() - 1); renderCal(); };
+  $('nextMonth').onclick = () => { viewMonth.setMonth(viewMonth.getMonth() + 1); renderCal(); };
+
+  // ---------- backup ----------
+  $('exportBtn').onclick = async () => {
+    const data = JSON.stringify({ days: state.days, rubrics: state.rubrics, grades: state.grades }, null, 2);
+    const filename = `english-checkin-${todayKey()}.json`;
+    const dl = window.claude && window.claude.use ? await window.claude.use('downloads').catch(() => null) : null;
+    if (dl) {
+      try { const r = await dl.save({ filename, data }); if (r && r.status === 'saved') toast('Backup saved'); }
+      catch (e) { if (e && e.code !== 'cancelled' && e.code !== 'declined') toast('Could not save the backup file'); }
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' })); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  let pendingImport = null;
+  $('importBtn').onclick = () => $('importFile').click();
+  $('importFile').onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      if (!data || typeof data.days !== 'object') throw new Error();
+      const keys = Object.keys(data.days).filter(k => DAY_RE.test(k));
+      const extra = [];
+      for (const b of ['rubrics', 'grades']) if (data[b] && typeof data[b] === 'object') for (const k of Object.keys(data[b])) if (bucketOf(k) === b) extra.push(k);
+      if (!keys.length && !extra.length) throw new Error();
+      pendingImport = { data, keys, extra };
+      $('importText').textContent = `This backup has ${keys.length} day${keys.length === 1 ? '' : 's'}${extra.length ? ` and ${extra.length} marking item${extra.length === 1 ? '' : 's'}` : ''}. Anything already here with the same date or name is replaced by the backup's version.`;
+      $('importBanner').hidden = false;
+    } catch (err) { toast('That file is not an English Check-in backup'); }
+  };
+  $('importNo').onclick = () => { pendingImport = null; $('importBanner').hidden = true; };
+  $('importYes').onclick = () => {
+    if (!pendingImport) return;
+    pendingImport.keys.forEach(k => { state.days[k] = clean(pendingImport.data.days[k] || {}); save(k); });
+    pendingImport.extra.forEach(k => { const b = bucketOf(k); state[b][k] = copy(pendingImport.data[b][k]); save(k); });
+    toast(`Imported ${pendingImport.keys.length + pendingImport.extra.length} items`);
+    pendingImport = null; $('importBanner').hidden = true; renderAll();
+  };
+
+  // ---------- plan from a photo ----------
+  let sample = null, photos = [], scanCtl = null, preview = [];
+  const scanStatus = (msg, err) => { const s = $('scanStatus'); s.hidden = !msg; s.textContent = msg || ''; s.classList.toggle('err', !!err); };
+
+  function rangeFor(v) {
+    const t = parse(todayKey());
+    if (v === 'thisWeek' || v === 'nextWeek') {
+      const mon = new Date(t); mon.setDate(t.getDate() - (t.getDay() + 6) % 7 + (v === 'nextWeek' ? 7 : 0));
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      return [keyOf(mon), keyOf(sun)];
+    }
+    const off = v === 'nextMonth' ? 1 : 0;
+    return [keyOf(new Date(t.getFullYear(), t.getMonth() + off, 1)), keyOf(new Date(t.getFullYear(), t.getMonth() + off + 1, 0))];
+  }
+  function applyRange() {
+    const v = $('rangeSel').value;
+    if (v === 'custom') return;
+    const [a, b] = rangeFor(v); $('rangeStart').value = a; $('rangeEnd').value = b;
+  }
+  $('rangeSel').onchange = applyRange;
+  $('rangeStart').onchange = $('rangeEnd').onchange = () => { $('rangeSel').value = 'custom'; };
+  applyRange();
+
+  async function setupScan() {
+    sample = window.claude && window.claude.use ? await window.claude.use('sample').catch(() => null) : null;
+    const lim = sample ? await sample.limits().catch(() => null) : null;
+    if (!lim || !lim.images) { sample = null; $('scanBody').hidden = true; $('scanUnavailable').hidden = false; return; }
+    $('photoFile').accept = lim.images.mediaTypes.join(',');
+    $('scanBody').dataset.max = lim.images.maxCount;
+  }
+
+  function setPhotos(list) {
+    const max = Number($('scanBody').dataset.max) || 4;
+    const imgs = [...list].filter(f => /^image\//.test(f.type));
+    if (!imgs.length) { scanStatus('Choose a photo file (JPEG, PNG or WebP).', true); return; }
+    photos = imgs.slice(0, max);
+    const th = $('thumbs'); th.innerHTML = '';
+    photos.forEach(f => { const im = document.createElement('img'); im.alt = 'Plan photo'; im.src = URL.createObjectURL(f); th.appendChild(im); });
+    $('readBtn').disabled = false;
+    scanStatus(imgs.length > max ? `Using the first ${max} photos.` : '');
+  }
+  $('pickBtn').onclick = () => $('photoFile').click();
+  $('photoFile').onchange = (e) => { setPhotos(e.target.files); e.target.value = ''; };
+  const drop = $('drop');
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); setPhotos(e.dataTransfer.files); };
+
+  function buildPrompt(start, end) {
+    const t = todayKey();
+    return `These photos show a paper study plan for learning English, handwritten or printed, possibly mixing English and Chinese.
+Today is ${t} (${weekday(t)}). The plan covers ${start} (${weekday(start)}) to ${end} (${weekday(end)}).
+
+Turn the plan into individual tasks, each on one date.
+- A day named by weekday (Mon, Monday, 周一, 星期一) or by date goes on that date inside the range. If the paper writes explicit dates, use them.
+- A task for every day (daily, every day, 每天) repeats on every date in the range. "Weekdays" means Monday to Friday; "weekends" means Saturday and Sunday.
+- A frequency without days ("3 times a week") is spread evenly across each week of the range.
+- A goal for the whole week with no day (for example "finish Unit 3") goes on the last date of that week inside the range, with text starting "Week goal: ".
+- A goal for the whole month goes on the last date of the range, with text starting "Month goal: ".
+- cat is one of: Vocabulary, Listening, Speaking, Reading, Writing, Grammar. Use "" if none fits.
+- min is the planned minutes if written (convert hours to minutes), otherwise 0.
+- Keep each text short and in the language it was written in. Copy book names, units and page numbers exactly. Fix obvious handwriting misreadings. If a word is illegible, give your best guess followed by "(?)".
+- Skip crossed-out items and decorations.
+
+Reply with only JSON in this shape:
+{"items":[{"date":"YYYY-MM-DD","text":"Learn 30 new words","cat":"Vocabulary","min":20}],"notes":"one short sentence about anything you could not read or place, or empty"}`;
+  }
+
+  $('readBtn').onclick = async () => {
+    if (!sample || !photos.length) return;
+    let start = $('rangeStart').value, end = $('rangeEnd').value;
+    if (!DAY_RE.test(start) || !DAY_RE.test(end)) { scanStatus('Set the first and last day the plan covers.', true); return; }
+    if (end < start) [start, end] = [end, start];
+    scanCtl = new AbortController();
+    $('readBtn').disabled = true; $('stopBtn').hidden = false; $('previewWrap').hidden = true;
+    scanStatus('Reading your plan… this can take up to a minute.');
+    try {
+      const res = await sample.json(buildPrompt(start, end), { images: photos, signal: scanCtl.signal, modelTier: 'default' });
+      const items = (res && Array.isArray(res.items) ? res.items : []).filter(it => it && DAY_RE.test(String(it.date)) && String(it.text || '').trim())
+        .map(it => ({ id: uid(), date: String(it.date), text: String(it.text).trim().slice(0, 300), cat: CATS.includes(it.cat) ? it.cat : '',
+          min: Math.max(0, Math.min(600, Math.round(Number(it.min) || 0))), keep: true }));
+      if (!items.length) { scanStatus('No tasks found in the photo. Try a sharper, closer photo with good light.', true); return; }
+      preview = items.sort((a, b) => a.date.localeCompare(b.date));
+      const note = res && typeof res.notes === 'string' && res.notes.trim() ? ' Note from Claude: ' + res.notes.trim() : '';
+      scanStatus(`Found ${items.length} tasks. Check them, fix anything misread, then add them.${note}`);
+      renderPreview();
+    } catch (e) {
+      const code = e && e.code;
+      const msg = {
+        cancelled: '',
+        not_granted: 'Claude was not allowed for this page, so photos cannot be read. Type your plan in by hand.',
+        sampling_disabled: 'Claude is not available on this account, so photos cannot be read.',
+        images_unavailable: 'This view cannot send photos to Claude.',
+        rate_limited: 'Too many requests right now. Wait a few minutes and try again.',
+        image_rejected: 'That photo could not be used. Try a JPEG or PNG under 20 MB.',
+        invalid_json: 'Claude\'s answer could not be turned into tasks. Press Read plan to try again.',
+        refused: 'Claude could not read this photo. Try a different photo.',
+        session_expired: 'Your claude.ai session expired. Sign in again and reload.',
+      }[code];
+      if (code === 'not_granted' || code === 'sampling_disabled' || code === 'images_unavailable') { $('scanBody').hidden = true; $('scanUnavailable').hidden = false; }
+      scanStatus(msg != null ? msg : 'Something went wrong while reading the photo. Try again.', !!msg || msg == null);
+    } finally {
+      scanCtl = null; $('readBtn').disabled = !photos.length; $('stopBtn').hidden = true;
+    }
+  };
+  $('stopBtn').onclick = () => { if (scanCtl) scanCtl.abort(); };
+
+  function renderPreview() {
+    const box = $('preview'); box.innerHTML = '';
+    const kept = preview.filter(p => p.keep);
+    $('previewWrap').hidden = !preview.length;
+    $('applyBtn').textContent = `Add ${kept.length} task${kept.length === 1 ? '' : 's'}`;
+    $('applyBtn').disabled = !kept.length;
+    let last = null;
+    preview.forEach(p => {
+      if (!p.keep) return;
+      if (p.date !== last) {
+        last = p.date;
+        const h = document.createElement('div'); h.className = 'pday'; h.textContent = fmtShort(p.date); box.appendChild(h);
+      }
+      const row = document.createElement('div'); row.className = 'pitem';
+      const tx = document.createElement('input'); tx.type = 'text'; tx.value = p.text; tx.maxLength = 300; tx.setAttribute('aria-label', 'Task');
+      tx.oninput = () => { p.text = tx.value; };
+      const mn = document.createElement('input'); mn.type = 'number'; mn.min = 0; mn.max = 600; mn.value = p.min || ''; mn.placeholder = 'min';
+      mn.setAttribute('aria-label', 'Minutes'); mn.oninput = () => { p.min = Math.max(0, Math.min(600, parseInt(mn.value, 10) || 0)); };
+      const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'del'; rm.textContent = '×'; rm.title = 'Leave out';
+      rm.setAttribute('aria-label', 'Leave out ' + p.text);
+      rm.onclick = () => { p.keep = false; renderPreview(); };
+      const meta = document.createElement('div'); meta.className = 'pmeta';
+      const dt = document.createElement('input'); dt.type = 'date'; dt.value = p.date; dt.setAttribute('aria-label', 'Date');
+      dt.onchange = () => { if (DAY_RE.test(dt.value)) { p.date = dt.value; preview.sort((a, b) => a.date.localeCompare(b.date)); renderPreview(); } };
+      const cs = document.createElement('select'); cs.setAttribute('aria-label', 'Category');
+      ['', ...CATS].forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c || 'No tag'; cs.appendChild(o); });
+      cs.value = p.cat; cs.onchange = () => { p.cat = cs.value; };
+      meta.append(dt, cs);
+      row.append(tx, mn, rm, meta);
+      box.appendChild(row);
+    });
+  }
+  $('discardBtn').onclick = () => { preview = []; $('previewWrap').hidden = true; scanStatus(''); };
+  $('applyBtn').onclick = () => {
+    const kept = preview.filter(p => p.keep && p.text.trim());
+    const touched = new Set(); let added = 0;
+    kept.forEach(p => {
+      const d = ensure(p.date);
+      if (d.plan.some(x => x.text.trim().toLowerCase() === p.text.trim().toLowerCase())) return;   // already planned
+      d.plan.push({ id: uid(), text: p.text.trim(), cat: p.cat, min: p.min, done: false });
+      touched.add(p.date); added++;
+    });
+    touched.forEach(k => save(k));
+    preview = []; $('previewWrap').hidden = true;
+    photos = []; $('thumbs').innerHTML = ''; $('readBtn').disabled = true;
+    scanStatus(added ? `Added ${added} tasks across ${touched.size} days.` : 'All of these tasks were already in your plan.');
+    if (kept.length) go(kept[0].date); else renderAll();
+  };
+
+  // ---------- tabs ----------
+  function showTab(name) {
+    const g = name === 'grade';
+    $('tabCheckin').hidden = g; $('tabGrade').hidden = !g;
+    $('tabBtnCheckin').setAttribute('aria-selected', !g); $('tabBtnGrade').setAttribute('aria-selected', g);
+    try { localStorage.setItem(KEY + '-tab', name); } catch (e) {}
+  }
+  $('tabBtnCheckin').onclick = () => showTab('checkin');
+  $('tabBtnGrade').onclick = () => showTab('grade');
+  try { if (location.hash === '#marking' || localStorage.getItem(KEY + '-tab') === 'grade') showTab('grade'); } catch (e) {}
+
+  // ---------- homework marking ----------
+  const CAMBRIDGE_SCALE = `Cambridge English writing assessment (Key, Preliminary, First, Advanced, Proficiency)
+Target level: B2 First (change this line to your own exam and level)
+
+Four criteria, each marked 0 to 5. Total out of 20.
+
+1. Content
+Is the task completed? Are all the content points covered and relevant? Would the target reader be fully informed?
+
+2. Communicative Achievement
+Are the register, tone and format right for the task type (essay, email, letter, article, review, report, story)? Does the writing hold the reader's attention and get both simple and complex ideas across?
+
+3. Organisation
+Is the text well organised and coherent? Paragraphing, linking words, cohesive devices and organisational patterns, logical order of ideas.
+
+4. Language
+Range and control of vocabulary and grammar, simple and complex forms. Do the errors make the meaning hard to follow?
+
+Bands: 5 = fully achieves the criterion at the target level. 3 = achieves it adequately, with clear limitations. 1 = only minimally achieves it. 0 = does not achieve it, or the content is irrelevant. 4 and 2 sit between these bands.`;
+
+  const el = (tag, props, ...kids) => {
+    const n = document.createElement(tag);
+    if (props) for (const [k, v] of Object.entries(props)) { if (k === 'class') n.className = v; else if (k in n) n[k] = v; else n.setAttribute(k, v); }
+    for (const k of kids.flat()) if (k != null && k !== false) n.append(k instanceof Node ? k : String(k));
+    return n;
+  };
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 10) / 10 : 0; };
+  const strs = (a, n) => Array.isArray(a) ? a.map(x => String(x || '').trim()).filter(Boolean).slice(0, n) : [];
+  let imageLimits = null, gKind = 'writing', gCtl = null, rCtl = null, editingRubric = null, shownGrade = null, confirmDel = null;
+
+  function picker(host, onChange) {
+    const files = [];
+    host.className = 'picker';
+    const inp = el('input', { type: 'file', multiple: true, hidden: true, accept: 'image/*,application/pdf,.pdf,.txt,.md,text/plain' });
+    const list = el('div', { class: 'flist' });
+    const btn = el('button', { type: 'button', class: 'btn small' }, 'Attach photos, PDF or text');
+    host.append(el('div', { class: 'row' }, btn, el('span', { class: 'hint' }, 'or drop files here')), list, inp);
+    const render = () => {
+      list.innerHTML = '';
+      files.forEach((f, i) => {
+        const isImg = /^image\//.test(f.type);
+        const icon = isImg ? el('img', { src: URL.createObjectURL(f), alt: '' })
+          : el('span', { class: 'ficon' }, /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name) ? 'PDF' : 'TXT');
+        const rm = el('button', { type: 'button', class: 'del', title: 'Remove', 'aria-label': 'Remove ' + f.name }, '×');
+        rm.onclick = () => { files.splice(i, 1); render(); onChange && onChange(); };
+        list.append(el('span', { class: 'fchip' }, icon, el('span', null, f.name), rm));
+      });
+    };
+    const add = (fl) => {
+      for (const f of fl) if (/^image\//.test(f.type) || /pdf$/i.test(f.type) || /\.(pdf|txt|md)$/i.test(f.name) || /^text\//.test(f.type)) files.push(f);
+      render(); onChange && onChange();
+    };
+    btn.onclick = () => inp.click();
+    inp.onchange = () => { add(inp.files); inp.value = ''; };
+    host.ondragover = (e) => { e.preventDefault(); host.classList.add('over'); };
+    host.ondragleave = () => host.classList.remove('over');
+    host.ondrop = (e) => { e.preventDefault(); host.classList.remove('over'); add(e.dataTransfer.files); };
+    return { files, clear() { files.length = 0; render(); onChange && onChange(); } };
+  }
+
+  // PDF pages: text pages are read as text, scanned pages become images
+  let pdfLib = null;
+  const loadScript = (src) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('script')); document.head.appendChild(s); });
+  function pdfjs() {
+    if (!pdfLib) {
+      const base = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+      pdfLib = (async () => {
+        await loadScript(base + 'pdf.min.js');
+        await loadScript(base + 'pdf.worker.min.js');
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.js';
+        return window.pdfjsLib;
+      })();
+      pdfLib.catch(() => { pdfLib = null; });
+    }
+    return pdfLib;
+  }
+  async function pdfParts(file, label) {
+    const lib = await pdfjs();
+    const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+    const images = [], texts = [];
+    const n = Math.min(doc.numPages, 30);
+    for (let i = 1; i <= n; i++) {
+      const page = await doc.getPage(i);
+      const tc = await page.getTextContent();
+      const text = tc.items.map(it => it.str + (it.hasEOL ? '\n' : ' ')).join('').replace(/[ \t]+/g, ' ').trim();
+      if (text.length > 150) { texts.push({ name: `${label}, ${file.name} page ${i}`, text }); continue; }
+      const v0 = page.getViewport({ scale: 1 });
+      const v = page.getViewport({ scale: Math.min(3, 1600 / Math.max(v0.width, v0.height)) });
+      const c = document.createElement('canvas'); c.width = Math.ceil(v.width); c.height = Math.ceil(v.height);
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext: ctx, viewport: v }).promise;
+      images.push({ blob: await new Promise(r => c.toBlob(r, 'image/jpeg', 0.88)), label: `${label}, ${file.name} page ${i}` });
+    }
+    return { images, texts };
+  }
+  async function toJpeg(file) {
+    const bmp = await createImageBitmap(file);
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    c.getContext('2d').drawImage(bmp, 0, 0);
+    return new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
+  }
+  async function prepare(files, label) {
+    const images = [], texts = [];
+    for (const f of files) {
+      if (/pdf$/i.test(f.type) || /\.pdf$/i.test(f.name)) {
+        let p;
+        try { p = await pdfParts(f, label); } catch (e) { throw new Error(`Could not open ${f.name}. Try photos of the pages instead.`); }
+        images.push(...p.images); texts.push(...p.texts);
+      } else if (/^image\//.test(f.type)) {
+        let blob = f;
+        if (imageLimits && !imageLimits.mediaTypes.includes(f.type)) {
+          try { blob = await toJpeg(f); } catch (e) { throw new Error(`${f.name} is in a photo format Claude cannot read. Set your camera to JPEG ("Most Compatible") or take a screenshot of it.`); }
+        }
+        if (imageLimits && blob.size > imageLimits.maxInputBytes) throw new Error(`${f.name} is too large. Use a smaller photo.`);
+        images.push({ blob, label: `${label}, ${f.name}` });
+      } else {
+        texts.push({ name: `${label}, ${f.name}`, text: (await f.text()).slice(0, 60000) });
+      }
+    }
+    return { images, texts };
+  }
+  const joinParts = (parts) => ({ images: parts.flatMap(p => p.images), texts: parts.flatMap(p => p.texts) });
+  const describeParts = ({ images, texts }) =>
+    (texts.length ? '\n\nTEXT FROM UPLOADED FILES\n' + texts.map(t => `--- ${t.name} ---\n${t.text}`).join('\n\n') : '') +
+    (images.length ? '\n\nIMAGES, IN ORDER\n' + images.map((im, i) => `Image ${i + 1}: ${im.label}`).join('\n') : '');
+  function checkCount(images) {
+    const max = imageLimits ? imageLimits.maxCount : 0;
+    if (images.length > max) throw new Error(`That is ${images.length} photos or scanned pages, but one marking can use at most ${max}. Remove some, or type part of it in.`);
+  }
+  const sampleError = (e) => ({
+    not_granted: 'Claude was not allowed for this page. Reload and choose Allow to use marking.',
+    sampling_disabled: 'Claude is not available on this account.',
+    images_unavailable: 'This view cannot send photos to Claude. Paste the text instead.',
+    rate_limited: 'Too many requests right now. Wait a few minutes and try again.',
+    image_rejected: 'One of the photos could not be used. Try a JPEG or PNG under 20 MB.',
+    prompt_too_large: 'There is too much text. Upload fewer pages at once.',
+    invalid_json: 'Claude\'s answer came back in the wrong shape. Press the button again.',
+    refused: 'Claude could not mark this. Check the files and try again.',
+    session_expired: 'Your claude.ai session expired. Sign in again and reload.',
+  }[e && e.code] || (e && e.message && !e.code ? e.message : 'Something went wrong. Try again.'));
+  const gStatus = (msg, err) => { const s = $('gStatus'); s.hidden = !msg; s.textContent = msg || ''; s.classList.toggle('err', !!err); };
+  const rStatus = (msg, err) => { const s = $('rStatus'); s.hidden = !msg; s.textContent = msg || ''; s.classList.toggle('err', !!err); };
+  const langRule = (l) => l === 'zh'
+    ? 'Write every comment, explanation, summary, strength, improvement, tip and "why" field in Simplified Chinese. Keep quoted student text, corrected sentences and example sentences in English.'
+    : 'Write all feedback in clear, simple English suited to the student\'s level.';
+
+  const taskPicker = picker($('gTaskFiles'));
+  const answerPicker = picker($('gAnswerFiles'));
+  const paperPicker = picker($('gPaperFiles'));
+  const rubricPicker = picker($('rFiles'), () => { $('rRead').disabled = !rubricPicker.files.length || !sample; });
+
+  // criteria list and editor
+  const rubricsOf = (kind) => Object.entries(state.rubrics).filter(([, r]) => r.kind === kind).sort((a, b) => String(a[1].name).localeCompare(String(b[1].name)));
+  function renderRubrics() {
+    const box = $('rList'); box.innerHTML = '';
+    const all = Object.entries(state.rubrics).sort((a, b) => (a[1].kind + a[1].name).localeCompare(b[1].kind + b[1].name));
+    if (!all.length) box.append(el('div', { class: 'empty' }, 'No criteria yet. Add your writing band descriptors or a reading answer key. Until then, writing is marked with the built-in Cambridge scale.'));
+    all.forEach(([id, r]) => {
+      const edit = el('button', { type: 'button', class: 'btn small' }, 'Edit');
+      edit.onclick = () => openEditor(id);
+      const del = el('button', { type: 'button', class: 'btn small' }, confirmDel === id ? 'Confirm' : 'Delete');
+      del.onclick = () => {
+        if (confirmDel !== id) { confirmDel = id; renderRubrics(); return; }
+        confirmDel = null; delete state.rubrics[id]; save(id); renderGradeSide(); toast('Criteria deleted');
+      };
+      const lines = String(r.text || '').split('\n').filter(l => l.trim()).length;
+      box.append(el('div', { class: 'rubric' },
+        el('div', { class: 'rname' }, el('span', { class: 'kind ' + r.kind }, r.kind), r.name),
+        el('div', { class: 'ract' }, edit, del),
+        el('div', { class: 'rmeta' }, `${lines} line${lines === 1 ? '' : 's'}`)));
+    });
+  }
+  function openEditor(id) {
+    editingRubric = id || null;
+    const r = id ? state.rubrics[id] : { name: '', kind: gKind, text: '' };
+    $('rName').value = r.name; $('rKind').value = r.kind; $('rText').value = r.text;
+    rubricPicker.clear(); rStatus('');
+    $('rEditor').hidden = false; $('rNew').hidden = true;
+    $('rName').focus();
+  }
+  const closeEditor = () => { if (rCtl) rCtl.abort(); $('rEditor').hidden = true; $('rNew').hidden = false; editingRubric = null; };
+  $('rNew').onclick = () => openEditor(null);
+  $('rCancel').onclick = closeEditor;
+  $('rPreset').onclick = () => {
+    $('rText').value = CAMBRIDGE_SCALE; $('rKind').value = 'writing';
+    if (!$('rName').value.trim()) $('rName').value = 'Cambridge writing scale (B2)';
+    rStatus('Filled in the Cambridge four-criteria scale. Change the target level line to your exam.');
+  };
+  $('rSave').onclick = () => {
+    const name = $('rName').value.trim(), text = $('rText').value.trim();
+    if (!name) { rStatus('Give the criteria a name.', true); $('rName').focus(); return; }
+    if (!text) { rStatus('The criteria text is empty. Upload files and press Copy text from files, or paste the text.', true); return; }
+    const id = editingRubric || 'rubric-' + uid();
+    state.rubrics[id] = { name, kind: $('rKind').value, text, updatedAt: new Date().toISOString() };
+    save(id);
+    try { localStorage.setItem(KEY + '-rubric-' + $('rKind').value, id); } catch (e) {}
+    closeEditor(); renderGradeSide(); toast('Criteria saved');
+  };
+  $('rRead').onclick = async () => {
+    if (!sample || !rubricPicker.files.length) return;
+    let parts;
+    try { parts = await prepare(rubricPicker.files, 'Criteria'); checkCount(parts.images); }
+    catch (e) { rStatus(e.message, true); return; }
+    if (!parts.images.length) {   // text files and text PDFs need no Claude call
+      $('rText').value = parts.texts.map(t => t.text).join('\n\n'); rStatus('Text copied. Check it, then save.'); return;
+    }
+    rCtl = new AbortController();
+    $('rRead').disabled = true; rStatus('Copying the text… this can take a minute.');
+    const kind = $('rKind').value;
+    const prompt = `These files contain ${kind === 'reading' ? 'an answer key or marking scheme for an English reading comprehension test' : 'marking criteria (band descriptors) for English writing'}.
+Transcribe all of it as plain text so it can be used for marking. Keep the structure: headings, criteria names, score bands and their descriptors, question numbers with their correct answers and points. Use one line per answer for answer keys, like "3. B (1 mark)". Do not add, summarise or leave anything out. If something is illegible, write [illegible].
+Reply with only the transcribed text.${describeParts(parts)}`;
+    try {
+      const { text } = await sample(prompt, { images: parts.images.map(i => i.blob), signal: rCtl.signal, onText: ({ text }) => { $('rText').value = text; } });
+      $('rText').value = text.trim(); rStatus('Done. Check the text against your paper, fix anything misread, then save.');
+    } catch (e) {
+      if (e && e.code !== 'cancelled') rStatus(sampleError(e), true); else rStatus('');
+      if (e && e.text) $('rText').value = e.text;
+    } finally { rCtl = null; $('rRead').disabled = !rubricPicker.files.length; }
+  };
+
+  function renderRubricSelect() {
+    const s = $('gRubric'), prev = s.value;
+    let remembered = null; try { remembered = localStorage.getItem(KEY + '-rubric-' + gKind); } catch (e) {}
+    s.innerHTML = '';
+    rubricsOf(gKind).forEach(([id, r]) => s.append(el('option', { value: id }, r.name)));
+    if (gKind === 'writing') s.append(el('option', { value: 'builtin' }, 'Cambridge writing scale (built in, B2)'));
+    else s.append(el('option', { value: 'none' }, 'No answer key: Claude works out the answers'));
+    const ids = [...s.options].map(o => o.value);
+    s.value = ids.includes(remembered) ? remembered : ids.includes(prev) ? prev : ids[0];
+    $('gRubricHint').textContent = s.value === 'none' ? 'Without a key, Claude answers the questions itself. Add your answer key under Marking criteria for exact marking.'
+      : s.value === 'builtin' ? 'Add your own criteria under Marking criteria to mark against your exam or teacher\'s scale.' : '';
+  }
+  $('gRubric').onchange = () => { try { localStorage.setItem(KEY + '-rubric-' + gKind, $('gRubric').value); } catch (e) {} renderRubricSelect(); };
+  $('gKind').onclick = (e) => {
+    const b = e.target.closest('button[data-k]'); if (!b) return;
+    gKind = b.dataset.k;
+    [...$('gKind').children].forEach(x => x.classList.toggle('on', x === b));
+    $('gWritingFields').hidden = gKind !== 'writing'; $('gReadingFields').hidden = gKind !== 'reading';
+    renderRubricSelect();
+  };
+
+  function writingPrompt(criteria, task, answer, extra, lang, parts) {
+    return `You are an experienced Cambridge English examiner. Mark this student's English writing homework strictly by the marking criteria below. Use the criteria names and score ranges exactly as they are given. Where the criteria give band descriptors, choose the band that fits best and say why in the comment.
+
+MARKING CRITERIA
+"""
+${criteria}
+"""
+
+WRITING TASK
+${task || '(see the images or files labelled Task; if there are none, work out the task from the writing)'}
+
+STUDENT'S WRITING
+${answer || '(handwritten: see the images or files labelled Student writing)'}
+${extra ? '\nNOTES FROM THE STUDENT: ' + extra + '\n' : ''}${describeParts(parts)}
+
+${langRule(lang)}
+Quote the student's words exactly in "original". Give up to 15 corrections, the most important first. "improved" is the student's text rewritten one level higher, keeping their ideas and paragraphs. "transcript" is the student's writing exactly as written, mistakes included, only when it came from images; otherwise "".
+Reply with only JSON in this shape:
+{"title":"short name of the task","transcript":"","scores":[{"criterion":"Content","score":4,"max":5,"comment":"..."}],"total":15,"max":20,"level":"estimated CEFR level, or empty","summary":"2 or 3 sentences","strengths":["..."],"improvements":["..."],"corrections":[{"original":"...","corrected":"...","why":"..."}],"improved":"..."}`;
+  }
+  function readingPrompt(criteria, answers, extra, lang, parts) {
+    return `You are an experienced English teacher marking a student's reading comprehension homework.
+${criteria ? `Mark it with this answer key or marking scheme. Where it gives a correct answer, that answer is final. Where it gives points per question, use them.
+"""
+${criteria}
+"""` : 'No answer key was given. Read the passage carefully, work out the correct answer to each question yourself, and mark the student against it. Set "keyUsed" to false.'}
+
+The passage, the questions and the student's answers are in the images and text below. Find every question and the student's answer to it. A question with no answer is wrong, with "student" set to "". Accept answers with small spelling mistakes when the meaning is clearly right, unless the key says otherwise.
+${answers ? '\nSTUDENT\'S ANSWERS (typed)\n' + answers + '\n' : ''}${extra ? '\nNOTES FROM THE STUDENT: ' + extra + '\n' : ''}${describeParts(parts)}
+
+${langRule(lang)}
+In "why", point to the part of the passage that gives the answer, quoting a few words of it.
+Reply with only JSON in this shape:
+{"title":"short name of the test","score":7,"max":10,"keyUsed":${criteria ? 'true' : 'false'},"items":[{"q":"1","student":"B","correct":"C","ok":false,"points":0,"maxPoints":1,"why":"..."}],"summary":"2 or 3 sentences","tips":["..."]}`;
+  }
+
+  function normalise(kind, r) {
+    if (!r || typeof r !== 'object') throw { code: 'invalid_json' };
+    if (kind === 'writing') {
+      const scores = (Array.isArray(r.scores) ? r.scores : []).slice(0, 12).map(s => ({ criterion: String(s.criterion || ''), score: num(s.score), max: num(s.max), comment: String(s.comment || '') }));
+      const total = r.total != null ? num(r.total) : scores.reduce((a, s) => a + s.score, 0);
+      const max = r.max != null ? num(r.max) : scores.reduce((a, s) => a + s.max, 0);
+      return { title: String(r.title || ''), transcript: String(r.transcript || ''), scores, total, max, level: String(r.level || ''),
+        summary: String(r.summary || ''), strengths: strs(r.strengths, 8), improvements: strs(r.improvements, 8),
+        corrections: (Array.isArray(r.corrections) ? r.corrections : []).slice(0, 20).map(c => ({ original: String(c.original || ''), corrected: String(c.corrected || ''), why: String(c.why || '') })).filter(c => c.original || c.corrected),
+        improved: String(r.improved || '') };
+    }
+    const items = (Array.isArray(r.items) ? r.items : []).slice(0, 120).map(it => ({ q: String(it.q ?? ''), student: String(it.student ?? ''), correct: String(it.correct ?? ''),
+      ok: !!it.ok, points: num(it.points ?? (it.ok ? 1 : 0)), maxPoints: num(it.maxPoints ?? 1), why: String(it.why || '') }));
+    return { title: String(r.title || ''), score: r.score != null ? num(r.score) : items.reduce((a, i) => a + i.points, 0),
+      max: r.max != null ? num(r.max) : items.reduce((a, i) => a + i.maxPoints, 0), keyUsed: r.keyUsed !== false,
+      items, summary: String(r.summary || ''), tips: strs(r.tips, 8) };
+  }
+
+  $('gGo').onclick = async () => {
+    if (!sample) return;
+    const kind = gKind, rid = $('gRubric').value, lang = $('gLang').value, extra = $('gExtra').value.trim();
+    const criteria = rid === 'builtin' ? CAMBRIDGE_SCALE : rid === 'none' ? '' : (state.rubrics[rid] || {}).text || '';
+    const criteriaName = rid === 'builtin' ? 'Cambridge writing scale (built in)' : rid === 'none' ? 'No answer key' : (state.rubrics[rid] || {}).name || '';
+    let parts, prompt;
+    try {
+      if (kind === 'writing') {
+        const task = $('gTask').value.trim(), answer = $('gAnswer').value.trim();
+        if (!answer && !answerPicker.files.length) { gStatus('Add your writing: type it in, or attach photos of it.', true); return; }
+        gStatus('Preparing files…');
+        parts = joinParts([await prepare(taskPicker.files, 'Task'), await prepare(answerPicker.files, 'Student writing')]);
+        prompt = writingPrompt(criteria, task, answer, extra, lang, parts);
+      } else {
+        const answers = $('gReadAnswers').value.trim();
+        if (!paperPicker.files.length) { gStatus('Attach the pages with the passage, the questions and your answers.', true); return; }
+        gStatus('Preparing files…');
+        parts = await prepare(paperPicker.files, 'Reading test');
+        prompt = readingPrompt(criteria, answers, extra, lang, parts);
+      }
+      checkCount(parts.images);
+    } catch (e) { gStatus(e.message || 'Could not read the files.', true); return; }
+
+    gCtl = new AbortController();
+    $('gGo').disabled = true; $('gStop').hidden = false;
+    gStatus('Marking… this usually takes 30 seconds to 2 minutes.');
+    try {
+      const raw = await sample.json(prompt, { images: parts.images.map(i => i.blob), signal: gCtl.signal, modelTier: 'default' });
+      const result = normalise(kind, raw);
+      const id = 'grade-' + uid();
+      state.grades[id] = { kind, date: todayKey(), createdAt: new Date().toISOString(), title: $('gTitle').value.trim() || result.title || (kind === 'writing' ? 'Writing homework' : 'Reading homework'),
+        criteriaName, lang, answerText: kind === 'writing' ? $('gAnswer').value.trim().slice(0, 20000) : '', result };
+      save(id);
+      shownGrade = id; renderGradeSide(); renderResult(id);
+      gStatus('Marked and saved under Marked homework.');
+      $('gResultCard').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    } catch (e) {
+      gStatus(e && e.code === 'cancelled' ? 'Stopped.' : sampleError(e), !(e && e.code === 'cancelled'));
+    } finally { gCtl = null; $('gGo').disabled = false; $('gStop').hidden = true; }
+  };
+  $('gStop').onclick = () => { if (gCtl) gCtl.abort(); };
+
+  function renderResult(id) {
+    const g = state.grades[id], box = $('gResult');
+    box.innerHTML = '';
+    if (!g) { $('gResultCard').hidden = true; return; }
+    $('gResultCard').hidden = false;
+    const r = g.result || {}, w = g.kind === 'writing';
+    const got = w ? r.total : r.score, max = r.max;
+    box.append(
+      el('h2', null, (w ? 'Writing' : 'Reading') + ' · ' + fmtShort(g.date)),
+      el('div', { style: 'font-size:18px;font-weight:650;overflow-wrap:anywhere' }, g.title),
+      el('div', { class: 'hint' }, 'Marked with: ' + (g.criteriaName || '')),
+      el('div', { class: 'score' }, el('b', null, got), el('span', { class: 'of' }, '/ ' + max), max ? el('span', { class: 'badge' }, Math.round(got / max * 100) + '%') : null, w && r.level ? el('span', { class: 'badge' }, r.level) : null));
+    if (!w && r.keyUsed === false) box.append(el('div', { class: 'warn' }, 'No answer key was used, so Claude worked out the correct answers itself. Check them against your teacher\'s key.'));
+    if (r.summary) box.append(el('p', { style: 'margin:0 0 6px' }, r.summary));
+    if (w) {
+      if (r.scores && r.scores.length) box.append(el('div', { class: 'rsec' }, el('h2', null, 'Scores'), r.scores.map(s =>
+        el('div', { class: 'crit' }, el('span', { class: 'cname' }, s.criterion), el('span', { class: 'cscore' }, `${s.score} / ${s.max}`),
+          el('div', { class: 'cbar' }, el('div', { style: `width:${s.max ? Math.max(0, Math.min(100, s.score / s.max * 100)) : 0}%` })),
+          s.comment ? el('div', { class: 'ccom' }, s.comment) : null))));
+      if (r.strengths && r.strengths.length) box.append(el('div', { class: 'rsec' }, el('h2', null, 'What went well'), el('ul', { class: 'rlist' }, r.strengths.map(x => el('li', null, x)))));
+      if (r.improvements && r.improvements.length) box.append(el('div', { class: 'rsec' }, el('h2', null, 'To improve'), el('ul', { class: 'rlist' }, r.improvements.map(x => el('li', null, x)))));
+      if (r.corrections && r.corrections.length) box.append(el('div', { class: 'rsec' }, el('h2', null, `Corrections (${r.corrections.length})`), r.corrections.map(c =>
+        el('div', { class: 'corr' }, el('div', null, el('span', { class: 'o' }, c.original), ' → ', el('span', { class: 'c' }, c.corrected)), c.why ? el('div', { class: 'w' }, c.why) : null))));
+      if (r.improved) box.append(el('details', null, el('summary', null, 'Improved version'), el('div', { class: 'pre' }, r.improved)));
+      const mine = g.answerText || r.transcript;
+      if (mine) box.append(el('details', null, el('summary', null, g.answerText ? 'My writing' : 'My writing (as Claude read it)'), el('div', { class: 'pre' }, mine)));
+    } else {
+      if (r.items && r.items.length) box.append(el('div', { class: 'rsec' }, el('h2', null, 'Answers'), el('div', { class: 'tablewrap' }, el('table', { class: 'items' },
+        el('thead', null, el('tr', null, el('th', null, 'Q'), el('th', null, 'Mine'), el('th', null, 'Correct'), el('th', null, ''), el('th', null, 'Why'))),
+        el('tbody', null, r.items.map(it => el('tr', null, el('td', { class: 'q' }, it.q), el('td', null, it.student || '—'), el('td', null, it.correct),
+          el('td', { class: it.ok ? 'ok' : 'no', 'aria-label': it.ok ? 'correct' : 'wrong' }, it.ok ? '✓' : '✗'), el('td', { class: 'why' }, it.why))))))));
+      if (r.tips && r.tips.length) box.append(el('div', { class: 'rsec' }, el('h2', null, 'Tips'), el('ul', { class: 'rlist' }, r.tips.map(x => el('li', null, x)))));
+    }
+    const logText = `${w ? 'Writing' : 'Reading'} homework marked: ${g.title} (${got}/${max})`;
+    const logged = (day(g.date).plan || []).some(t => t.text === logText);
+    const logBtn = el('button', { type: 'button', class: 'btn small', disabled: logged }, logged ? 'In that day\'s plan' : 'Add to that day\'s plan');
+    logBtn.onclick = () => {
+      ensure(g.date).plan.push({ id: uid(), text: logText, cat: w ? 'Writing' : 'Reading', min: 0, done: true });
+      save(g.date); renderAll(); renderResult(id); toast('Added to ' + fmtShort(g.date));
+    };
+    const del = el('button', { type: 'button', class: 'btn small' }, confirmDel === id ? 'Confirm delete' : 'Delete');
+    del.onclick = () => {
+      if (confirmDel !== id) { confirmDel = id; renderResult(id); return; }
+      confirmDel = null; delete state.grades[id]; save(id); shownGrade = null; $('gResultCard').hidden = true; renderGradeSide(); toast('Deleted');
+    };
+    box.append(el('div', { class: 'row', style: 'margin-top:16px' }, logBtn, del));
+  }
+
+  function renderGradeHistory() {
+    const h = $('gHistory'); h.innerHTML = '';
+    const list = Object.entries(state.grades).sort((a, b) => String(b[1].createdAt).localeCompare(String(a[1].createdAt))).slice(0, 30);
+    if (!list.length) { h.append(el('div', { class: 'empty' }, 'Homework you mark is kept here.')); return; }
+    list.forEach(([id, g]) => {
+      const r = g.result || {}, got = g.kind === 'writing' ? r.total : r.score;
+      const b = el('button', { type: 'button', class: 'ghrow' + (id === shownGrade ? ' cur' : '') },
+        el('span', { class: 'gt' }, el('span', { class: 'kind ' + g.kind }, g.kind), g.title), el('span', { class: 'gs' }, `${got}/${r.max}`),
+        el('span', { class: 'gm' }, fmtShort(g.date) + ' · ' + (g.criteriaName || '')));
+      b.onclick = () => { shownGrade = id; confirmDel = null; renderGradeHistory(); renderResult(id); };
+      h.append(b);
+    });
+  }
+  function renderGradeSide() { renderRubrics(); renderRubricSelect(); renderGradeHistory(); if (shownGrade && !state.grades[shownGrade]) { shownGrade = null; $('gResultCard').hidden = true; } }
+
+  $('wiCopy').onclick = async () => {
+    const g = shownGrade && state.grades[shownGrade];
+    const text = $('gAnswer').value.trim() || (g && (g.answerText || (g.result && g.result.transcript))) || '';
+    if (!text) { toast('Type your writing into My writing first'); return; }
+    try { await navigator.clipboard.writeText(text); toast('Copied. Paste it into Write & Improve.'); }
+    catch (e) { showTab('grade'); $('gAnswer').focus(); $('gAnswer').select(); toast('Press Ctrl+C or ⌘C to copy'); }
+  };
+
+  async function setupGrade() {
+    if (!sample) { $('gradeMain').hidden = true; $('gradeUnavailable').hidden = false; return; }
+    imageLimits = await sample.limits().then(l => l.images || null).catch(() => null);
+    $('gGo').disabled = false;
+    $('rRead').disabled = !rubricPicker.files.length;
+  }
+
+  // ---------- theme ----------
+  const root = document.documentElement;
+  try { const th = localStorage.getItem(KEY + '-theme'); if (th === 'light' || th === 'dark') root.dataset.theme = th; } catch (e) {}
+  $('themeBtn').onclick = () => {
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem(KEY + '-theme', root.dataset.theme); } catch (e) {}
+  };
+
+  let toastTimer;
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  // roll over to the new day if the page stays open past midnight
+  let lastToday = todayKey();
+  setInterval(() => { const t = todayKey(); if (t !== lastToday) { if (sel === lastToday) sel = t; lastToday = t; go(sel); } }, 60000);
+
+  renderCats();
+  renderAll();
+  connect();
+  setupScan().then(setupGrade);
+})();
+</script>
+</body>
+</html>
