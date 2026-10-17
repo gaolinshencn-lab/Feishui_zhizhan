@@ -39,6 +39,10 @@
 | `evidence/STILL_MATCH_REVIEW.md` | 剧照对位审核：每张剧照的已确认 / 推测 / 本轮修改 / 下一轮；角色比例测试结果 |
 | `render_still_match.py`、`still_match/` | 剧照对位相机（`Still_Match_Cameras`）和模型渲染。和剧照并排的对比图含版权画面，不放进仓库 |
 | `render_scale_tests.py`、`scale_tests/` | 角色比例测试：门口、床、洞口、树枝；`scale_tests.json` 是量出来的开口净高净宽 |
+| `evidence/P3_LAKE_FOREST.md`、`lake_checks/` | 湖、瀑布、森林：已确认 / 推测 / 本轮修改；审核图（`Lake_13`–`16`、`Forest_01`–`03` 为本轮新增） |
+| `map_diagrams.py`、`maps/`、`evidence/MAPS.md` | Evidence Map（只画剧照证明的关系）和 Playable Map（模型实际布局，推测都标出） |
+| `export_glb.py`、`glb/` | 按区域导出的 .glb（修改器和布尔开洞已应用；`name_cn`、`ref_status` 等属性在 glTF extras 里） |
+| `../frame_collection/` | 1000+ 剧照采集的目录、索引格式和脚本（独立任务，目前 0 张，等用户提供视频或截图） |
 
 ## 打开文件
 
@@ -137,7 +141,7 @@ blender -b boonie_bears_forest_map.blend -P render_acceptance.py -- acceptance_o
   | `Props` | 院子里的道具、蜂巢、螃蟹、栅栏 |
   | `Lights_and_Cameras` | 太阳、相机 |
   | `Reference_Notes` | 说明、推测模型集合、隐藏的树木原型 |
-- **整体移动**：木屋（`GQ_House_Root`）、仓库（`Warehouse_Root`）、皮卡、树洞、每个角色都有一个 `_Root` 空物体，其余部件都挂在它下面；移动或旋转 `_Root` 就能整体移动。
+- **整体移动**：木屋（`HOUSE_Root`）、仓库（`WAREHOUSE_Root`）、皮卡、树洞、每个角色都有一个 `_Root` 空物体，其余部件都挂在它下面；移动或旋转 `_Root` 就能整体移动。
 - **中文名称与依据**：选中物体 → 属性面板 → 物体 → 自定义属性：
   - `name_cn`：中文名。
   - `ref_status`：`observed` 表示剧照可见，`inferred` 表示推测。
@@ -152,9 +156,42 @@ blender -b boonie_bears_forest_map.blend -P render_acceptance.py -- acceptance_o
   - `XiongDa_Fur_With_Bib`：熊大的毛色和胸前 V 字
 
   在“着色”工作区修改。熊大胸前 V 字、熊二肚皮等毛色分区是着色器里按物体坐标画的平滑色块。
-- **门**：`GQ_Door_Front_Leaf_East/West`、`GQ_Bedroom_Door_Leaf_RedLattice`、`GQ_Bathroom_Door_Leaf`、`Warehouse_Barn_Door_North/South` 的原点都在铰链上，绕 Z 轴旋转即可开关门。
+- **门**：`GQ_Door_Front_Leaf_East/West`、`HOUSE_Bedroom_Door_Leaf_RedLattice`、`HOUSE_Bathroom_Door_Leaf`、`Warehouse_Barn_Door_North/South` 的原点都在铰链上，绕 Z 轴旋转即可开关门。
 - **室内物体的属性**：`room`（所在房间）、`position_status`（位置是剧照可见还是推测）、`floor_item`（落地家具，质量检查会核对它贴地、不互相穿插、不挡门洞）。
 - **角色细化**：角色由多个独立部件组成（头、口鼻、眼睛、耳朵、四肢、手掌、脚掌、衣服、帽子等），部件都带细分修改器。可以把某个角色的部件合并后进入雕刻模式继续塑形，见下文“未完成内容”。
+
+## 命名规范和导出
+
+物体名按区域加前缀（建模脚本最后一步 `apply_name_prefixes()` 统一改名，对照表在场景属性 `name_map_json`）：
+
+| 前缀 | 区域 |
+|---|---|
+| `HOUSE_` | 光头强木屋（外观、室内三个房间、可拆屋顶） |
+| `WAREHOUSE_` | 仓库 |
+| `BEAR_HOME_` | 熊大熊二树洞 |
+| `MONKEY_CAVE_` | 吉吉毛毛山洞 |
+| `SQUIRREL_NEST_` | 蹦蹦的松鼠窝 |
+| `LAKE_` | 湖面、水体、湖底、岩石、水草、螃蟹、石崖、瀑布、小溪 |
+| `FOREST_` | 树木、灌木、蕨类、草、倒木、树桩、蘑菇、落叶 |
+| `TERRAIN_` | 地形、远山、全图散布的岩石 |
+| `PROPS_` | 院子道具、栅栏、院门、皮卡 |
+
+角色（`XiongDa_` 等）、相机、灯光、隐藏的原型（`Proto_`）不加前缀。旧文档（`HOUSE_WAREHOUSE_AUDIT.md`、`LAKE_AUDIT.md`、`REFERENCE_CATALOG.md` 等）里用的是改名前的名字，新旧对照见 `evidence/NAME_MAP.json`。
+
+`.glb` 由 `export_glb.py` 导出（每个区域一个文件；森林太大，单独成文件）：
+
+| 文件 | 物体 | 三角面 | 大小 |
+|---|---|---|---|
+| `glb/HOUSE_and_WAREHOUSE.glb` | 204 | 135,752 | 6.16 MB |
+| `glb/BEAR_HOME.glb` | 12 | 26,012 | 0.62 MB |
+| `glb/MONKEY_CAVE.glb` | 17 | 8,094 | 0.3 MB |
+| `glb/SQUIRREL_NEST.glb` | 7 | 2,930 | 0.18 MB |
+| `glb/LAKE.glb` | 170 | 56,194 | 1.91 MB |
+| `glb/TERRAIN.glb` | 3 | 96,290 | 2.43 MB |
+| `glb/FOREST.glb` | 2036 | 1,229,815 | 6.23 MB |
+| `glb/CHARACTERS.glb` | 138 | 236,084 | 3.77 MB |
+
+体积材质（湖水体积、瀑布水雾）在 glTF 里没有对应，只导出外形。森林的三角面最多（约 120 万），在游戏引擎里用时建议给树木做 LOD。
 
 ## 比例
 

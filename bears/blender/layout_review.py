@@ -29,7 +29,7 @@ if mode == "render":
     sc = bpy.context.scene
     sc.cycles.samples = int(argv[2]) if len(argv) > 2 else 12
     O = bpy.data.objects
-    hr, wr = O["GQ_House_Root"], O["Warehouse_Root"]
+    hr, wr = O["HOUSE_Root"], O["WAREHOUSE_Root"]
     H = hr.matrix_world
 
     def hw(x, y, z=0.0):
@@ -101,12 +101,12 @@ if mode == "render":
                "Path_Meadow_LakeBeach": "空地—湖边沙滩小路", "Path_Meadow_MonkeyCave": "空地—猴洞小路", "Path_To_SquirrelTree": "去松鼠窝的岔路",
                "Path_House_Warehouse": "木屋—仓库院内小路", "Road_House_East": "皮卡土路（向东）"}
     # A：全图俯视
-    big = [("光头强木屋和院子", loc("GQ_House_Root"), "infer", True), ("独立仓库", loc("Warehouse_Root"), "infer", True),
+    big = [("光头强木屋和院子", loc("HOUSE_Root"), "infer", True), ("独立仓库", loc("WAREHOUSE_Root"), "infer", True),
            ("森林湖泊", (L["x"], L["y"], 0), "infer", True), ("石崖和瀑布", (cliff[0], cliff[1], 8), "orig", False),
            ("沙滩（涂涂、萝卜头、蹦蹦）", (beach[0], beach[1], 1), "orig", False),
-           ("空地（熊大熊二）", (m.MEADOW[0], m.MEADOW[1], 0), "infer", True), ("熊大熊二树洞", loc("Bears_TreeHome_Root"), "infer", True),
-           ("蜂蜜树", (m.HONEYTREE[0], m.HONEYTREE[1], 0), "other", False), ("吉吉毛毛山洞", loc("MonkeyCave_Root"), "infer", True),
-           ("蹦蹦松鼠窝", loc("SquirrelNest_Tree_Root"), "infer", True), ("北面山脊", (0, 55, 15), "infer", False)]
+           ("空地（熊大熊二）", (m.MEADOW[0], m.MEADOW[1], 0), "infer", True), ("熊大熊二树洞", loc("BEAR_HOME_Root"), "infer", True),
+           ("蜂蜜树", (m.HONEYTREE[0], m.HONEYTREE[1], 0), "other", False), ("吉吉毛毛山洞", loc("MONKEY_CAVE_Root"), "infer", True),
+           ("蹦蹦松鼠窝", loc("SQUIRREL_NEST_Tree_Root"), "infer", True), ("北面山脊", (0, 55, 15), "infer", False)]
     co, res = cam_top("Review_A_Map_Top", (-8, 4), 185, "1600x1200")
     render(co, res, big, lines=[(path_cn.get(n, n), pts, "infer") for n, pts in paths], title="A 狗熊岭整体正射俯视（位置依据见颜色）")
     # E：去掉树木的地形、湖泊和道路
@@ -117,11 +117,11 @@ if mode == "render":
     F = dict(x0=-10.0, x1=15.0, y0=-22.0, y1=12.0)
     yard = [("木屋主屋", hw(0, 0, 5), "orig", True), ("卫生间侧翼", hw(-5.75, -0.6, 4), "orig", False),
             ("正门楼梯", hw(-0.2, 5.6, 1), "orig", False), ("带蓝顶的院门", hw(7.8, 12, 2), "orig", True),
-            ("独立仓库（整栋推测）", loc("Warehouse_Root", 5), "infer", True), ("仓库大门", loc("Warehouse_Barn_Door_North", 1), "infer", False),
-            ("轮胎堆", loc("Prop_Tire_Stack"), "orig", False), ("院里原木堆", loc("Prop_Log_Pile_Yard"), "orig", False),
-            ("铁皮盆、铁桶", loc("Prop_Washtub_Galvanized"), "other", False), ("木墩和斧头", loc("Prop_Chopping_Block"), "other", False),
-            ("水缸", loc("Prop_Water_Jar_Clay"), "orig", False), ("木桶", loc("Prop_Wooden_Barrel"), "other", False),
-            ("皮卡", loc("Vehicle_Pickup_Root"), "other", False), ("车道缺口", hw(12.75, 12, 0), "infer", False),
+            ("独立仓库（整栋推测）", loc("WAREHOUSE_Root", 5), "infer", True), ("仓库大门", loc("WAREHOUSE_Barn_Door_North", 1), "infer", False),
+            ("轮胎堆", loc("PROPS_Tire_Stack"), "orig", False), ("院里原木堆", loc("PROPS_Log_Pile_Yard"), "orig", False),
+            ("铁皮盆、铁桶", loc("PROPS_Washtub_Galvanized"), "other", False), ("木墩和斧头", loc("PROPS_Chopping_Block"), "other", False),
+            ("水缸", loc("PROPS_Water_Jar_Clay"), "orig", False), ("木桶", loc("PROPS_Wooden_Barrel"), "other", False),
+            ("皮卡", loc("PROPS_Pickup_Root"), "other", False), ("车道缺口", hw(12.75, 12, 0), "infer", False),
             ("栅栏（正面一段 R1 可见）", hw(-3.5, 12.3, 0), "orig", False), ("栅栏（东侧）", hw(15.4, -5, 0), "infer", False),
             ("栅栏（后面）", hw(5, -22.4, 0), "infer", False), ("栅栏（西侧）", hw(-10.4, 3, 0), "infer", False)]
     yl = [(path_cn[n], pts, "infer") for n, pts in paths if n in ("Path_House_Meadow", "Path_House_Warehouse", "Road_House_East")]
@@ -140,34 +140,34 @@ if mode == "render":
     co, res = cam_top("Review_C_House_Interior_Top", (c.x, c.y), 13.6, "1600x1050")
     render(co, res, rooms, hide_c=("GQ_House_Roof_Removable", "Characters"), title="C 木屋室内俯视（拆掉屋顶）：三个功能空间和家具")
     # D：三个住所的剖面
-    br = O["Bears_TreeHome_Root"]
+    br = O["BEAR_HOME_Root"]
     co, res = cam_section("Review_D1_Section_Bears_TreeHome", br, None, (1, 0, 0), (0, 0, 5.0), 21, "1400x1400", depth=10)
     render(co, res, [("天然洞口（正面）", br.matrix_world @ Vector((0, -3.6, 1.2)), "player", False),
                      ("后壁拱形圆洞", br.matrix_world @ Vector((0, 3.6, 2.0)), "orig", False),
                      ("树根状内壁、穹顶", br.matrix_world @ Vector((0, 0, 5.2)), "orig", False),
-                     ("长条灰色石板床", loc("Bears_TreeHome_Stone_Bed", 0.6), "orig", False),
-                     ("熊二的树叶铺（推测）", loc("Bears_TreeHome_Leaf_Bed_XiongEr", 0.4), "infer", False),
+                     ("长条灰色石板床", loc("BEAR_HOME_Stone_Bed", 0.6), "orig", False),
+                     ("熊二的树叶铺（推测）", loc("BEAR_HOME_Leaf_Bed_XiongEr", 0.4), "infer", False),
                      ("橙色螺旋叠圈物", br.matrix_world @ Vector((0, 0.6, 1.4)), "orig", False),
                      ("上段树干和树冠", br.matrix_world @ Vector((0, 0, 12)), "infer", False)],
            hide_c=("Characters",), title="D1 熊大熊二树洞剖面（沿洞口方向切开）")
-    mr = O["MonkeyCave_Root"]
+    mr = O["MONKEY_CAVE_Root"]
     co, res = cam_section("Review_D2_Section_MonkeyCave", mr, None, (1, 0, 0), (0, -1.5, 2.5), 17, "1500x1000", depth=12)
     render(co, res, [("洞口（不规则，乱石门框）", mr.matrix_world @ Vector((0, -3.6, 1.3)), "orig", False),
                      ("洞室（推测）", mr.matrix_world @ Vector((0, 1.8, 2.0)), "infer", False),
                      ("洞前石板平台", mr.matrix_world @ Vector((0, -5.5, 0.5)), "orig", False),
                      ("木图腾柱", mr.matrix_world @ Vector((0, -7.4, 1.5)), "orig", False),
                      ("洞口上方石刻", mr.matrix_world @ Vector((0, -4.0, 3.3)), "orig", False),
-                     ("吉吉的石座（推测）", loc("MonkeyCave_JiJi_Stone_Seat", 0.5), "infer", False),
-                     ("毛毛的草窝（推测）", loc("MonkeyCave_MaoMao_Straw_Nest", 0.3), "infer", False)],
+                     ("吉吉的石座（推测）", loc("MONKEY_CAVE_JiJi_Stone_Seat", 0.5), "infer", False),
+                     ("毛毛的草窝（推测）", loc("MONKEY_CAVE_MaoMao_Straw_Nest", 0.3), "infer", False)],
            hide_c=("Characters",), title="D2 吉吉毛毛山洞剖面（沿洞口方向切开）")
-    sr = O["SquirrelNest_Tree_Root"]
+    sr = O["SQUIRREL_NEST_Tree_Root"]
     co, res = cam_section("Review_D3_Section_SquirrelNest", sr, None, (0, 1, 0), (1.2, 0, 4.9), 4.2, "1200x1200", depth=6)
     render(co, res, [("候选洞口 A（树枝和树干相接处）", sr.matrix_world @ Vector((0.85, 0, 4.75)), "infer", False),
                      ("粗树枝（S1 可见）", sr.matrix_world @ Vector((2.5, 0, 4.35)), "orig", False),
                      ("小洞室（推测）", sr.matrix_world @ Vector((0.1, 0, 5.2)), "infer", False),
-                     ("松果堆（第一季，其他版本）", loc("SquirrelNest_Pinecone_Pile", 0.2), "other", False),
-                     ("睡窝（推测）", loc("SquirrelNest_Leaf_Bed", 0.1), "infer", False),
-                     ("候选洞口 B（只是标记）", loc("SquirrelNest_Candidate_Entrance_B"), "infer", False)],
+                     ("松果堆（第一季，其他版本）", loc("SQUIRREL_NEST_Pinecone_Pile", 0.2), "other", False),
+                     ("睡窝（推测）", loc("SQUIRREL_NEST_Leaf_Bed", 0.1), "infer", False),
+                     ("候选洞口 B（只是标记）", loc("SQUIRREL_NEST_Candidate_Entrance_B"), "infer", False)],
            hide_c=("Characters",), title="D3 蹦蹦松鼠窝剖面（沿树枝方向切开）")
     sys.exit(0)
 

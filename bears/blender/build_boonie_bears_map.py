@@ -5068,7 +5068,7 @@ def quality_checks():
             if abs(ob.location.z - gz) > 0.3:
                 report.append(f"可能悬空/埋地: {ob.name} dz={ob.location.z - gz:.2f}")
     for ob in COLL["Props"].objects:
-        if ob.type == "MESH" and ob.parent is None and not ob.name.startswith("Prop_Beehive"):
+        if ob.type == "MESH" and ob.parent is None and not ob.name.startswith(("Prop_Beehive", "PROPS_Beehive")):
             gz = ground(ob.location.x, ob.location.y)
             if ob.location.z - gz > 0.6:
                 report.append(f"可能悬空: {ob.name} dz={ob.location.z - gz:.2f}")
@@ -5123,7 +5123,7 @@ def quality_checks():
             report.append(f"缺失贴图: {im.name}")
     # 地图范围
     for ob in bpy.data.objects:
-        if ob.parent is None and ob.type in ("MESH", "EMPTY") and not ob.name.startswith(("Terrain_", "Proto_")):
+        if ob.parent is None and ob.type in ("MESH", "EMPTY") and not ob.name.startswith(("Terrain_", "TERRAIN_", "Proto_")):
             if abs(ob.location.x) > TERRAIN[0] / 2 or abs(ob.location.y) > TERRAIN[1] / 2:
                 report.append(f"超出地图: {ob.name}")
     return report
@@ -5170,6 +5170,71 @@ def finalize_and_save():
     print("SAVED", OUT_BLEND)
 
 
+# P5 命名规范：按物体所在的区域集合加统一前缀。建模函数里还用旧名字互相引用，所以在全部建好以后、质量检查之前一次性改名。
+# 对照表写进场景属性 name_map_json；辅助脚本已经改成新名字。角色、相机、灯光、隐藏原型不改。
+NAME_RULES = [  # (区域集合, 前缀, 要去掉的旧前缀)
+    ("Bears_TreeHome", "BEAR_HOME_", ("Bears_TreeHome_",)),
+    ("GuangtouQiang_House_Exterior", "HOUSE_", ("GQ_House_", "GQ_")),
+    ("GuangtouQiang_House_Interior", "HOUSE_", ("GQ_House_", "GQ_")),
+    ("GuangtouQiang_Warehouse", "WAREHOUSE_", ("Warehouse_", "WH_")),
+    ("MonkeyCave", "MONKEY_CAVE_", ("MonkeyCave_",)),
+    ("SquirrelNest", "SQUIRREL_NEST_", ("SquirrelNest_",)),
+    ("River_and_Rocks", "LAKE_", ("Lake_",)),
+    ("Forest_Trees", "FOREST_", ("FOREST_",)),
+    ("Forest_Plants", "FOREST_", ("FOREST_",)),
+    ("Terrain", "TERRAIN_", ("Terrain_",)),
+    ("Props", "PROPS_", ("Prop_",)),
+    ("Vehicles", "PROPS_", ("Vehicle_",)),
+]
+
+
+def apply_name_prefixes():
+    parents = {}
+
+    def walk(c):
+        for ch in c.children:
+            parents[ch.name] = c.name
+            walk(ch)
+    walk(bpy.context.scene.collection)
+
+    def area(c):
+        names = [c]
+        while c in parents:
+            c = parents[c]
+            names.append(c)
+        for cn, pre, strip in NAME_RULES:  # 最内层的规则优先（熊洞在 Forest_Trees 下面）
+            if cn in names:
+                return pre, strip
+        return None
+    mapping = {}
+    for ob in list(bpy.data.objects):
+        cols = [c.name for c in ob.users_collection if c.name not in ("Inferred_Models",)]
+        hits = [a for a in (area(c) for c in cols) if a]
+        if not hits:
+            continue
+        pre, strip = hits[0]
+        if ob.name.startswith(pre):
+            continue
+        base = ob.name
+        for st in strip:
+            if base.startswith(st):
+                base = base[len(st):]
+                break
+        if ob.name.startswith("Rock_") and pre == "LAKE_":  # 全图散布的普通岩石（Rock_000…）不属于湖
+            pre = "TERRAIN_"
+        new = (pre + base)[:63]
+        old = ob.name
+        ob.name = new
+        mapping[old] = ob.name
+        if ob.data is not None and ob.data.users == 1 and ob.type == "MESH":
+            ob.data.name = ob.name  # 网格数据同名（导出 glb 时网格名就是物体名）；共用原型网格的关联复制不改
+    for i, (nm, root, box) in enumerate(DOOR_PASSAGES):
+        DOOR_PASSAGES[i] = (nm, mapping.get(root, root), box)
+    import json
+    bpy.context.scene["name_map_json"] = json.dumps(mapping, ensure_ascii=False)
+    return mapping
+
+
 def render(path, camera_name):
     sc = bpy.context.scene
     sc.camera = bpy.data.objects[camera_name]
@@ -5203,6 +5268,8 @@ def main():
     step("characters", build_characters)
     step("lights and cameras", build_lights_cameras)
     step("reference notes", write_reference_text)
+    mp = step("name prefixes", apply_name_prefixes)
+    print("  renamed:", len(mp), flush=True)
     issues = step("quality checks", quality_checks)
     print("QA issues:", len(issues), flush=True)
     for s in issues[:80]:
