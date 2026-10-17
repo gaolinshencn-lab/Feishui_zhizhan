@@ -65,7 +65,7 @@ export class UI {
   </div>
   <button class="icon-btn" id="btn-camera" aria-pressed="true" title="自动镜头：跟随剧情推移视角">${SVG.camera}<span>自动镜头</span></button>
   <button class="icon-btn" id="btn-places" aria-expanded="false" title="地名索引：古今对照，点击飞往">${SVG.pin}<span>地名</span></button>
-  <button class="icon-btn" id="btn-sound" aria-pressed="false" title="声音：琴声、战鼓与风声">${SVG.sound}<span>声音</span></button>
+  <button class="icon-btn" id="btn-sound" aria-pressed="false" title="声音：战鼓、号角、喊杀、马蹄与风声">${SVG.sound}<span>声音</span></button>
   <button class="icon-btn" id="btn-layers" aria-expanded="false" title="图层与显示">${SVG.layers}<span>图层</span></button>
   <button class="icon-btn" id="btn-full" title="全屏">${SVG.full}<span>全屏</span></button>
   <button class="icon-btn" id="btn-about" title="史料与说明">${SVG.info}<span>说明</span></button>
@@ -311,7 +311,7 @@ export class UI {
       const on = this.$('btn-sound').getAttribute('aria-pressed') !== 'true';
       const ok = await app.sound.setEnabled(on);
       this.$('btn-sound').setAttribute('aria-pressed', String(on && ok));
-      if (on && ok) app.sound.phrase(app.episodeIndex);
+      if (on && ok) app.sound.chapter();
     });
     const about = this.$('about');
     this.$('btn-about').addEventListener('click', () => (about.showModal ? about.showModal() : about.setAttribute('open', '')));

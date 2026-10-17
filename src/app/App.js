@@ -15,8 +15,9 @@ import { MarkersLayer } from '../world/Markers.js';
 import { Declutter } from '../world/Declutter.js';
 import { PropsLayer } from '../world/Props.js';
 import { EffectsLayer } from '../fx/Effects.js';
-import { TACTICAL_FX, STRATEGIC_FX, TACTICAL_PROPS, SOUNDSCAPE } from '../data/effects.js';
+import { TACTICAL_FX, STRATEGIC_FX, TACTICAL_PROPS } from '../data/effects.js';
 import { Sound } from '../audio/Sound.js';
+import { levelsAt, cuesBetween } from '../audio/score.js';
 import { shouyangHolder } from '../data/events.js';
 import { territoryTexture, FRONTIER_383, FRONTIER_385 } from '../world/Territory.js';
 import { T as TT } from '../data/episodes.js';
@@ -170,7 +171,7 @@ export class App {
       this.ui?.setEpisode(idx);
       if (this.ready && !snap && !this.scrubbing) {
         this.ui?.showCaption(idx);
-        this.sound.phrase(idx);
+        this.sound.chapter();
       }
     }
     if (snap) this.stage.snapLight();
@@ -209,7 +210,7 @@ export class App {
     if (this.T >= N - 0.01) this.setTime(0, { snap: true });
     if (this.T - this.episodeIndex < 0.02) {
       this.ui.showCaption(this.episodeIndex);
-      this.sound.phrase(this.episodeIndex);
+      this.sound.chapter();
     }
     this.playing = true;
     this.ui.setPlaying(true);
@@ -255,19 +256,6 @@ export class App {
     const el = t.layers.labels?.items.find((it) => it.p.id === id)?.el;
     if (el) setTimeout(() => this.ui.showTooltip(p, el), 1900);
     setTimeout(() => this.ui.showTooltip(null), 7000);
-  }
-
-  soundLevels() {
-    const env = (list) => {
-      let v = 0;
-      for (const [a, b, lvl] of list) {
-        if (this.T < a || this.T > b) continue;
-        const e = Math.min(1, (this.T - a) / 0.05, (b - this.T) / 0.05);
-        v = Math.max(v, lvl * e);
-      }
-      return v;
-    };
-    return { drums: this.playing ? env(SOUNDSCAPE.drums) : 0, wind: env(SOUNDSCAPE.wind) };
   }
 
   showMap(name) {
@@ -343,6 +331,7 @@ export class App {
     this.lastFrame = now;
     this.elapsed += dt;
     this.watchPerformance(rawDt);
+    const prevT = this.T;
     if (this.playing) {
       const ep = this.episode;
       const next = this.T + (dt * this.speed) / ep.duration;
@@ -384,7 +373,13 @@ export class App {
       this.declutter.run(items, st.camera, w, h, this.ui.chrome);
       this.ui.updateHud(st.camera, st.controls, t.proj);
     }
-    if (this.sound.enabled) this.sound.update(dt, this.soundLevels());
+    if (this.sound.enabled) {
+      if (this.playing) for (const cue of cuesBetween(prevT, this.T)) this.sound.cue(cue);
+      // the closer the camera, the less air between the listener and the fighting
+      let near = THREE.MathUtils.clamp(Math.log(120 / dist) / Math.log(10), 0, 1);
+      if (this.table === this.tables.strategic) near *= 0.6;
+      this.sound.update(dt, levelsAt(this.T, this.playing), near);
+    }
     st.render(this.elapsed);
     requestAnimationFrame(() => this.loop());
   }

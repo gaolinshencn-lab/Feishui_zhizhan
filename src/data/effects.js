@@ -45,19 +45,116 @@ export const TACTICAL_PROPS = {
   palisade: [T('blockade', 0.55), T('raid', 0.8)],
 };
 
-/** Sound beds: [t0, t1, level] windows for war drums and wind. */
+/**
+ * The soundscape. Each bed has windows [t0, t1, level] on the timeline (it fades in just before t0
+ * and out just after t1); cues are one-off moments [t, name]. Wind, water and fire carry on while
+ * paused, the rest sound only while the armies move.
+ */
 export const SOUNDSCAPE = {
-  drums: [
-    [T('prologue', 0.45), T('prologue', 0.72), 0.35],
-    [T('shouyang', 0.48), T('shouyang', 0.76), 0.6],
-    [T('raid', 0.32), T('raid', 0.78), 0.85],
-    [T('advance', 0.48), T('advance', 0.72), 0.45],
-    [T('battle', 0.22), T('battle', 0.96), 1.0],
-    [T('rout', 0.0), T('rout', 0.35), 0.55],
-  ],
-  wind: [
-    [T('advance', 0.6), T('standoff', 0.05), 0.45],
-    [T('rout', 0.08), T('rout', 0.92), 1.0],
-    [T('epilogue', 0.0), T('epilogue', 1.0), 0.25],
+  beds: {
+    wind: [
+      [T('prologue', 0), T('converge', 1), 0.3],
+      [T('shouyang', 0), T('advance', 0.6), 0.16],
+      [T('advance', 0.62), T('standoff', 0.06), 0.5], // 草木皆兵: wind in the grass on 八公山
+      [T('standoff', 0.06), T('battle', 1), 0.16],
+      [T('rout', 0.04), T('rout', 0.96), 1], // 风声鹤唳
+      [T('news', 0), T('news', 1), 0.4],
+      [T('epilogue', 0), T('epilogue', 1), 0.45],
+    ],
+    water: [[T('shouyang', 0), T('rout', 1), 0.35]], // the Huai, the Fei and 洛涧 on the battlefield table
+    fire: [
+      [T('shouyang', 0.58), T('shouyang', 0.86), 0.7],
+      [T('raid', 0), T('raid', 0.44), 0.18], // torches and campfires in the night
+      [T('raid', 0.46), T('raid', 1), 0.8], // 梁成's camp burning
+    ],
+    march: [
+      [T('march', 0.05), T('march', 1), 0.85],
+      [T('converge', 0), T('converge', 0.85), 0.65],
+      [T('shouyang', 0), T('shouyang', 0.5), 0.55],
+      [T('blockade', 0), T('blockade', 0.66), 0.45],
+      [T('raid', 0.04), T('raid', 0.36), 0.3], // 刘牢之's five thousand close in by night
+      [T('advance', 0), T('advance', 0.5), 0.6],
+    ],
+    hooves: [
+      [T('prologue', 0.55), T('prologue', 0.8), 0.3],
+      [T('march', 0.3), T('march', 1), 0.5], // 骑二十七万
+      [T('envoy', 0.3), T('envoy', 0.72), 0.85], // 苻坚轻骑八千
+      [T('battle', 0.4), T('battle', 0.6), 0.45], // 苻融驰骑略陈
+      [T('rout', 0), T('rout', 0.72), 0.55],
+      [T('news', 0.02), T('news', 0.22), 0.25], // the courier with the dispatch
+      [T('epilogue', 0.4), T('epilogue', 0.7), 0.2],
+    ],
+    drums: [
+      [T('prologue', 0.46), T('prologue', 0.78), 0.35],
+      [T('march', 0.05), T('march', 1), 0.3],
+      [T('converge', 0), T('converge', 0.8), 0.25],
+      [T('shouyang', 0.48), T('shouyang', 0.76), 0.65],
+      [T('raid', 0.38), T('raid', 0.78), 0.9],
+      [T('advance', 0.48), T('advance', 0.72), 0.5],
+      [T('standoff', 0.08), T('standoff', 0.95), 0.2],
+      [T('battle', 0.22), T('battle', 0.96), 1],
+      [T('rout', 0), T('rout', 0.35), 0.55],
+      [T('epilogue', 0.35), T('epilogue', 0.7), 0.2],
+    ],
+    roar: [
+      [T('prologue', 0.48), T('prologue', 0.76), 0.25],
+      [T('shouyang', 0.5), T('shouyang', 0.76), 0.7],
+      [T('raid', 0.4), T('raid', 0.78), 0.9],
+      [T('advance', 0.5), T('advance', 0.72), 0.5],
+      [T('battle', 0.26), T('battle', 0.95), 1],
+      [T('rout', 0), T('rout', 0.55), 0.45],
+    ],
+    clash: [
+      [T('shouyang', 0.55), T('shouyang', 0.74), 0.55],
+      [T('raid', 0.42), T('raid', 0.75), 0.8],
+      [T('advance', 0.52), T('advance', 0.7), 0.45],
+      [T('battle', 0.36), T('battle', 0.8), 1],
+      [T('rout', 0), T('rout', 0.3), 0.35],
+    ],
+    splash: [
+      [T('raid', 0.38), T('raid', 0.46), 0.5], // over 洛涧 to the attack
+      [T('raid', 0.7), T('raid', 0.95), 0.75], // 争赴淮水
+      [T('battle', 0.16), T('battle', 0.42), 0.8], // the eight thousand wade the Fei
+      [T('battle', 0.58), T('battle', 0.85), 0.7], // 肥水为之不流
+      [T('rout', 0), T('rout', 0.3), 0.4],
+    ],
+    oars: [
+      [T('converge', 0.1), T('converge', 0.8), 0.6],
+      [T('shouyang', 0), T('shouyang', 0.55), 0.5],
+      [T('blockade', 0.34), T('blockade', 0.66), 0.5],
+      [T('advance', 0.5), T('advance', 0.9), 0.4],
+    ],
+    stakes: [[T('blockade', 0.55), T('blockade', 0.8), 1]], // 栅淮: driving the palisade into the riverbed
+    stones: [
+      [T('converge', 0.14), T('converge', 0.5), 1], // 谢安与谢玄围棋赌墅
+      [T('news', 0.26), T('news', 0.76), 1],
+    ],
+  },
+  cues: [
+    [T('prologue', 0.47), 'horn'],
+    [T('march', 0.03), 'horns'],
+    [T('march', 0.33), 'horns'],
+    [T('converge', 0.03), 'horn'],
+    [T('shouyang', 0.47), 'horns'],
+    [T('shouyang', 0.53), 'volley'],
+    [T('shouyang', 0.72), 'surge'], // 寿阳陷
+    [T('blockade', 0.6), 'horn'],
+    [T('envoy', 0.42), 'horn'],
+    [T('raid', 0.38), 'surge'], // the night attack breaks on 梁成's camp
+    [T('raid', 0.44), 'volley'],
+    [T('advance', 0.47), 'horns'],
+    [T('standoff', 0.1), 'horn'],
+    [T('standoff', 0.32), 'horns'],
+    [T('battle', 0.05), 'gong'], // 麾兵使却: the Qin line is signalled to pull back
+    [T('battle', 0.3), 'surge'], // 朱序大呼“秦兵败矣”
+    [T('battle', 0.4), 'volley'],
+    [T('battle', 0.62), 'volley'], // 苻坚中流矢
+    [T('rout', 0.16), 'crane'],
+    [T('rout', 0.33), 'crane'],
+    [T('rout', 0.52), 'crane'],
+    [T('rout', 0.7), 'crane'],
+    [T('news', 0.74), 'snap'], // 不觉屐齿之折
+    [T('epilogue', 0.42), 'horn'],
+    [T('epilogue', 0.74), 'toll'], // 苻坚死于新平
   ],
 };
