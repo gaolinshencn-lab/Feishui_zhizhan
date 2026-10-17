@@ -130,7 +130,19 @@ export class CameraRig {
   faceNorth() {
     this.setAuto(false);
     const from = this.currentPose();
-    this.manual = { from, to: { ...from, target: from.target.clone(), yaw: 0 }, t: 0, dur: 0.8 };
+    this.manual = { from, to: { ...from, target: from.target.clone(), yaw: 0 }, t: 0, dur: 0.8, turning: true };
+  }
+
+  /**
+   * Turn the view about its centre by `deg`; positive turns the table counter-clockwise on screen.
+   * Clicks in quick succession add up rather than restarting from wherever the last turn had reached.
+   */
+  turn(deg) {
+    this.setAuto(false);
+    const from = this.currentPose();
+    const base = this.manual?.turning ? this.manual.to.yaw : from.yaw;
+    const to = { ...from, target: from.target.clone(), yaw: base + deg };
+    this.manual = { from, to, t: 0, dur: Math.abs(deg) >= 180 ? 1.1 : 0.6, turning: true };
   }
 
   /** Free camera: keep the orbit centre over the table and on the terrain surface. */

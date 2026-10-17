@@ -5,6 +5,12 @@ const SVG = {
   pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z" fill="currentColor"/></svg>',
   prev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM19 5.5v13L9.5 12z" fill="currentColor"/></svg>',
   next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM5 5.5v13L14.5 12z" fill="currentColor"/></svg>',
+  turnCcw:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.94 9.5A7 7 0 1 1 8.5 19.06" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9.11 8.02L5.94 9.5 5.64 6.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  turnCw:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.06 9.5A7 7 0 1 0 15.5 19.06" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14.89 8.02L18.06 9.5 18.36 6.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  flip:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11.4A7 7 0 0 1 18.6 9.6M19 12.6A7 7 0 0 1 5.4 14.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.8 9.4l2.9.5.6-2.9M8.2 14.6l-2.9-.5-.6 2.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   camera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.6-2.4h6.8L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13.2" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
   layers: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 5-9 5-9-5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 13.5l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
   full: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
@@ -119,7 +125,12 @@ export class UI {
 </section>
 
 <div class="hud" id="hud">
-  <button class="compass" id="compass" type="button" title="回到正北" aria-label="指北针：点击回到正北"><span class="compass__rose" id="compass-rose"><span>北</span></span></button>
+  <div class="viewctl" role="group" aria-label="视角">
+    <button class="viewctl__btn" id="turn-ccw" type="button" title="沙盘逆时针转 45°（Q）" aria-label="沙盘逆时针转 45 度">${SVG.turnCcw}</button>
+    <button class="compass" id="compass" type="button" title="回到正北" aria-label="指北针：点击回到正北"><span class="compass__rose" id="compass-rose"><span>北</span></span></button>
+    <button class="viewctl__btn" id="turn-cw" type="button" title="沙盘顺时针转 45°（E）" aria-label="沙盘顺时针转 45 度">${SVG.turnCw}</button>
+    <button class="viewctl__flip" id="flip-view" type="button" title="翻转视角 180°（R）" aria-label="翻转视角 180 度">${SVG.flip}<span>翻转</span></button>
+  </div>
   <div class="scalebar" id="scalebar"><div class="scalebar__bar" id="scalebar-bar"></div><div class="scalebar__label" id="scalebar-label"></div></div>
 </div>
 
@@ -155,7 +166,7 @@ export class UI {
     <section>
       <h3>示意与推定</h3>
       <p>史书只记大势，各部的具体营址、队形与行军道路多为据史文与地形所作的推定，例如晋军大营按“去洛涧二十五里”（一晋里约435米）定位，青冈仅知“去寿春三十里”，方位为示意。兵俑、舟船与旗帜均经放大，数量不代表实际人数。</p>
-      <p>操作：拖动平移沙盘，右键拖动（或按住 Ctrl / Shift 拖动）旋转与俯仰，滚轮向指针处缩放；触屏单指平移、双指缩放旋转；点击指北针回到正北。空格播放或暂停，左右方向键切换时间节点。</p>
+      <p>操作：拖动平移沙盘，右键拖动（或按住 Ctrl / Shift 拖动）旋转与俯仰，滚轮向指针处缩放；触屏单指平移、双指缩放旋转。指北针两旁的按钮把沙盘逆时针或顺时针转 45°，「翻转」转 180° 看向对面（快捷键 Q、E、R），点击指北针回到正北。空格播放或暂停，左右方向键切换时间节点。</p>
     </section>
   </div>
 </dialog>
@@ -206,6 +217,9 @@ export class UI {
     this.$('tl-next').addEventListener('click', () => app.stepEpisode(1));
     this.$('tl-speed').addEventListener('change', (e) => (app.speed = Number(e.target.value)));
     this.$('compass').addEventListener('click', () => app.rig.faceNorth());
+    this.$('turn-ccw').addEventListener('click', () => app.rig.turn(45));
+    this.$('turn-cw').addEventListener('click', () => app.rig.turn(-45));
+    this.$('flip-view').addEventListener('click', () => app.rig.turn(180));
     this.$('tl-nodes').addEventListener('click', (e) => {
       const b = e.target.closest('.tl-node__btn');
       if (b) app.jumpTo(Number(b.dataset.i));
@@ -325,6 +339,10 @@ export class UI {
         app.togglePlay();
       } else if (e.code === 'ArrowRight') app.stepEpisode(1);
       else if (e.code === 'ArrowLeft') app.stepEpisode(-1);
+      else if (e.ctrlKey || e.metaKey || e.altKey) return;
+      else if (e.code === 'KeyQ') app.rig.turn(45);
+      else if (e.code === 'KeyE') app.rig.turn(-45);
+      else if (e.code === 'KeyR') app.rig.turn(180);
     });
   }
 
@@ -347,7 +365,7 @@ export class UI {
   /** Screen boxes of the overlay panels; map labels give way to them instead of showing through. */
   measureChrome() {
     const boxes = [];
-    for (const el of this.root.querySelectorAll('.masthead, .toolbar, #episode, #legend, #timeline, .compass')) {
+    for (const el of this.root.querySelectorAll('.masthead, .toolbar, #episode, #legend, #timeline, .viewctl')) {
       const r = el.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) boxes.push([r.left, r.top, r.right, r.bottom]);
     }

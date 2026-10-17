@@ -853,6 +853,61 @@ button {
 .compass:hover {
   border-color: var(--gold);
 }
+.viewctl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+.viewctl .compass {
+  margin: 0 9px; /* room for the 北 mark, which circles outside the ring as the view turns */
+}
+.viewctl__btn,
+.viewctl__flip {
+  height: 34px;
+  border: 1px solid var(--gold-dim);
+  background: var(--lacquer);
+  color: var(--paper);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font: inherit;
+  cursor: pointer;
+}
+.viewctl__btn {
+  width: 34px;
+  padding: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.viewctl__flip {
+  padding: 0 12px 0 8px;
+  border-radius: 17px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+.viewctl__btn svg {
+  width: 18px;
+  height: 18px;
+}
+.viewctl__flip svg {
+  width: 17px;
+  height: 17px;
+}
+.viewctl__btn:hover,
+.viewctl__flip:hover {
+  border-color: var(--gold);
+  color: #fff;
+}
+.viewctl__btn:focus-visible,
+.viewctl__flip:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
 .compass:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
