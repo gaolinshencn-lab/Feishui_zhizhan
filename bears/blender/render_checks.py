@@ -35,8 +35,15 @@ for cam in cams:
                 p = world_to_camera_view(sc, cam, o.matrix_world.translation)
                 labels.append(dict(name=o.name, cn=o["name_cn"], x=p.x, y=p.y, status=o.get("position_status", o.get("ref_status", ""))))
         json.dump(labels, open(os.path.join(out, cam.name + ".labels.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    extra = [bpy.data.collections[n] for n in cam.get("hide_collections", "").split(",") if n in bpy.data.collections]
+    for c in extra:  # 例如螃蟹检查图隐藏湖水和岩石
+        for o in [o for o in c.all_objects if o is not None]:
+            o.hide_render = True
     sc.render.filepath = os.path.join(out, cam.name + ".png")
     bpy.ops.render.render(write_still=True)
+    for c in extra:
+        for o in [o for o in c.all_objects if o is not None]:
+            o.hide_render = False
     roof.hide_render = False
     for o in [o for o in roof.all_objects if o is not None]:
         o.hide_render = False

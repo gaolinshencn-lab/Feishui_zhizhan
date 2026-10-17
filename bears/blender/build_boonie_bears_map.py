@@ -153,7 +153,7 @@ def setup_collections():
     coll("WH_Roof_Removable", COLL["GuangtouQiang_Warehouse"])
     coll("WH_Interior", COLL["GuangtouQiang_Warehouse"])
     coll("Bears_TreeHome", COLL["Forest_Trees"])
-    for n in ("Lake_Water", "Lake_Bottom", "Lake_Rocks", "Lake_Shore"):
+    for n in ("Lake_Water", "Lake_Bottom", "Lake_Rocks", "Lake_Weeds", "Lake_Crab", "Lake_Shore"):
         coll(n, COLL["River_and_Rocks"])
     coll("LW_Surface", COLL["Lake_Water"])
     coll("LW_Volume", COLL["Lake_Water"])
@@ -279,7 +279,7 @@ def mat_birch_bark():
     return m
 
 
-def mat_vertex_color(name, attr="Col", rough=0.95, var_scale=0.6, bump=0.25):
+def mat_vertex_color(name, attr="Col", rough=0.95, var_scale=0.6, bump=0.25, caustics=False):
     """读取顶点色的地形材质，叠加细小噪声明暗变化和凹凸。"""
     if name in MATS:
         return MATS[name]
@@ -301,7 +301,24 @@ def mat_vertex_color(name, attr="Col", rough=0.95, var_scale=0.6, bump=0.25):
     mix.operation = "SCALE"
     links.new(vc.outputs["Color"], mix.inputs[0])
     links.new(mr.outputs["Result"], mix.inputs["Scale"])
-    links.new(mix.outputs["Vector"], b.inputs["Base Color"])
+    out_col = mix.outputs["Vector"]
+    if caustics:  # 湖底光斑（假焦散）：沃罗诺伊边线提亮
+        vo = nodes.new("ShaderNodeTexVoronoi")
+        vo.feature = "DISTANCE_TO_EDGE"
+        vo.inputs["Scale"].default_value = 1.3
+        links.new(tc.outputs["Object"], vo.inputs["Vector"])
+        cr = nodes.new("ShaderNodeMapRange")
+        cr.inputs["From Min"].default_value = 0.0
+        cr.inputs["From Max"].default_value = 0.08
+        cr.inputs["To Min"].default_value = 1.28
+        cr.inputs["To Max"].default_value = 1.0
+        links.new(vo.outputs["Distance"], cr.inputs["Value"])
+        sc2 = nodes.new("ShaderNodeVectorMath")
+        sc2.operation = "SCALE"
+        links.new(out_col, sc2.inputs[0])
+        links.new(cr.outputs["Result"], sc2.inputs["Scale"])
+        out_col = sc2.outputs["Vector"]
+    links.new(out_col, b.inputs["Base Color"])
     _set(b, "Roughness", rough)
     nz2 = nodes.new("ShaderNodeTexNoise")
     nz2.inputs["Scale"].default_value = 9.0
@@ -892,7 +909,7 @@ def build_lake_bottom():
             for loop, k in zip(f.loops, q):
                 c = vcol[k]
                 loop[col] = (c.x, c.y, c.z, 1.0)
-    ob = new_obj("Lake_Bottom_Terrain", bm, LB, [mat_vertex_color("Lake_Bed_Silt_VertexColor", rough=0.95, bump=0.3)], smooth_shade=True,
+    ob = new_obj("Lake_Bottom_Terrain", bm, LB, [mat_vertex_color("Lake_Bed_Silt_VertexColor", rough=0.95, bump=0.3, caustics=True)], smooth_shade=True,
                  props=dict(cn="湖底地形（浅滩、陡坎、湖心盆地）", status="inferred",
                             note="形状与深度为推测：浅滩约 1.4 m，湖心约 5 m，石崖下最深约 7.5 m；等待第 30 集截图核对"))
     ob["max_depth_m"] = round(LAKE["level"] - min(v.co.z for v in ob.data.vertices), 2)
@@ -1040,17 +1057,6 @@ def build_lake_rocks():
         md.solver = "EXACT"
         md.use_self = True
         md.object = cut
-    # 4. 小圆石
-    bm = bmesh.new()
-    for k in range(60):
-        a, b = rnd.uniform(-11, 11), rnd.uniform(-7, 8)
-        if math.hypot(a, b) < 3.2:
-            continue
-        p, zf = at(a, b)
-        s_ = rnd.uniform(0.08, 0.28)
-        bm_ico(bm, s_, loc=(p.x, p.y, zf + s_ * 0.25), scale=(1.2, 1.0, 0.6), subdiv=1, rough=0.2, seed=k)
-    new_obj("Lake_Pebbles", bm, LR, [mat_noise("Pebble_BlueGrey", "#5f8796", "#7b9fac", scale=4)], smooth_shade=True,
-            props=dict(cn="湖底小圆石", status="observed", note="L1：画面左下的蓝灰色圆石；分布为推测"))
 
 
 def build_lake_water_volume():
@@ -1092,6 +1098,262 @@ def build_lake_water_volume():
                                                                          note="L1：青绿色水体；浓度和颜色为预览值，第五步再按剧照调"))
 
 
+def _blade(bm, base, length, width, heading, bend, twist, segs=7, mi=0):
+    """一片水草叶：从 base 往上，沿 heading 方向弯曲，越往上越窄，带扭转。真实 3D 几何（不是贴图片）。"""
+    base = Vector(base)
+    hx, hy = math.cos(heading), math.sin(heading)
+    prev = None
+    for i in range(segs + 1):
+        t = i / segs
+        c = base + Vector((hx * bend * t * t * length, hy * bend * t * t * length, length * t * (1 - 0.25 * bend * t)))
+        a = heading + math.pi / 2 + twist * t
+        w = width * (1 - t) ** 0.6 + 0.004
+        d = Vector((math.cos(a), math.sin(a), 0)) * w / 2
+        pair = (bm.verts.new(c - d), bm.verts.new(c + d))
+        if prev:
+            f = bm.faces.new((prev[0], prev[1], pair[1], pair[0]))
+            f.material_index = mi
+        prev = pair
+
+
+def build_scatter_gn(name, target, vgroup, protos_coll, density, scale_rng, seed):
+    """Geometry Nodes 散布：在 target 网格上按顶点组 vgroup（可在权重绘制模式里手动修改）的密度撒点，
+    从 protos_coll 随机挑原型实例化，随机朝向和大小。"""
+    ng = bpy.data.node_groups.new(name + "_GN", "GeometryNodeTree")
+    ng.interface.new_socket("Geometry", in_out="INPUT", socket_type="NodeSocketGeometry")
+    ng.interface.new_socket("Geometry", in_out="OUTPUT", socket_type="NodeSocketGeometry")
+    N, L = ng.nodes, ng.links
+    gout = N.new("NodeGroupOutput")
+    N.new("NodeGroupInput")
+    oi = N.new("GeometryNodeObjectInfo")
+    oi.inputs["Object"].default_value = target
+    oi.transform_space = "RELATIVE"
+    na = N.new("GeometryNodeInputNamedAttribute")
+    na.data_type = "FLOAT"
+    na.inputs["Name"].default_value = vgroup
+    dp = N.new("GeometryNodeDistributePointsOnFaces")  # 随机模式：密度字段 = 顶点组权重 × density
+    dp.inputs["Seed"].default_value = seed
+    mul = N.new("ShaderNodeMath")
+    mul.operation = "MULTIPLY"
+    mul.inputs[1].default_value = density
+    L.new(na.outputs["Attribute"], mul.inputs[0])
+    L.new(mul.outputs[0], dp.inputs[4])
+    L.new(oi.outputs["Geometry"], dp.inputs["Mesh"])
+    ci = N.new("GeometryNodeCollectionInfo")
+    ci.inputs["Collection"].default_value = protos_coll
+    ci.inputs["Separate Children"].default_value = True
+    ci.inputs["Reset Children"].default_value = True
+    ip = N.new("GeometryNodeInstanceOnPoints")
+    ip.inputs["Pick Instance"].default_value = True
+    L.new(dp.outputs["Points"], ip.inputs["Points"])
+    L.new(ci.outputs["Instances"], ip.inputs["Instance"])
+    ri = N.new("FunctionNodeRandomValue")
+    ri.data_type = "INT"
+    ri.inputs[4].default_value = 0  # 整数的 Min/Max（同名的第一个插口是向量）
+    ri.inputs[5].default_value = len(protos_coll.objects) - 1
+    ri.inputs["Seed"].default_value = seed + 1
+    L.new(ri.outputs[2], ip.inputs["Instance Index"])
+    rr = N.new("FunctionNodeRandomValue")
+    rr.data_type = "FLOAT_VECTOR"
+    rr.inputs["Min"].default_value = (0, 0, 0)
+    rr.inputs["Max"].default_value = (0.12, 0.12, 6.283)
+    rr.inputs["Seed"].default_value = seed + 2
+    L.new(rr.outputs["Value"], ip.inputs["Rotation"])
+    rs = N.new("FunctionNodeRandomValue")
+    rs.data_type = "FLOAT"
+    rs.inputs[2].default_value = scale_rng[0]
+    rs.inputs[3].default_value = scale_rng[1]
+    rs.inputs["Seed"].default_value = seed + 3
+    L.new(rs.outputs[1], ip.inputs["Scale"])
+    L.new(ip.outputs["Instances"], gout.inputs["Geometry"])
+    me = bpy.data.meshes.new(name)
+    ob = bpy.data.objects.new(name, me)
+    md = ob.modifiers.new("Scatter", "NODES")
+    md.node_group = ng
+    return ob
+
+
+def build_lake_weeds_and_pebbles():
+    """湖底水草和小碎石（L1：细长、稀疏的水草，长在岩石附近和画面左侧；蓝灰色小圆石）。
+    分布用 Geometry Nodes；密度来自湖底网格上的顶点组 Weed_Density / Pebble_Density，可以在权重绘制模式里手动改。"""
+    LW = COLL["Lake_Weeds"]
+    PR = coll("Lake_Scatter_Prototypes", COLL["Reference_Notes"])
+    bottom = bpy.data.objects["Lake_Bottom_Terrain"]
+    R, f, r = lake_rock_frame()
+    # 顶点组：水草——岩石区外圈（3–9 m）、岩石区左侧，以及 1.5–3.5 m 深的浅坡带；碎石——岩石区周围
+    vw = bottom.vertex_groups.new(name="Weed_Density")
+    vp = bottom.vertex_groups.new(name="Pebble_Density")
+    for v in bottom.data.vertices:
+        p = bottom.matrix_world @ v.co
+        d = math.hypot(p.x - R.x, p.y - R.y)
+        side = (p - R).dot(r)
+        depth = LAKE["level"] - p.z
+        w = (smooth(2.8, 4.0, d) * (1 - smooth(8.0, 11.0, d))) * (0.6 + 0.4 * smooth(0.0, -6.0, side))
+        w = max(w, 0.35 * smooth(1.2, 1.8, depth) * (1 - smooth(3.0, 3.8, depth)))
+        w *= 0.55 + 0.45 * smooth(-0.2, 0.4, noise.noise(Vector((p.x * 0.18, p.y * 0.18, 1.7))))
+        if w > 0.01:
+            vw.add([v.index], min(1.0, w), "REPLACE")
+        pw = smooth(2.5, 3.5, d) * (1 - smooth(9.0, 12.0, d))
+        if pw > 0.01:
+            vp.add([v.index], pw, "REPLACE")
+    weed = mat("Plant_Waterweed_Green", "#3f9a52", rough=0.6)
+    weed_lt = mat("Plant_Waterweed_Light", "#68b85a", rough=0.6)
+    rnd = random.Random(55)
+    protos = []
+    for k, (n_bl, L0, L1, wdt, bend) in enumerate(((6, 0.7, 1.4, 0.035, 0.35), (3, 1.4, 2.1, 0.03, 0.25), (12, 0.18, 0.4, 0.03, 0.6),
+                                                     (8, 0.35, 0.7, 0.07, 0.5))):
+        bm = bmesh.new()
+        for i in range(n_bl):
+            a = rnd.uniform(0, 6.283)
+            _blade(bm, (math.cos(a) * 0.05, math.sin(a) * 0.05, -0.03), rnd.uniform(L0, L1), wdt * rnd.uniform(0.8, 1.2), a,
+                   rnd.uniform(0.2, 1.0) * bend, rnd.uniform(-1.5, 1.5), mi=i % 2)
+        ob = new_obj(f"Proto_Waterweed_{('LongCluster', 'TallStrands', 'ShortTuft', 'BroadLeaf')[k]}", bm, PR, [weed, weed_lt],
+                     smooth_shade=True, recalc=False, props=dict(cn="水草原型", status="observed", note="L1：细长水草"))
+        protos.append(ob)
+    pk = mat_noise("Pebble_BlueGrey", "#5f8796", "#7b9fac", scale=4)
+    for k in range(4):
+        bm = bmesh.new()
+        bm_ico(bm, 1.0, scale=(1.2, 1.0, 0.6), subdiv=2, rough=0.25, seed=k * 3.3)
+        PRp = coll("Lake_Pebble_Prototypes", COLL["Reference_Notes"])
+        new_obj(f"Proto_Pebble_{k}", bm, PRp, [pk], smooth_shade=True, props=dict(cn="碎石原型", status="observed", note="L1：蓝灰色圆石"))
+    PRp = COLL["Lake_Pebble_Prototypes"]
+    for C in (PR, PRp):
+        C.hide_render = True
+        C.hide_viewport = True
+    ob = build_scatter_gn("Lake_Weeds_Scatter", bottom, "Weed_Density", PR, 1.6, (0.7, 1.3), 11)
+    LW.objects.link(ob)
+    tag(ob, cn="湖底水草（Geometry Nodes 散布）", status="observed",
+        note="形状依据 L1；分布为推测，改湖底网格的顶点组 Weed_Density 即可增减")
+    ob = build_scatter_gn("Lake_Pebbles_Scatter", bottom, "Pebble_Density", PRp, 0.22, (0.08, 0.24), 21)
+    COLL["Lake_Rocks"].objects.link(ob)
+    tag(ob, cn="湖底小碎石（Geometry Nodes 散布）", status="observed", note="L1：蓝灰色小圆石；分布为推测，顶点组 Pebble_Density")
+    # 悬浮微粒：岩石区附近的水里一些很小的亮点
+    bm = bmesh.new()
+    for k in range(400):
+        p = R + r * rnd.uniform(-14, 14) + f * rnd.uniform(-12, 10)
+        zf = ground(p.x, p.y)
+        bm_ico(bm, rnd.uniform(0.008, 0.02), loc=(p.x, p.y, rnd.uniform(zf + 0.3, LAKE["level"] - 0.5)), subdiv=0)
+    new_obj("Lake_Water_Particles", bm, COLL["LW_Volume"], [mat("Water_Particle_Glint", "#dff6f2", emit="#cff4ee", emit_strength=0.6)],
+            props=dict(cn="水中悬浮微粒", status="inferred"))
+
+
+def build_lake_crab():
+    """《湖底历险记》的大螃蟹（形状依据 L1；背面、侧面为推测）。
+    卡通造型：米色宽蟹壳，正面一张大嘴和两排白牙，蟹壳下方前面两只灰色圆眼长在眼柄上，橙粉色步足每侧 4 条（向上翘、尖头），一对大蟹钳。
+    尺寸按 L1 和熊的比例估算：蟹壳宽约 1.4 m，蟹钳展开约 3.6 m。
+    骨骼 Crab_Rig：每个部件是独立物体，挂在对应的骨头上，可以单独摆动蟹钳、步足、眼睛和身体。局部 -Y 为正面。"""
+    C = COLL["Lake_Crab"]
+    R, f, r = lake_rock_frame()
+    pos = R - f * 3.0
+    gz = ground(pos.x, pos.y)
+    yaw = math.atan2(-f.x, f.y)  # 局部 +Y 朝 f，嘴（局部 -Y）朝 -f，也就是朝着 L1 的镜头
+    shell = mat_noise("Crab_Shell_Cream", "#e6cfa2", "#efdcb4", scale=4, bump=0.1)
+    under = mat("Crab_Shell_Salmon", "#e49a72", rough=0.5)
+    leg_m = mat_noise("Crab_Leg_Salmon", "#e6a183", "#efb498", scale=6, bump=0.05)
+    tip_m = mat("Crab_Leg_Tip", "#c98466", rough=0.5)
+    mouth_m = mat("Crab_Mouth_Inner", "#a8343a", rough=0.6)
+    tongue = mat("Crab_Mouth_Tongue", "#d85a62", rough=0.6)
+    teeth = mat("Crab_Teeth_White", "#f6f3ea", rough=0.3)
+    eye_m = mat("Crab_Eye_Grey", "#a9a9a6", rough=0.2, metal=0.1)
+    pupil = mat("Crab_Eye_Pupil", "#2a2a2a", rough=0.3)
+    BZ = 0.62  # 身体中心离地高度
+
+    # ---- 骨骼
+    ad = bpy.data.armatures.new("Crab_Rig")
+    arm = bpy.data.objects.new("Crab_Rig", ad)
+    C.objects.link(arm)
+    arm.location = (pos.x, pos.y, gz)
+    arm.rotation_euler = (0, 0, yaw)
+    arm.show_in_front = True
+    tag(arm, cn="大螃蟹骨骼（根）", status="observed", note="L1；动作和关节位置为推测")
+    bpy.context.view_layer.objects.active = arm
+    arm.select_set(True)
+    bpy.ops.object.mode_set(mode="EDIT")
+    E = ad.edit_bones
+
+    def bone(name, head, tail, parent=None):
+        b = E.new(name)
+        b.head, b.tail = head, tail
+        if parent:
+            b.parent = E[parent]
+        return b
+    bone("Root", (0, 0, 0), (0, 0.4, 0))
+    bone("Body", (0, 0.1, BZ), (0, -0.4, BZ), "Root")
+    for s, side in ((-1, "L"), (1, "R")):
+        bone(f"Eye_{side}", (s * 0.22, -0.4, BZ - 0.1), (s * 0.26, -0.62, BZ - 0.42), "Body")
+        bone(f"Claw_Upper_{side}", (s * 0.6, -0.25, BZ - 0.05), (s * 1.15, -0.5, BZ - 0.2), "Body")
+        bone(f"Claw_Lower_{side}", (s * 1.15, -0.5, BZ - 0.2), (s * 1.45, -0.95, BZ - 0.38), f"Claw_Upper_{side}")
+        bone(f"Claw_Hand_{side}", (s * 1.45, -0.95, BZ - 0.38), (s * 1.2, -1.55, BZ - 0.42), f"Claw_Lower_{side}")
+        bone(f"Claw_Finger_{side}", (s * 1.33, -1.25, BZ - 0.3), (s * 1.08, -1.75, BZ - 0.36), f"Claw_Hand_{side}")
+        for k in range(4):
+            y = -0.15 + k * 0.2
+            knee = (s * (0.95 + 0.1 * k), y + 0.12 * k, BZ + 0.4 - 0.04 * k)  # L1：步足沿身体两侧散开，向外上方翘起
+            tip = (s * (1.15 + 0.32 * k), y + 0.3 * k, BZ + 0.95 - 0.16 * k)
+            bone(f"Leg{k + 1}_Upper_{side}", (s * 0.62, y, BZ), knee, "Body")
+            bone(f"Leg{k + 1}_Lower_{side}", knee, tip, f"Leg{k + 1}_Upper_{side}")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    arm.select_set(False)
+
+    def part(name, cn, mats, build, bone_name, smooth_shade=True):
+        bm = bmesh.new()
+        build(bm)
+        ob = new_obj(name, bm, C, mats, smooth_shade=smooth_shade, props=dict(cn=cn, status="observed", note="L1"))
+        b = ad.bones[bone_name]
+        ob.parent = arm
+        ob.parent_type = "BONE"
+        ob.parent_bone = bone_name
+        ob.matrix_parent_inverse = (b.matrix_local @ Matrix.Translation((0, b.length, 0))).inverted()
+        return ob
+
+    def body(bm):
+        bm_sphere(bm, (0.72, 0.52, 0.24), loc=(0, 0.02, BZ + 0.04), seg=32, rings=16, mi=0,
+                  deform=lambda co: Vector((co.x, co.y, co.z * (1.0 if co.z > 0 else 0.6))))
+        bm_sphere(bm, (0.66, 0.46, 0.16), loc=(0, 0.04, BZ - 0.1), seg=28, rings=12, mi=1)
+        for s in (-1, 1):  # 蟹壳两侧的尖角
+            bm_cyl(bm, 0.07, 0.0, 0.22, loc=(s * 0.78, -0.12, BZ + 0.05), rot=(0, s * math.pi / 2, 0), seg=8, mi=0)
+        # 大嘴：深红口腔、舌头、上下两排白牙、嘴唇
+        bm_sphere(bm, (0.36, 0.1, 0.12), loc=(0, -0.47, BZ + 0.0), seg=24, rings=10, mi=2)
+        bm_sphere(bm, (0.2, 0.06, 0.05), loc=(0, -0.5, BZ - 0.06), seg=16, rings=8, mi=3)
+        for row, z in ((1, 0.065), (-1, -0.07)):
+            for i in range(9):
+                x = -0.3 + i * 0.075
+                bm_cube(bm, (0.062, 0.04, 0.05), loc=(x, -0.535 - 0.01 * (1 - abs(x) / 0.35), BZ + z), mi=4)
+        bm_torus(bm, 0.36, 0.035, loc=(0, -0.5, BZ), rot=(math.pi / 2, 0, 0), seg=28, rseg=6, mi=0, scale=(1.0, 0.36, 1.0))
+    part("Crab_Body_Shell_Mouth", "蟹壳、下壳和大嘴", [shell, under, mouth_m, tongue, teeth], body, "Body")
+    for s, side in ((-1, "L"), (1, "R")):
+        def eye(bm, s=s):
+            bm_tube(bm, [(s * 0.22, -0.4, BZ - 0.1), (s * 0.24, -0.52, BZ - 0.26), (s * 0.26, -0.6, BZ - 0.36)], [0.035, 0.03, 0.03], seg=8, mi=0)
+            bm_sphere(bm, (0.15, 0.15, 0.15), loc=(s * 0.27, -0.64, BZ - 0.46), seg=20, rings=12, mi=1)
+            bm_sphere(bm, (0.05, 0.02, 0.05), loc=(s * 0.27, -0.785, BZ - 0.47), seg=10, rings=6, mi=2)
+        part(f"Crab_Eye_{side}", "眼柄和灰色圆眼", [under, eye_m, pupil], eye, f"Eye_{side}")
+
+        def seg(bm, a, b, r0, r1, s=s, mi=0):
+            bm_tube(bm, [a, b], [r0, r1], seg=10, mi=mi)
+            bm_sphere(bm, (r0 * 1.1, r0 * 1.1, r0 * 1.1), loc=a, seg=10, rings=6, mi=mi)
+        part(f"Crab_Claw_Upper_{side}", "蟹钳上段", [leg_m],
+             lambda bm, s=s: seg(bm, (s * 0.6, -0.25, BZ - 0.05), (s * 1.15, -0.5, BZ - 0.2), 0.1, 0.12), f"Claw_Upper_{side}")
+        part(f"Crab_Claw_Lower_{side}", "蟹钳中段", [leg_m],
+             lambda bm, s=s: seg(bm, (s * 1.15, -0.5, BZ - 0.2), (s * 1.45, -0.95, BZ - 0.38), 0.12, 0.15), f"Claw_Lower_{side}")
+
+        def hand(bm, s=s):
+            bm_sphere(bm, (0.2, 0.36, 0.17), loc=(s * 1.36, -1.18, BZ - 0.4), rot=(0, 0, s * -0.4), seg=20, rings=12, mi=0)
+            bm_tube(bm, [(s * 1.25, -1.45, BZ - 0.45), (s * 1.12, -1.68, BZ - 0.46), (s * 1.0, -1.78, BZ - 0.44)], [0.08, 0.05, 0.015], seg=10, mi=0)
+            bm_sphere(bm, (0.03, 0.03, 0.03), loc=(s * 1.0, -1.78, BZ - 0.44), seg=8, rings=4, mi=1)
+        part(f"Crab_Claw_Hand_{side}", "蟹钳（固定指）", [leg_m, tip_m], hand, f"Claw_Hand_{side}")
+        part(f"Crab_Claw_Finger_{side}", "蟹钳（活动指）", [leg_m, tip_m],
+             lambda bm, s=s: (bm_tube(bm, [(s * 1.33, -1.25, BZ - 0.3), (s * 1.22, -1.5, BZ - 0.28), (s * 1.08, -1.72, BZ - 0.33)], [0.07, 0.045, 0.012], seg=10, mi=0),
+                              bm_sphere(bm, (0.03, 0.03, 0.03), loc=(s * 1.08, -1.72, BZ - 0.33), seg=8, rings=4, mi=1)), f"Claw_Finger_{side}")
+        for k in range(4):
+            y = -0.15 + k * 0.2
+            knee = (s * (0.95 + 0.1 * k), y + 0.12 * k, BZ + 0.4 - 0.04 * k)  # L1：步足沿身体两侧散开，向外上方翘起
+            tip = (s * (1.15 + 0.32 * k), y + 0.3 * k, BZ + 0.95 - 0.16 * k)
+            part(f"Crab_Leg{k + 1}_Upper_{side}", f"第 {k + 1} 对步足上段", [leg_m],
+                 lambda bm, s=s, y=y, knee=knee: seg(bm, (s * 0.62, y, BZ), knee, 0.06, 0.05), f"Leg{k + 1}_Upper_{side}")
+            part(f"Crab_Leg{k + 1}_Lower_{side}", f"第 {k + 1} 对步足下段（尖头）", [leg_m, tip_m],
+                 lambda bm, knee=knee, tip=tip: (bm_tube(bm, [knee, Vector(knee).lerp(Vector(tip), 0.7), tip], [0.05, 0.035, 0.004], seg=10, mi=0),
+                                                 bm_sphere(bm, (0.055, 0.055, 0.055), loc=knee, seg=10, rings=6, mi=1)), f"Leg{k + 1}_Lower_{side}")
+
+
 def build_lake_and_rocks():
     C = COLL["River_and_Rocks"]
     # 湖面
@@ -1105,11 +1367,13 @@ def build_lake_and_rocks():
         ring.append(bm.verts.new((x, y, LAKE["level"])))
     for k in range(seg):
         bm.faces.new((center, ring[k], ring[(k + 1) % seg]))
-    new_obj("Lake_Water_Surface", bm, COLL["LW_Surface"], [mat_water("Water_Lake", "#4f8fc0", "#2d6a96")], recalc=False,
-            props=dict(cn="湖面", status="observed", note="U1：大湖；湖的完整轮廓为推测"))
+    new_obj("Lake_Water_Surface", bm, COLL["LW_Surface"], [mat_water("Water_Lake", "#3dbdb6", "#1f8f94")], recalc=False,
+            props=dict(cn="湖面", status="observed", note="U1：大湖；第 30 集小帧、第 41 集 056s/072s：湖水是青绿色；湖的完整轮廓为推测"))
     build_lake_bottom()
     build_lake_rocks()
     build_lake_water_volume()
+    build_lake_weeds_and_pebbles()
+    build_lake_crab()
 
     # 石崖：成排的深灰色多棱柱状岩体，前面陡直、顶部参差（U1）
     bm = bmesh.new()
@@ -3797,6 +4061,9 @@ def build_check_cameras():
                                        ("LuoBoTou_Root", "LuoBoTou", 0.7, 0.5, 0.33), ("BengBeng_Root", "BengBeng", 0.66, 0.6, 0.6)):
         views(root_name, label, h, w, c)
     views("Vehicle_Pickup_Root", "Pickup", 2.4, 5.6, 3.2, kinds=("Front", "Side", "Back", "Top"), res="1000x700")
+    views("Crab_Rig", "Crab", 1.7, 3.8, 2.2, kinds=("Front", "Side", "Back", "Top"), res="1000x700")
+    for k in ("Front", "Side", "Back", "Top"):
+        bpy.data.objects[f"Check_Crab_{k}"]["hide_collections"] = "Lake_Water,Lake_Rocks,Lake_Weeds"
     # 皮卡正面 = 局部 +Y：把 Front/Back 对调
     for a, b in (("Check_Pickup_Front", "Check_Pickup_Back_tmp"), ("Check_Pickup_Back", "Check_Pickup_Front"), ("Check_Pickup_Back_tmp", "Check_Pickup_Back")):
         bpy.data.objects[a].name = b
@@ -3857,6 +4124,13 @@ def build_lake_cameras():
         hide="Characters")
     cam("Lake_06_Rock_Group_NoWater", "岩石区全貌（隐藏水体）", R - f * 13 - r * 7 + up * (zf + 7.5), R + f * 2 + up * (zf + 1.5), lens=26, hide=hide_wf)
     cam("Lake_07_Rock_Tower_Closeup", "岩石塔近景（隐藏水体）", R - f * 5.0 + r * 1.8 + up * (zf + 2.2), R + up * (zf + 2.6), lens=30, hide=hide_wf)
+    cam("Lake_08_Underwater_Wide", "湖底整体广角（水下）", R - f * 15.0 - r * 2.0 + up * (lv - 3.0), R + f * 2.0 + up * (zf + 1.0), lens=18, hide="Characters")
+    cam("Lake_09_Underwater_Look_Up", "水下仰视水面", R - f * 5.5 + r * 3.0 + up * (zf + 1.0), R - f * 2.0 + r * 1.0 + up * (lv + 0.5), lens=16, hide="Characters")
+    cam("Lake_10_Waterweed_Closeup", "水草近景（隐藏水体）", R - f * 2.0 - r * 3.2 + up * (zf + 0.9), R - f * 1.0 - r * 7.0 + up * (zf + 0.4), lens=24, hide=hide_wf)
+    ex, ey = lake_point(math.radians(-50), 1.12)
+    cam("Lake_12_Shore_Front", "湖岸正面：从沙滩入水点看湖面、石崖和瀑布", (ex, ey, ground(ex, ey) + 1.7), (cx - 4, cy + 6, lv + 3.0), lens=24, hide="Characters")
+    co = cam("Lake_11_Cutaway_With_Water", "整体剖视：湖面、水下、岸边（相机裁剪面切在剖面上）",
+             (cx - nx_ * D, cy - ny_ * D, lv - 1.5), (cx, cy, lv - 1.5), ortho=56, hide="Forest_Trees,Forest_Plants,Characters", res="1600x800", clip=D)
 
 
 def build_acceptance_cameras():
