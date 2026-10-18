@@ -38,6 +38,7 @@
 | `evidence/REFERENCE_INDEX.csv`、`evidence/REFERENCE_GAPS.md` | 参考图总索引（编号、集数、来源、看到的细节、证据等级 A/B/C/D）；读取失败、版本冲突、缺少的画面 |
 | `evidence/STILL_MATCH_REVIEW.md` | 剧照对位审核：每张剧照的已确认 / 推测 / 本轮修改 / 下一轮；角色比例测试结果 |
 | `render_still_match.py`、`still_match/` | 剧照对位相机（`Still_Match_Cameras`）和模型渲染。和剧照并排的对比图含版权画面，不放进仓库 |
+| `render_match.py`、`evidence/B1_M1_REBUILD.md` | 熊洞内部（B1）和猴洞正面（M1）按剧照重做：同机位灰模 / 材质渲染（`still_match/*_clay.jpg`）；逐项写了匹配了什么、还差什么、哪里缺证据。QA 0 不等于视觉验收 |
 | `render_scale_tests.py`、`scale_tests/` | 角色比例测试：门口、床、洞口、树枝；`scale_tests.json` 是量出来的开口净高净宽 |
 | `evidence/P3_LAKE_FOREST.md`、`lake_checks/` | 湖、瀑布、森林：已确认 / 推测 / 本轮修改；审核图（`Lake_13`–`16`、`Forest_01`–`03` 为本轮新增） |
 | `map_diagrams.py`、`maps/`、`evidence/MAPS.md` | Evidence Map（只画剧照证明的关系）和 Playable Map（模型实际布局，推测都标出） |

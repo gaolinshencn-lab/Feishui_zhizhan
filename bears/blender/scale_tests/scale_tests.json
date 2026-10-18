@@ -3,11 +3,11 @@
  "scenes": [
   {
    "scene": "ST01_TreeHome_Door_Bears",
-   "anchor": "Bears_TreeHome_Root",
+   "anchor": "BEAR_HOME_Root",
    "actors": [
     {
      "actor": "XiongDa_Root",
-     "foot_z": 1.493,
+     "foot_z": 1.504,
      "height": 2.09,
      "width": 1.692,
      "length_lying": null
@@ -22,9 +22,9 @@
    ],
    "opening": "熊洞洞口",
    "clearance": {
-    "floor_local_z": -0.012,
-    "clear_height": 2.567,
-    "clear_width_at_mid": 3.808
+    "floor_local_z": -0.015,
+    "clear_height": 2.582,
+    "clear_width_at_mid": 2.186
    },
    "upright_fit": {
     "XiongDa_Root": true,
@@ -33,14 +33,14 @@
   },
   {
    "scene": "ST02_TreeHome_Bed_XiongDa",
-   "anchor": "Bears_TreeHome_Root",
+   "anchor": "BEAR_HOME_Root",
    "actors": [
     {
      "actor": "XiongDa_Root",
-     "foot_z": 1.914,
+     "foot_z": 2.533,
      "height": 1.23,
      "width": null,
-     "length_lying": 2.29
+     "length_lying": 2.256
     }
    ]
   },
@@ -88,25 +88,25 @@
   },
   {
    "scene": "ST05_MonkeyCave_Door_JiJi_MaoMao",
-   "anchor": "MonkeyCave_Root",
+   "anchor": "MONKEY_CAVE_Root",
    "actors": [
     {
      "actor": "Proxy_JiJi",
-     "foot_z": 4.406,
+     "foot_z": 4.294,
      "height": 1.3,
      "width": 0.642,
      "length_lying": null
     },
     {
      "actor": "Proxy_MaoMao",
-     "foot_z": 4.435,
+     "foot_z": 4.294,
      "height": 0.7,
      "width": 0.346,
      "length_lying": null
     },
     {
      "actor": "XiongDa_Root",
-     "foot_z": 4.468,
+     "foot_z": 3.214,
      "height": 2.09,
      "width": 1.915,
      "length_lying": null
@@ -114,9 +114,9 @@
    ],
    "opening": "猴洞洞口",
    "clearance": {
-    "floor_local_z": -0.073,
-    "clear_height": 2.626,
-    "clear_width_at_mid": 2.069
+    "floor_local_z": 0.131,
+    "clear_height": 3.13,
+    "clear_width_at_mid": 3.001
    },
    "upright_fit": {
     "Proxy_JiJi": true,
@@ -126,7 +126,7 @@
   },
   {
    "scene": "ST06_MonkeyCave_Chamber",
-   "anchor": "MonkeyCave_Root",
+   "anchor": "MONKEY_CAVE_Root",
    "actors": [
     {
      "actor": "Proxy_JiJi",

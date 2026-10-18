@@ -765,10 +765,11 @@ HOUSE = dict(x=34.0, y=-28.0, rot=0.0)  # 正面朝北（+Y）
 YARD = (36.0, -20.0, 14.0)
 LOGYARD = (60.0, -25.0, 6.0)  # 院子栅栏外东侧
 BEARHOME = dict(x=20.0, y=18.0, rot=math.radians(-140))  # 树洞门朝西南（空地方向）
+B1_CAM = dict(loc=(-0.6, -2.6, 1.6), tgt=(0.4, 3.0, 1.75), lens=24)  # 熊洞室内 B1 的对位相机（树洞局部坐标）。高度和焦距按“石板床约 2.9 m、顶面比机位低约 0.7 m、床在窗洞下方”反推
 HONEYTREE = (29.0, 28.0)
 MONKEYCAVE = dict(x=-14.0, y=44.0, rot=0.38)  # 推测：北面山坡；洞口朝东南的空地方向
+M1_CAM = dict(loc=(1.4, -14.4, 0.6), tgt=(0.2, -4.0, 1.8), lens=26)  # 猴洞 M1 的对位相机（局部坐标；z 相对洞内地面 fz）
 SQUIRRELTREE = dict(x=4.0, y=28.0, rot=0.3)   # 推测
-
 PATHS = [
     dict(name="Path_House_Meadow", w=2.0, pts=[(34.0, -20.4), (39.6, -18.4), (41.8, -15.0), (38, -10.5), (26, -8.5), (16, -7.0), (6, -6)]),
     dict(name="Path_Meadow_BearsHome", w=1.8, pts=[(6, -6), (9, 3), (14, 10), (17.5, 14.5)]),
@@ -912,6 +913,11 @@ def ground(x, y):
     # 道路略微下凹
     pd = path_dist(x, y)
     h -= (1 - smooth(-0.5, 1.0, pd)) * 0.06
+    # 猴洞洞前往下低一些（M1：镜头从低处往上看一级级石板平台；下沉多少是推测）
+    cx_, cy_ = MONKEYCAVE["x"] + math.sin(MONKEYCAVE["rot"]) * 9.0, MONKEYCAVE["y"] - math.cos(MONKEYCAVE["rot"]) * 9.0  # 局部 (0, -9)
+    dd_ = math.hypot(x - cx_, y - cy_)
+    if dd_ < 9.0:
+        h -= 1.4 * (1 - smooth(4.0, 9.0, dd_))
     # 湖岸石崖后面的高地
     e = lake_e(x, y)
     a = lake_angle(x, y)
@@ -3870,54 +3876,111 @@ def build_bears_home():
     bark = mat_noise("Bark_Big_Tree", "#5a3c28", "#77543a", scale=3, bump=0.5, stretch=(1.0, 1.0, 0.3))
     inner = mat_noise("Wood_TreeHome_Inner_Flutes", "#c98a3e", "#a8642c", scale=2.2, bump=0.4, stretch=(1.0, 1.0, 0.35))
     moss = mat_noise("Moss_TreeHome", "#5e8f34", "#7aa844", scale=6)
-    # ---- 空心树干：外壁（底部外扩、竖向沟槽）+ 内壁（扭曲的树根状肋条，顶部收成穹顶）
-    nT = 72
-    zo = [-0.6 + i * 0.3 for i in range(23)]           # 外壁 -0.6 … 6.0
-    zi = [0.0 + i * 0.25 for i in range(19)]            # 内壁 0 … 4.5，之后接穹顶
+    # ---- B1 对位：熊洞室内按 B1（1248×720）逐项描出来。B1_CAM 是对位相机（局部坐标），
+    # 剧照上的像素点沿相机射线投回三维（给定深度、落到地面或落到内壁上），这样从这个机位看轮廓和 B1 一致，同时是真实的三维物体。
+    cam_loc, cam_tgt = Vector(B1_CAM["loc"]), Vector(B1_CAM["tgt"])
+    cf = (cam_tgt - cam_loc).normalized()
+    cr = cf.cross(Vector((0, 0, 1))).normalized()
+    cu = cr.cross(cf)
+    tan_h = 18.0 / B1_CAM["lens"]  # 传感器宽 36 mm
+    IW, IH = 1248, 720
+
+    def ray(u, v):
+        return cf + cr * ((u - IW / 2) / (IW / 2) * tan_h) + cu * ((IH / 2 - v) / (IH / 2) * tan_h * IH / IW)
+
+    def P(u, v, d):  # 像素 (u, v)，沿视线深度 d
+        return cam_loc + ray(u, v) * d
+
+    def on_z(u, v, z):  # 像素落到高度 z 的水平面上
+        r = ray(u, v)
+        return cam_loc + r * ((z - cam_loc.z) / r.z)
+
+    def on_y(u, v, yy):  # 像素落到 y = yy 的竖直面上（后壁）
+        r = ray(u, v)
+        return cam_loc + r * ((yy - cam_loc.y) / r.y)
+
+    def on_wall(u, v, R):  # 像素落到半径 R 的圆柱内壁上
+        r = ray(u, v)
+        a = r.x * r.x + r.y * r.y
+        b = 2 * (cam_loc.x * r.x + cam_loc.y * r.y)
+        c = cam_loc.x ** 2 + cam_loc.y ** 2 - R * R
+        t = (-b + math.sqrt(b * b - 4 * a * c)) / (2 * a)
+        return cam_loc + r * t
+    RIN = 3.4
+    # ---- 空心树干：外壁（底部外扩、竖向深沟，参考新浪夜景外观图 X1）+ 内壁（深棕色，带竖向沟槽），顶部收成穹顶
+    nT = 80
+    zo = [-0.6 + i * 0.3 for i in range(25)]           # 外壁 -0.6 … 6.6
+    zi = [0.0 + i * 0.25 for i in range(21)]            # 内壁 0 … 5.0，之后接穹顶
 
     def r_out(a, z):
-        return (3.5 + 1.3 * math.exp(-(z + 0.6) / 0.9)) * (1 + 0.06 * math.sin(7 * a + 0.35 * z) + 0.03 * math.sin(13 * a))
+        return (4.25 + 1.4 * math.exp(-(z + 0.6) / 0.9)) * (1 + 0.07 * math.sin(9 * a + 0.3 * z) + 0.03 * math.sin(17 * a))
 
     def r_in(a, z):
-        rib = 0.22 * max(0.0, math.sin(9 * a + 0.55 * z)) ** 3
-        return 2.85 - rib - 0.05 * math.sin(5 * a)
+        groove = 0.12 * max(0.0, math.sin(11 * a + 0.4 * z)) ** 4
+        return RIN + groove - 0.06 * math.sin(5 * a)
     bm = bmesh.new()
     ring_o = [[bm.verts.new((r_out(2 * math.pi * k / nT, z) * math.cos(2 * math.pi * k / nT), r_out(2 * math.pi * k / nT, z) * math.sin(2 * math.pi * k / nT), z))
                for k in range(nT)] for z in zo]
-    dome = [4.5 + 0.2 * i for i in range(1, 8)]
+    dome = [5.0 + 0.22 * i for i in range(1, 8)]
     rows_i = []
     for z in zi + dome:
-        s = 1.0 if z <= 4.5 else math.sqrt(max(0.02, 1 - ((z - 4.5) / 1.5) ** 2))
+        s = 1.0 if z <= 5.0 else math.sqrt(max(0.02, 1 - ((z - 5.0) / 1.65) ** 2))
         rows_i.append([bm.verts.new((r_in(2 * math.pi * k / nT, z) * s * math.cos(2 * math.pi * k / nT),
                                      r_in(2 * math.pi * k / nT, z) * s * math.sin(2 * math.pi * k / nT), z)) for k in range(nT)])
-    pole = bm.verts.new((0, 0, 6.05))
+    pole = bm.verts.new((0, 0, 6.7))
 
     def band(r0, r1, flip=False):
         for k in range(nT):
             q = (r0[k], r0[(k + 1) % nT], r1[(k + 1) % nT], r1[k])
-            f = bm.faces.new(q[::-1] if flip else q)
+            bm.faces.new(q[::-1] if flip else q)
     for i in range(len(ring_o) - 1):
         band(ring_o[i], ring_o[i + 1])
     for i in range(len(rows_i) - 1):
         band(rows_i[i], rows_i[i + 1], flip=True)
     for k in range(nT):
         bm.faces.new((rows_i[-1][(k + 1) % nT], rows_i[-1][k], pole))
-    bm.faces.new(ring_o[-1])                      # 外壁顶盖（上面接实心的上段树干）
-    band(ring_o[0], rows_i[0], flip=True)         # 底部环面
+    bm.faces.new(ring_o[-1])
+    band(ring_o[0], rows_i[0], flip=True)
+    wall_dark = mat_noise("Wood_TreeHome_Inner_Dark", "#3e2516", "#5a3820", scale=2.0, bump=0.6, stretch=(1.0, 1.0, 0.3))
     hollow = new_obj("Bears_TreeHome_Hollow_Trunk", bm, C, [bark], smooth_shade=True, parent=root,
-                     props=dict(cn="空心树干（外壁、树根状内壁、穹顶）", status="observed",
-                                note="B1：内壁是一条条扭曲的树根状木头；外壁形状为推测"))
-    hollow.data.materials.append(inner)
-    for p in hollow.data.polygons:  # 内壁用橙黄色木头材质
+                     props=dict(cn="空心树干（外壁、深棕色内壁、穹顶）", status="observed",
+                                note="B1：室内四周是深棕色木壁，上面是穹顶；外壁形状参考 X1（新浪夜景图，季集未核实）"))
+    hollow.data.materials.append(wall_dark)
+    for p in hollow.data.polygons:
         c = p.center
-        if math.hypot(c.x, c.y) < 3.0 and c.z > -0.05:
+        if math.hypot(c.x, c.y) < RIN + 0.3 and c.z > -0.05:
             p.material_index = 1
-    add_cutters(hollow, C, [("Front_Entrance", (1.2, 2.2, 1.55), (0, -3.3, 1.05), 0.0),
-                            ("Back_Round_Opening", (1.35, 1.8, 1.05), (0.3, 3.3, 2.05), 0.15)], "Bears_TreeHome")
-    DOOR_PASSAGES.append(("熊洞洞口", "Bears_TreeHome_Root", (-0.7, 0.7, -4.6, -1.6, 0.15, 1.9)))
+    add_cutters(hollow, C, [("Front_Entrance", (1.2, 2.2, 1.55), (0, -3.95, 1.05), 0.0)], "Bears_TreeHome")
+    # 后壁窗洞：按 B1 描的不规则轮廓（像素），投到后壁平面上，挤成穿透树壁的棱柱切割体
+    WIN = [(600, 240), (612, 190), (650, 160), (700, 150), (760, 152), (820, 160), (860, 195), (868, 250), (860, 300), (830, 335),
+           (760, 345), (690, 342), (640, 330), (605, 295)]
+    YB = 3.15
+    wpts = [on_y(u, v, YB) for u, v in WIN]
+    wc = sum(wpts, Vector()) / len(wpts)
+    bm = bmesh.new()
+    front = [bm.verts.new((p.x, YB - 0.4, p.z)) for p in wpts]
+    back = [bm.verts.new((wc.x + (p.x - wc.x) * 1.25, 6.5, wc.z + (p.z - wc.z) * 1.25)) for p in wpts]  # 往外略张开
+    bm.faces.new(front)
+    bm.faces.new(back[::-1])
+    n = len(front)
+    for k in range(n):
+        bm.faces.new((front[k], back[k], back[(k + 1) % n], front[(k + 1) % n]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    cut = new_obj("Bears_TreeHome_Cutter_Back_Window_B1", bm, C, [], parent=hollow, props=dict(cn="后壁窗洞切割体（按 B1 轮廓，渲染隐藏）", status="observed"))
+    cut.hide_render = True
+    cut.display_type = "WIRE"
+    cut["helper"] = True
+    md = hollow.modifiers.new("Cut_Back_Window_B1", "BOOLEAN")
+    md.operation, md.solver, md.object = "DIFFERENCE", "EXACT", cut
+    md.use_self = True
+    # 左墙下方的小亮洞（B1 画面最左边能看到一块亮的室外）
+    pl = on_wall(10, 415, RIN)
+    add_cutters(hollow, C, [("Left_Small_Opening_B1", (0.9, 0.5, 0.45), (pl.x, pl.y, pl.z), math.atan2(pl.y, pl.x))], "Bears_TreeHome")
+    DOOR_PASSAGES.append(("熊洞洞口", "Bears_TreeHome_Root", (-0.7, 0.7, -5.3, -2.3, 0.15, 1.9)))
+    root["b1_window_center"] = list(wc)
     # ---- 上段树干、树枝、树冠、外面的大树根
     bm = bmesh.new()
-    bm_tube(bm, [(0, 0, 5.6), (0.2, 0.1, 8), (0.1, -0.1, 10.5), (0.3, 0, 12.5)], [3.0, 2.2, 1.7, 1.2], seg=16)
+    bm_tube(bm, [(0, 0, 6.2), (0.2, 0.1, 8.5), (0.1, -0.1, 11.0), (0.3, 0, 13.0)], [4.2, 3.0, 2.2, 1.5], seg=20)
     for k in range(5):
         a = 2 * math.pi * k / 5 + 0.5
         bm_tube(bm, [(0.2, 0, 11.0), (math.cos(a) * 2.8, math.sin(a) * 2.8, 13.2), (math.cos(a) * 5.0, math.sin(a) * 5.0, 14.2)], [0.7, 0.45, 0.18], seg=8)
@@ -3925,8 +3988,8 @@ def build_bears_home():
         a = 2 * math.pi * k / 9 + 0.15
         if abs(math.atan2(math.sin(a + math.pi / 2), math.cos(a + math.pi / 2))) < 0.6:
             continue  # 洞口前不放树根
-        bm_tube(bm, [(math.cos(a) * 3.4, math.sin(a) * 3.4, 1.6), (math.cos(a) * 4.6, math.sin(a) * 4.6, 0.4), (math.cos(a) * 6.0, math.sin(a) * 6.0, -0.3)],
-                [0.9, 0.6, 0.22], seg=10)
+        bm_tube(bm, [(math.cos(a) * 4.2, math.sin(a) * 4.2, 1.6), (math.cos(a) * 5.4, math.sin(a) * 5.4, 0.4), (math.cos(a) * 6.8, math.sin(a) * 6.8, -0.3)],
+                [0.95, 0.65, 0.24], seg=10)
     new_obj("Bears_TreeHome_Upper_Trunk_Roots", bm, C, [bark], smooth_shade=True, parent=root,
             props=dict(cn="上段树干、树枝和外面的粗树根", status="inferred"))
     bm = bmesh.new()
@@ -3952,96 +4015,175 @@ def build_bears_home():
             ob["floor_z_world"] = gz
             ob["overlap_check"] = overlap
         return ob
+    gold = mat_noise("Wood_Root_Golden", "#b47a2c", "#dca552", scale=2.5, bump=0.5, stretch=(1.0, 1.0, 0.3))
+    dark_root = mat_noise("Wood_Root_Dark", "#2f1c10", "#4c2e1a", scale=2.5, bump=0.5, stretch=(1.0, 1.0, 0.3))
+    rim_wood = mat_noise("Wood_Window_Rim", "#5a3a22", "#7e5430", scale=3, bump=0.6, stretch=(1.0, 1.0, 0.4))
 
     def floor_disk(bm):
-        bm_cyl(bm, 2.95, 2.95, 0.05, loc=(0, 0, -0.025), seg=48, mi=0)
-        for k in range(10):
+        bm_cyl(bm, RIN + 0.1, RIN + 0.1, 0.05, loc=(0, 0, -0.025), seg=56, mi=0)
+        for k in range(14):
             a = rnd.uniform(0, 6.283)
-            bm_ico(bm, rnd.uniform(0.1, 0.25), loc=(math.cos(a) * rnd.uniform(0.5, 2.4), math.sin(a) * rnd.uniform(0.5, 2.4), 0.0), scale=(1.4, 1.0, 0.35), subdiv=1, mi=1)
-    obj("Bears_TreeHome_Floor", "树洞地面（泥土、小石子）", [mat_noise("Soil_TreeHome", "#6a4e34", "#7d5c3e", scale=5), MATS["Pebble_BlueGrey"]],
+            bm_ico(bm, rnd.uniform(0.1, 0.25), loc=(math.cos(a) * rnd.uniform(0.5, 3.0), math.sin(a) * rnd.uniform(0.5, 3.0), 0.0), scale=(1.4, 1.0, 0.35), subdiv=1, mi=1)
+    obj("Bears_TreeHome_Floor", "树洞地面（深色泥土、小石子）", [mat_noise("Soil_TreeHome", "#3e2a1a", "#55391f", scale=5), MATS["Pebble_BlueGrey"]],
         floor_disk, status="inferred")
 
-    def ribs(bm):  # 从穹顶顺着内壁扭下来、铺到地上的树根
-        for k in range(10):
-            a0 = 2 * math.pi * k / 10 + 0.2
-            if abs(math.atan2(math.sin(a0 + math.pi / 2), math.cos(a0 + math.pi / 2))) < 0.5:
-                continue
-            if abs(math.atan2(math.sin(a0 + 0.3 - 1.48), math.cos(a0 + 0.3 - 1.48))) < 0.75:  # B1：后壁圆洞周围不挡
-                continue
-            pts = []
-            for i in range(9):
-                t = i / 8
-                a = a0 + 0.6 * t
-                rr = 2.6 - 0.15 * math.sin(t * 3) if t < 0.8 else 2.6 - (t - 0.8) * 4.0
-                pts.append((math.cos(a) * rr, math.sin(a) * rr, 4.6 * (1 - t) + 0.05))
-            bm_tube(bm, pts, [0.38 - 0.14 * (i / 8) for i in range(9)], seg=12, mi=0)
-    obj("Bears_TreeHome_Inner_Root_Ribs", "内壁上扭曲下垂的树根", [inner], ribs, note="B1：室内一条条扭曲的树根")
+    def tube_px(bm, pts, mi=0, seg=12):
+        """pts: [(u, v, 深度或 None, 半径, 方式)]；方式 'd' 沿视线深度，'z' 落到高度，'w' 落到内壁（参数是离壁距离）。"""
+        cs, rs = [], []
+        for (u, v, val, rpx, how) in pts:  # 半径按 B1 里量到的像素给，再按深度换成米：从对位机位看粗细和剧照一致
+            if how == "d":
+                p = P(u, v, val)
+            elif how == "z":
+                p = on_z(u, v, val)
+            else:
+                p = on_wall(u, v, RIN - val)
+            cs.append(tuple(p))
+            rs.append(rpx * (p - cam_loc).dot(cf) / (IW / 2 / tan_h))
+        bm_tube(bm, cs, rs, seg=seg, mi=mi)
 
-    def bed(bm):
-        bm_cube(bm, (2.9, 1.15, 0.34), loc=(0, 0, 0.17), mi=0)
-        bm_cube(bm, (2.75, 1.0, 0.08), loc=(0.02, 0.02, 0.37), rot=(0, 0.02, 0), mi=0)
-    ob = obj("Bears_TreeHome_Stone_Bed", "长条灰色石板床", [mat_noise("Stone_Bed_Grey_Purple", "#8d8a98", "#a4a1ae", scale=3, bump=0.3)], bed,
-             loc=(1.0, 1.3, 0), rot=(0, 0, -0.35), floor=True, note="B1：熊大躺在一块长条灰色石板上", smooth_shade=False)
+    # 1. 窗洞周围厚重、不规则的木头边框（B1：窗洞四周一圈粗木头，下沿更厚）
+    def window_rim(bm):
+        n = len(WIN)
+        ring = []
+        for k in range(n + 1):
+            u, v = WIN[k % n]
+            p = on_y(u, v, YB - 0.15)
+            out = (p - wc)
+            out.y = 0
+            p = p + out.normalized() * 0.2  # 边框在轮廓外侧，不挡住窗洞
+            ring.append(tuple(p))
+        dw = (wc - cam_loc).dot(cf) / (IW / 2 / tan_h)  # 窗洞深度处 1 像素 = dw 米
+        rad = [(13 + 9 * (on_y(*WIN[k % n], YB).z < wc.z) + 4 * math.sin(k * 1.7)) * dw for k in range(n + 1)]
+        bm_tube(bm, ring, rad, seg=10, mi=0)
+        # 下沿那根往右下方伸、一直接到石板床后面的粗木（B1 窗下右侧）
+        lip = [on_y(640, 345, YB - 0.2), on_y(760, 360, YB - 0.25), on_y(880, 330, YB - 0.2), P(990, 360, 5.0), P(1080, 420, 4.4)]
+        bm_tube(bm, [tuple(p) for p in lip], [r * dw for r in (22, 26, 24, 22, 18)], seg=10, mi=0)
+    obj("Bears_TreeHome_Window_Rim", "后壁窗洞的粗木边框（不规则，下沿更厚）", [rim_wood], window_rim, note="B1：窗洞四周厚重、不规则的木头边缘")
+
+    # 2. 左边那根粗大、金黄色、略扭的立柱树根，顶上弯过来接到窗洞上方的拱
+    def golden_pillar(bm):
+        tube_px(bm, [(440, 560, 3.2, 115, "d"), (445, 470, 3.3, 105, "d"), (465, 330, 3.4, 92, "d"), (458, 170, 3.5, 88, "d"),
+                     (480, 50, 3.7, 80, "d"), (540, -50, 4.2, 75, "d"), (680, -70, 5.0, 70, "d"), (860, 10, 5.6, 60, "d")], seg=14)
+        # 根部向前、向两边铺开
+        tube_px(bm, [(440, 470, 3.3, 90, "d"), (380, 545, 0.3, 55, "z"), (250, 640, 0.25, 45, "z"), (120, 720, 0.2, 35, "z")])
+        tube_px(bm, [(490, 465, 3.3, 70, "d"), (560, 545, 0.3, 40, "z"), (640, 640, 0.22, 30, "z")])
+    obj("Bears_TreeHome_Golden_Pillar_Root", "左侧粗大的金黄色立柱树根（顶上弯成窗洞上方的拱）", [gold], golden_pillar,
+        note="B1：画面左中一根粗壮、略扭、受光的金黄色树根，从地面一直到顶")
+
+    # 3. 左上斜穿过来的树枝（缠着藤蔓），从顶上斜着落到窗洞左上角
+    obj("Bears_TreeHome_Diagonal_Branch", "窗洞左上方斜穿的树枝", [gold],
+        lambda bm: tube_px(bm, [(515, -40, 4.0, 28, "d"), (560, 60, 4.4, 24, "d"), (600, 140, 4.8, 20, "d"), (625, 190, 5.1, 16, "d")]),
+        note="B1：从左上斜落到窗洞边的树枝")
+
+    # 4. 左墙：深色竖向树根肋条 + 中段金黄色的弯根台
+    def left_wall(bm):
+        for u0, r0 in ((40, 40), (150, 45), (275, 50)):
+            tube_px(bm, [(u0 - 20, 720, 0.35, r0 * 1.2, "w"), (u0, 480, 0.35, r0, "w"), (u0 + 10, 250, 0.4, r0, "w"), (u0 + 30, 40, 0.5, r0 * 0.9, "w"),
+                         (u0 + 60, -80, 0.8, r0 * 0.8, "w")], mi=1)
+    obj("Bears_TreeHome_Left_Wall_Roots", "左墙深色竖向树根", [gold, dark_root], left_wall, note="B1：左墙一条条深色、竖向的粗树根")
+    obj("Bears_TreeHome_Left_Root_Ledge", "左墙中段向前弯出的金黄色根台", [gold],
+        lambda bm: tube_px(bm, [(0, 330, 0.3, 40, "w"), (90, 380, 0.5, 45, "w"), (190, 430, 0.8, 42, "w"), (300, 470, 3.1, 35, "d")]),
+        note="B1：左墙中段一根金黄色树根向前弯出来")
+
+    # 5. 前景地面上的大树根（左下、右下），右边那根顶上长苔藓
+    def floor_roots(bm):
+        tube_px(bm, [(-60, 590, 0.35, 50, "z"), (100, 600, 0.35, 48, "z"), (260, 630, 0.3, 42, "z"), (430, 690, 0.25, 35, "z")])
+        tube_px(bm, [(1300, 450, 0.5, 60, "z"), (1150, 530, 0.45, 55, "z"), (1000, 600, 0.38, 50, "z"), (880, 680, 0.3, 42, "z"), (820, 760, 0.2, 35, "z")])
+        tube_px(bm, [(1248, 640, 0.3, 40, "z"), (1120, 700, 0.25, 35, "z"), (1040, 760, 0.18, 28, "z")])
+    obj("Bears_TreeHome_Floor_Roots", "前景地面上的粗树根（左下、右下）", [gold], floor_roots, note="B1：前景左右两边铺在地上的粗大金黄色树根")
+
+    def moss_tops(bm):
+        for (u, v, s) in ((1150, 500, 0.3), (1020, 570, 0.26), (1220, 470, 0.22), (60, 580, 0.24), (150, 600, 0.2)):  # 贴在前景树根顶上
+            p = on_z(u, v, 0.55)
+            for j in range(4):
+                bm_ico(bm, s * (0.6 + 0.15 * j), loc=(p.x + 0.12 * j, p.y + 0.05 * j, p.z - 0.05), scale=(1.3, 1.0, 0.35), subdiv=2, rough=0.4, seed=u + j)
+    obj("Bears_TreeHome_Moss_Patches", "树根上的苔藓", [moss], moss_tops, note="B1：右下树根顶上、左墙上有绿色苔藓")
+
+    # 6. 右墙：深色立柱 + 一根金黄色竖根（挂藤）
+    def right_wall(bm):
+        tube_px(bm, [(1190, 720, 0.4, 95, "w"), (1170, 400, 0.4, 90, "w"), (1150, 120, 0.45, 85, "w"), (1100, -80, 0.7, 80, "w")], mi=1)
+        tube_px(bm, [(1060, 470, 0.35, 45, "w"), (1050, 300, 0.35, 42, "w"), (1030, 120, 0.4, 40, "w"), (990, -40, 0.6, 36, "w")], mi=0)
+    obj("Bears_TreeHome_Right_Wall_Roots", "右墙的深色立柱和金黄色竖根", [gold, dark_root], right_wall, note="B1：画面右边深色立柱和一根受光的竖根")
+
+    # 7. 石板床：B1 里一长条灰紫色石板，斜放在窗洞下方偏右。前缘顶边两个角在 B1 里是 (598, 545) 和 (1170, 468)。
+    # 石板长度按熊大身长估 2.9 m（B1 里熊大躺着占了石板大半），再找一个顶面高度，让这两个像素落到这个高度上时正好相距 2.9 m；
+    # 石板从地面一直到这个高度（底边在 B1 里被前景树根挡住）。
+    # 改法（v5）：前缘四个角都取 B1 像素——顶边 (598, 545)→(1170, 468)，底边 (612, 655)→(1165, 575)；
+    # 左端深度 3.3 m、右端 4.8 m（右端在窗洞下方、后壁前面）。长度、厚度、离地高度由画面算出来；石板下面用石头垫到地面（垫石是推测）。
+    TL, TR, BL_, BR_ = P(598, 545, 3.3), P(1170, 468, 4.8), P(612, 655, 3.3), P(1165, 575, 4.8)
+    BED_TOP, BED_BOT, BED_W = (TL.z + TR.z) / 2, (BL_.z + BR_.z) / 2, 1.0
+    FBL, FBR = Vector((TL.x, TL.y, 0)), Vector((TR.x, TR.y, 0))
+    ax_ = (FBR - FBL)
+    L = ax_.length
+    ang = math.atan2(ax_.y, ax_.x)
+    BED_H = BED_TOP
+
+    nb = Vector((-(TR - TL).y, (TR - TL).x, 0)).normalized() * BED_W  # 水平、朝后（远离镜头）
+    if nb.dot(cf) < 0:
+        nb = -nb
+
+    def bed(bm):  # 直接用投回来的四个前缘角点，往后挤出：保留 B1 里石板右端抬高的斜度
+        fr = [TL, TR, BR_, BL_]
+        v = [bm.verts.new(tuple(p)) for p in fr] + [bm.verts.new(tuple(p + nb)) for p in fr]
+        for f in ((0, 1, 2, 3), (5, 4, 7, 6), (0, 4, 5, 1), (3, 2, 6, 7), (0, 3, 7, 4), (1, 5, 6, 2)):
+            bm.faces.new([v[i] for i in f])
+        base = [Vector((p.x, p.y, 0.0)) for p in (BL_, BR_)]  # 下面的垫石（推测）：从石板底面到地面
+        ins = nb * 0.08
+        q = [BL_ + ins, BR_ + ins, base[1] + ins, base[0] + ins]
+        w = [bm.verts.new(tuple(p)) for p in q] + [bm.verts.new(tuple(p + nb * 0.85)) for p in q]
+        for f in ((0, 1, 2, 3), (5, 4, 7, 6), (0, 4, 5, 1), (3, 2, 6, 7), (0, 3, 7, 4), (1, 5, 6, 2)):
+            bm.faces.new([w[i] for i in f]).material_index = 1
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    mid = (FBL + FBR) / 2
+    ob = obj("Bears_TreeHome_Stone_Bed", "长条灰紫色石板床（按 B1 轮廓，右端略高）", [mat_noise("Stone_Bed_Grey_Purple", "#7f7896", "#a49cbb", scale=3, bump=0.4), mat_noise("Stone_Bed_Base_Dark", "#4c4652", "#5e5866", scale=3, bump=0.3)], bed,
+             floor=True, note="B1：熊大躺在一块长条灰紫色石板上。前缘四个角按画面投回；左端深度 3.3 m、右端 4.8 m 是估的；垫石是推测", smooth_shade=False)
     soft = ob.modifiers.new("Bevel_Soft", "BEVEL")
     soft.width = 0.08
-    soft.segments = 2
+    soft.segments = 3
+    root["b1_bed"] = [mid.x, mid.y, ang, L]
     obj("Bears_TreeHome_Leaf_Bed_XiongEr", "熊二的树叶铺（推测）", [mat_noise("Leaf_Bed_Green", "#5f8f3a", "#77a64a", scale=8)],
-        lambda bm: bm_ico(bm, 1.0, scale=(1.1, 0.75, 0.18), subdiv=2, rough=0.08, seed=4), loc=(-1.7, 0.4, 0.195), floor=True,
-        status="inferred", note="B1 只看到一块石板床；熊二睡哪里没有画面")
+        lambda bm: bm_ico(bm, 1.0, scale=(1.1, 0.75, 0.18), subdiv=2, rough=0.08, seed=4), loc=(-2.1, 0.9, 0.195), floor=True,
+        status="inferred", note="B1 只看到一块石板床；熊二睡哪里没有画面（临时设计）")
     orange = mat_noise("Swirl_Orange", "#e07a28", "#f09238", scale=6)
-    spots = [(-2.45, 0.6, 1.4, 0.18), (2.3, -1.2, 2.4, 0.2), (1.2, 2.5, 3.2, 0.22), (-1.6, -2.0, 2.0, 0.16), (2.6, 0.9, 0.9, 0.15), (-2.2, 1.6, 3.4, 0.2)]
 
-    def swirls(bm):
-        for (sx, sy, sz, rr) in spots:
-            stacked_swirl(bm, rr, rr * 1.8, (sx, sy, sz))
-        stacked_swirl(bm, 0.24, 0.42, (-0.9, -0.4, 0.0))
-        stacked_swirl(bm, 0.2, 0.36, (1.9, -0.1, 0.0))
-    obj("Bears_TreeHome_Orange_Swirls", "橙色螺旋叠圈物（墙上和地上；身份待确认：可能是蜂蜜/蜂巢或菌类）", [orange], swirls,
-        note="B1：墙上、地上有橙色螺旋叠圈物；具体是什么、位置为推测")
+    def swirls(bm):  # B1 里能看到的橙色叠圈物位置（像素）
+        for (u, v, how, val, rr) in ((200, 345, "w", 0.55, 0.2), (1225, 190, "w", 0.65, 0.22), (1045, 30, "w", 0.6, 0.2),
+                                     (130, 600, "z", 0.0, 0.2), (865, 640, "z", 0.0, 0.2), (410, 470, "z", 0.0, 0.16), (1240, 560, "z", 0.4, 0.15)):
+            p = on_wall(u, v, RIN - val) if how == "w" else on_z(u, v, val)
+            stacked_swirl(bm, rr, rr * 1.8, tuple(p))
+    obj("Bears_TreeHome_Orange_Swirls", "橙色螺旋叠圈物（身份待确认）", [orange], swirls, note="B1：墙上、地上的橙色螺旋叠圈物，位置按画面描")
     obj("Bears_TreeHome_Honey_Pot", "蜂蜜罐（推测）", [mat_noise("Clay_Honey_Pot", "#9a6a3a", "#ad7a46", scale=5), mat("Honey_Gold", "#f2a71e", rough=0.2, emit="#f0a020", emit_strength=0.1)],
         lambda bm: (bm_sphere(bm, (0.28, 0.28, 0.3), loc=(0, 0, 0.3), seg=16, rings=10, mi=0), bm_cyl(bm, 0.2, 0.22, 0.05, loc=(0, 0, 0.58), seg=16, mi=1),
-                    bm_sphere(bm, (0.06, 0.06, 0.12), loc=(0.18, -0.12, 0.5), seg=8, rings=6, mi=1)), loc=(-1.9, -0.6, 0), floor=True,
-        status="inferred", note="熊爱吃蜂蜜；B1 里没有看到蜂蜜罐")
+                    bm_sphere(bm, (0.06, 0.06, 0.12), loc=(0.18, -0.12, 0.5), seg=8, rings=6, mi=1)), loc=(-2.4, -1.3, 0), floor=True,
+        status="inferred", note="熊爱吃蜂蜜；B1 里没有看到蜂蜜罐（临时设计）")
 
-    def vines(bm):
-        for k in range(6):
-            a = rnd.uniform(0, 6.283)
-            r0 = rnd.uniform(0.6, 2.2)
-            x0, y0 = math.cos(a) * r0, math.sin(a) * r0
-            L = rnd.uniform(1.6, 3.2)
-            pts = [(x0 + 0.1 * math.sin(i), y0 + 0.1 * math.cos(i * 1.3), 5.4 - (i / 6) * L) for i in range(7)]
-            bm_tube(bm, pts, [0.035] * 7, seg=6, mi=0)
-            for j in range(3):
-                p = pts[2 + j]
-                bm_sphere(bm, (0.09, 0.03, 0.05), loc=(p[0] + 0.06, p[1], p[2]), seg=8, rings=4, mi=1)
-    obj("Bears_TreeHome_Hanging_Vines", "垂下来的藤蔓", [mat("Vine_Dark_Green", "#3f6a2a", rough=0.7), mat("Vine_Leaf", "#5a9a3a", rough=0.6)], vines,
-        note="B1：上方垂下来的藤蔓；位置为推测")
+    def vines(bm):  # B1：缠在立柱上的藤、从顶上垂下来的藤
+        tube_px(bm, [(360, 150, 3.2, 7, "d"), (430, 230, 3.1, 7, "d"), (500, 290, 3.1, 7, "d"), (470, 380, 3.0, 7, "d"), (380, 390, 3.0, 6, "d")], seg=6)
+        for (u, v0, v1, d) in ((365, -20, 250, 3.8), (575, -20, 120, 4.6), (1130, -20, 380, 4.4), (500, -20, 90, 4.0)):
+            tube_px(bm, [(u + 6 * math.sin(i), v0 + (v1 - v0) * i / 6, d, 5, "d") for i in range(7)], seg=6)
+    obj("Bears_TreeHome_Hanging_Vines", "缠绕和垂下来的藤蔓", [mat("Vine_Dark_Green", "#3f5a2a", rough=0.7)], vines, note="B1：缠在立柱上的藤、顶上垂下的藤")
 
     def greens(bm):
-        for k in range(18):
-            a = rnd.uniform(0, 6.283)
-            rr = rnd.uniform(1.6, 2.7)
-            if abs(math.atan2(math.sin(a + math.pi / 2), math.cos(a + math.pi / 2))) < 0.4:
-                continue
-            px, py = math.cos(a) * rr, math.sin(a) * rr
-            if k % 3 == 0:
-                bm_ico(bm, rnd.uniform(0.2, 0.45), loc=(px, py, 0.02), scale=(1.4, 1.0, 0.3), subdiv=1, rough=0.3, mi=0)
-            else:
-                for g in range(6):
-                    aa = g * 1.05
-                    bm_cyl(bm, 0.025, 0.0, rnd.uniform(0.25, 0.45), loc=(px + math.cos(aa) * 0.05, py + math.sin(aa) * 0.05, 0.15),
-                           rot=(math.cos(aa) * 0.35, math.sin(aa) * 0.35, 0), seg=4, mi=1)
-        for k in range(5):  # 小蘑菇（推测）
-            a = rnd.uniform(0, 6.283)
-            px, py = math.cos(a) * 2.5, math.sin(a) * 2.5
-            bm_cyl(bm, 0.03, 0.03, 0.12, loc=(px, py, 0.06), seg=6, mi=2)
-            bm_sphere(bm, (0.08, 0.08, 0.04), loc=(px, py, 0.13), seg=10, rings=6, mi=3)
-    obj("Bears_TreeHome_Moss_Grass_Mushrooms", "树洞里的苔藓、小草和小蘑菇", [moss, mat("Grass_Cave", "#5aa04a", rough=0.7),
-                                                                      mat("Mushroom_Stem", "#e9e0c8"), mat("Mushroom_Cap_Red", "#c8462e")], greens,
-        status="observed", note="B1：树根上的苔藓、地上的小草；小蘑菇为推测")
+        for (u, v, z) in ((100, 520, 0.0), (650, 445, 0.6), (760, 665, 0.0), (300, 700, 0.0), (560, 700, 0.0)):
+            p = on_z(u, v, z)
+            for g in range(7):
+                aa = g * 0.9
+                bm_cyl(bm, 0.03, 0.0, rnd.uniform(0.3, 0.55), loc=(p.x + math.cos(aa) * 0.06, p.y + math.sin(aa) * 0.06, p.z + 0.18),
+                       rot=(math.cos(aa) * 0.4, math.sin(aa) * 0.4, 0), seg=4, mi=0)
+    obj("Bears_TreeHome_Grass_Tufts", "树洞里的小草", [mat("Grass_Cave", "#5aa04a", rough=0.7)], greens, note="B1：地上和床边的几丛小草")
+    # 灯光：B1 是从镜头左前方来的暖光，把树根照成金黄色；里面深处偏暗，窗外亮
+    la = bpy.data.lights.new("Bears_TreeHome_Key_Light", "AREA")
+    la.energy = 900
+    la.size = 2.0
+    la.color = (1.0, 0.82, 0.55)
+    lo = bpy.data.objects.new("Bears_TreeHome_Key_Light", la)
+    INT.objects.link(lo)
+    lo.parent = root
+    lo.location = (-2.2, -2.6, 4.2)
+    lo.rotation_euler = (math.radians(55), 0, math.radians(-30))
     li = bpy.data.lights.new("Bears_TreeHome_Light", "POINT")
-    li.energy = 160
-    li.color = (1.0, 0.85, 0.62)
+    li.energy = 60
+    li.color = (1.0, 0.8, 0.55)
     li.shadow_soft_size = 0.6
     lo = bpy.data.objects.new("Bears_TreeHome_Light", li)
     INT.objects.link(lo)
@@ -4067,86 +4209,228 @@ def build_bears_home():
 
 
 def build_monkey_cave():
-    """吉吉和毛毛的山洞（依据 hdslb 剧照 M1）：长满苔藓的灰绿色大石堆成的山包，正面一个不规则的黑洞口，
-    洞口上方石头上刻着图案；洞前是一层层平整的石板平台，平台前有两根雕刻的木图腾柱；周围灌木、蕨类，右侧云杉。
-    洞内空间和吉吉的生活区、毛毛的休息区没有原版画面，全部为推测。局部 -Y 为洞口。"""
+    """吉吉和毛毛的山洞（依据 M1，640×455，季集未核实）。
+    本轮按 M1 重做外观：先定 M1 的对位相机，再把剧照里每块主要岩石、洞口、平台、图腾的轮廓矩形，
+    按估计的深度沿相机射线投回三维（M1 没拍到山顶，所以山体只做到画面上边以外一点，不做成完整圆顶）。
+    岩石用凸包做成有棱面的块石。比例：吉吉在 M1 里约 85 像素高，按吉吉 1.3 m（推测）反推洞口离镜头约 8.6 m。
+    洞内空间、吉吉的石座、毛毛的草窝没有原版画面，全部是临时设计。局部 -Y 为洞口。"""
     C = COLL["MonkeyCave"]
-    P = MONKEYCAVE
-    gz = ground(P["x"], P["y"])
-    root = empty("MonkeyCave_Root", C, (P["x"], P["y"], gz), (0, 0, P["rot"]), size=2.0,
-                 props=dict(cn="吉吉和毛毛的山洞（根）", status="observed", note="外观依据 M1；洞内和在地图上的位置为推测"))
+    P_ = MONKEYCAVE
+    gz = ground(P_["x"], P_["y"])
+    root = empty("MonkeyCave_Root", C, (P_["x"], P_["y"], gz), (0, 0, P_["rot"]), size=2.0,
+                 props=dict(cn="吉吉和毛毛的山洞（根）", status="observed", note="外观依据 M1（按剧照轮廓投回三维）；洞内和在地图上的位置为推测"))
     rnd = random.Random(41)
-    rock = mat_lake_rock("Rock_Cave_GreyGreen_Moss", "#566557", "#687868", algae="#5f8a3c", speck="#a9b3a4", algae_amt=1.2, speck_amt=0.1)
-    rock2 = mat_lake_rock("Rock_Cave_Grey", "#5f665f", "#737b72", algae="#5f8a3c", speck="#a9b3a4", algae_amt=0.6, speck_amt=0.05)
-    # 山包主体：一大块粗糙岩体，挖出洞室和洞口通道（布尔修改器）
+    rock = mat_lake_rock("Rock_Cave_GreyGreen_Moss", "#5e6b58", "#76836c", algae="#5f8a3c", speck="#a9b3a4", algae_amt=1.0, speck_amt=0.1)
+    rock2 = mat_lake_rock("Rock_Cave_Grey", "#666d63", "#7d857a", algae="#5f8a3c", speck="#a9b3a4", algae_amt=0.5, speck_amt=0.05)
+    cR = Matrix.Rotation(P_["rot"], 3, "Z")
+
+    def tg(lx, ly):  # 局部坐标处的地形高度（相对根）
+        w = Vector((P_["x"], P_["y"], 0)) + cR @ Vector((lx, ly, 0))
+        return ground(w.x, w.y) - gz
+    # 洞内地面：抬到洞室范围里最高的地形之上，避免山坡地形从地面冒出来
+    fz = max(0.0, max(tg(dx, 1.8 + dy) for dx in (-3.0, -1.5, 0, 1.5, 3.0) for dy in (-2.8, -1.4, 0, 1.4, 2.8)) + 0.03)
+    # ---- M1 对位相机（局部坐标）：机位比洞口地面略高，往上仰拍高耸的岩壁
+    IW, IH = 640, 455
+    cam_loc = Vector((M1_CAM["loc"][0], M1_CAM["loc"][1], fz + M1_CAM["loc"][2]))
+    cam_tgt = Vector((M1_CAM["tgt"][0], M1_CAM["tgt"][1], fz + M1_CAM["tgt"][2]))
+    cf = (cam_tgt - cam_loc).normalized()
+    cr = cf.cross(Vector((0, 0, 1))).normalized()
+    cu = cr.cross(cf)
+    tan_h = 18.0 / M1_CAM["lens"]
+    FPX = IW / 2 / tan_h  # 1 米在深度 1 m 处是多少像素
+
+    def P(u, v, d):
+        return cam_loc + (cf + cr * ((u - IW / 2) / (IW / 2) * tan_h) + cu * ((IH / 2 - v) / (IH / 2) * tan_h * IH / IW)) * d
+    root["m1_cam"] = list(cam_loc) + list(cam_tgt) + [M1_CAM["lens"]]  # 位置 3 + 目标 3 + 焦距
+
+    def block(bm, u, v, wpx, hpx, d, depth, seed, tilt=0.0, roll=0.0, mi=0, chamfer=0.32):
+        """M1 里的一块岩石：画面上的矩形 (中心 u, v，宽 wpx，高 hpx) 放在深度 d，厚 depth 米；凸包做出有棱面的块石。"""
+        r = random.Random(seed)
+        c = P(u, v, d) + cf * (depth * 0.45)  # 前表面在深度 d 附近
+        w, h = wpx * d / FPX, hpx * d / FPX
+        pts = []
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                for sz in (-1, 1):
+                    for k in range(3):  # 每个角切掉一点，变成多棱面
+                        q = [sx * w / 2, sy * depth / 2, sz * h / 2]
+                        q[k] *= (1 - chamfer * r.uniform(0.4, 1.0))
+                        pts.append(Vector(q) + Vector((r.uniform(-0.1, 0.1) * w, r.uniform(-0.1, 0.1) * depth, r.uniform(-0.1, 0.1) * h)))
+        for k in range(10):  # 面上再加几个点，切出更多不规则棱面
+            q = Vector((r.uniform(-0.5, 0.5) * w, r.uniform(-0.5, 0.5) * depth, r.uniform(-0.5, 0.5) * h))
+            ax = r.randrange(3)
+            q[ax] = (w, depth, h)[ax] / 2 * r.choice((-1, 1)) * r.uniform(0.9, 1.05)
+            pts.append(q)
+        rot = Matrix.Rotation(math.atan2(cf.x, cf.y) * -1, 3, "Z") @ Matrix.Rotation(tilt, 3, "X") @ Matrix.Rotation(roll, 3, "Y")
+        vs = [bm.verts.new(tuple(c + rot @ p)) for p in pts]
+        ret = bmesh.ops.convex_hull(bm, input=vs)
+        for f in [g for g in ret["geom"] if isinstance(g, bmesh.types.BMFace)]:
+            f.material_index = mi
+        for vtx in vs:  # 凸包里面没用上的点删掉
+            if vtx.is_valid and not vtx.link_faces:
+                bm.verts.remove(vtx)
+    # ---- 洞口（M1 轮廓），洞口所在平面深度 DM
+    DM = 8.6
+    MOUTH = [(268, 302), (264, 240), (274, 206), (300, 186), (336, 180), (372, 190), (402, 212), (416, 252), (418, 302)]
+    mpts = [P(u, v, DM) for u, v in MOUTH]
+    mc = sum(mpts, Vector()) / len(mpts)
+    m_floor = min(p.z for p in mpts)
+    root["m1_mouth"] = [mc.x, mc.y, mc.z, m_floor]
+    # 山体核心：洞口后面一整块高大的岩体（M1 里一直伸出画面上边和左边），挖出通道和洞室
     bm = bmesh.new()
-    ret = bmesh.ops.create_icosphere(bm, subdivisions=4, radius=1.0)
-    for v in ret["verts"]:
-        k = 1 + 0.18 * noise.noise(v.co * 1.6 + Vector((2.1, 0.3, 1.0))) + 0.06 * noise.noise(v.co * 5)
-        v.co = Vector((v.co.x * 6.8 * k, v.co.y * 6.0 * k + 1.6, v.co.z * 7.2 * k + 1.4))  # M1：高高的石山
-    body = new_obj("MonkeyCave_Rock_Mound", bm, C, [rock], smooth_shade=True, parent=root,
-                   props=dict(cn="山包主体（洞室和洞口用布尔修改器挖出）", status="observed", note="M1：灰绿色、长苔藓的大石山包"))
-    add_cutters(body, C, [("Chamber", (3.4, 3.2, 2.5), (0, 1.8, 1.2), 0.0), ("Entrance_Tunnel", (1.25, 3.1, 1.45), (0, -2.9, 1.15), 0.0)], "MonkeyCave")
-    DOOR_PASSAGES.append(("猴洞洞口", "MonkeyCave_Root", (-0.6, 0.6, -5.4, -1.0, 0.2, 1.9)))
-    # 外面堆着的大圆石（避开洞口），洞口两侧和上方的“门框”石
+    block(bm, 230, 40, 520, 330, 15.5, 12.0, 1, tilt=0.05, chamfer=0.18)
+    core = new_obj("MonkeyCave_Rock_Massif", bm, C, [rock], parent=root,
+                   props=dict(cn="山体核心（高大岩壁，挖出洞口通道和洞室）", status="observed",
+                              note="M1：洞口后面是向画面上方和左方延伸的高大岩壁；画面外的部分是推测"))
+    md = core.modifiers.new("Bevel_Soft", "BEVEL")
+    md.width, md.segments = 0.25, 2
+    ch_y = mc.y + 6.5
+    tun_len = ch_y - mc.y
+    add_cutters(core, C, [("Chamber", (3.4, 3.2, 2.5), (mc.x, ch_y, fz + 2.2), 0.0),
+                          ("Entrance_Tunnel", (1.25, tun_len / 2 + 1.0, 1.35), (mc.x, (mc.y + ch_y) / 2 - 0.5, m_floor + 1.0), 0.0)], "MonkeyCave")
+    DOOR_PASSAGES.append(("猴洞洞口", "MonkeyCave_Root", (mc.x - 0.6, mc.x + 0.6, mc.y - 1.5, mc.y + 3.0, m_floor + 0.25, m_floor + 1.8)))
+    # 山体底座：从洞口后面一直到洞室后方，落到地面以下，把通道和洞室包住（上面的大岩壁底部离地，单靠它洞室不封闭）
+    y0_, y1_ = mc.y + 2.6, ch_y + 4.4  # 前面藏在洞口石头后面；宽度、高度只够包住洞室，不能从 M1 机位露出来挡住天空
+    zb_ = min(tg(mc.x + dx, yy) for dx in (-6, 0, 6) for yy in (y0_, (y0_ + y1_) / 2, y1_)) - 1.0
     bm = bmesh.new()
-    for k in range(16):
-        a = rnd.uniform(0, 2 * math.pi)
-        el = rnd.uniform(0.1, 1.3)
-        if abs(math.atan2(math.sin(a + math.pi / 2), math.cos(a + math.pi / 2))) < 0.5 and el < 0.7:
-            continue
-        rr = rnd.uniform(1.2, 2.2)
-        px, py, pz = math.cos(a) * math.cos(el) * 7.0, math.sin(a) * math.cos(el) * 6.3 + 1.6, math.sin(el) * 7.0 + 1.0
-        bm_ico(bm, rr, loc=(px, py, pz), scale=(1.25, 1.0, 0.8), subdiv=2, rough=0.35, seed=k * 1.7)
-    for (px, py, pz, rr, sc) in ((-1.9, -4.2, 1.2, 1.15, (0.9, 1.0, 1.4)), (1.9, -4.2, 1.1, 1.1, (0.9, 1.0, 1.4)), (0.0, -4.0, 3.4, 1.35, (1.5, 0.9, 0.7))):
-        bm_ico(bm, rr, loc=(px, py, pz), scale=sc, subdiv=3, rough=0.2, seed=px + pz)
-    new_obj("MonkeyCave_Boulders", bm, C, [rock2], smooth_shade=True, parent=root,
-            props=dict(cn="山包外圆石和洞口两侧、上方的大石", status="observed", note="M1；石块数量和位置为推测"))
-    # 洞口上方石头上的刻纹（M1 可见，有图案；图案细节看不清，用简单线条代替）
+    r_ = random.Random(9)
+    vs = []
+    for sx in (-1, 1):
+        for sy in (y0_, y1_):
+            for sz in (zb_, fz + 4.3):
+                for k in range(3):
+                    vs.append(bm.verts.new((mc.x + sx * (3.75 + r_.uniform(-0.2, 0.2)) * (0.85 if k == 0 else 1), sy + r_.uniform(-0.4, 0.4) * (k == 1), sz + r_.uniform(-0.3, 0.3) * (k == 2))))
+    ret = bmesh.ops.convex_hull(bm, input=vs)
+    for vtx in vs:
+        if vtx.is_valid and not vtx.link_faces:
+            bm.verts.remove(vtx)
+    # 底座只能从洞口里看到（洞室后墙）。M1 洞口里是黑的，所以用暗色岩石，不让洞室灯把后墙照成一块灰
+    rock_in = mat_noise("Rock_Cave_Inner_Dark", "#1d1c1a", "#2c2a26", scale=3.0, bump=0.5)
+    base = new_obj("MonkeyCave_Rock_Massif_Base", bm, C, [rock_in], parent=root,
+                   props=dict(cn="山体底座（包住通道和洞室，落到地面）", status="inferred", note="M1 看不到这部分；为了洞室封闭补的结构"))
+    for cn_ in ("Chamber", "Entrance_Tunnel"):
+        md = base.modifiers.new(f"Cut_{cn_}", "BOOLEAN")
+        md.operation, md.solver, md.object = "DIFFERENCE", "EXACT", bpy.data.objects[f"MonkeyCave_Cutter_{cn_}"]
+    root["m1_chamber_y"] = ch_y
+    # ---- 主要岩块（逐块对 M1）：名字、画面中心、宽高（像素）、深度、厚度、倾角
+    BLOCKS = [
+        ("Top_Left_Leaning_Slab", 110, 45, 260, 150, 14.0, 5.0, 0.25, -0.15, "左上方斜靠的大石板"),
+        ("Top_Face", 330, 20, 250, 120, 16.5, 6.0, 0.1, 0.05, "上方的大岩面（伸出画面）"),
+        ("Right_Face", 440, 120, 110, 270, 14.0, 5.0, 0.05, 0.28, "右侧岩壁，右边缘斜着往下"),
+        ("Upper_Stack_1", 290, 88, 115, 62, 10.5, 3.2, 0.15, -0.1, "洞口上方叠着的块石 1"),
+        ("Upper_Stack_2", 345, 62, 140, 70, 12.0, 3.8, -0.05, 0.08, "洞口上方叠着的块石 2"),
+        ("Left_Mid", 55, 222, 115, 95, 9.5, 3.0, 0.1, -0.2, "左侧中部的块石"),
+        ("Left_Big_Beside_Mouth", 205, 212, 112, 112, 8.8, 3.4, 0.2, -0.3, "洞口左边斜顶的大块石"),
+        ("Mouth_Left_Jamb", 245, 262, 55, 96, 8.4, 2.0, 0.0, 0.05, "洞口左侧门框石"),
+        ("Mouth_Top", 300, 162, 105, 52, 8.5, 2.4, 0.08, 0.1, "洞口顶上的横石"),
+        ("Mouth_Right_Jamb", 452, 222, 72, 150, 8.4, 3.0, 0.0, -0.08, "洞口右侧的大块石"),
+        ("Right_Low", 482, 300, 100, 48, 7.6, 2.0, 0.0, 0.1, "右下方的低石"),
+        ("Left_Low", 30, 292, 80, 60, 7.0, 2.0, 0.05, 0.0, "左下方的低石"),
+    ]
+    for k, (nm, u, v, wpx, hpx, d, dep, tilt, roll, cn) in enumerate(BLOCKS):
+        bm = bmesh.new()
+        block(bm, u, v, wpx, hpx, d, dep, 100 + k, tilt=tilt, roll=roll)
+        ob = new_obj(f"MonkeyCave_Rock_{nm}", bm, C, [rock if k % 2 == 0 else rock2], parent=root,
+                     props=dict(cn=cn, status="observed", note="M1：按剧照里这块石头的位置和大小投回三维；厚度和背面是推测"))
+        md = ob.modifiers.new("Bevel_Soft", "BEVEL")
+        md.width, md.segments = 0.12, 2
+    # 洞口所在的岩面：一块盖住洞口区域的石头，按 M1 的拱形轮廓挖穿（不再是几块石头之间的方形空隙）
     bm = bmesh.new()
-    bm_torus(bm, 0.28, 0.035, loc=(0, -5.22, 3.45), rot=(math.pi / 2, 0, 0), seg=20, rseg=4)
-    for (dx, dz, ang) in ((-0.12, 0.05, 0.6), (0.14, 0.02, -0.5), (0.0, -0.15, 0.0)):
-        bm_cube(bm, (0.05, 0.03, 0.3), loc=(dx, -5.25, 3.45 + dz), rot=(0, ang, 0))
+    block(bm, 342, 240, 190, 140, DM + 0.2, 2.6, 77, chamfer=0.3)
+    face = new_obj("MonkeyCave_Rock_Mouth_Face", bm, C, [rock2], parent=root,
+                   props=dict(cn="洞口岩面（拱形洞口按 M1 轮廓挖穿）", status="observed", note="M1：洞口是不规则的拱形"))
+    bm = bmesh.new()
+    fr = [bm.verts.new(tuple(P(u, v, DM - 1.2))) for u, v in MOUTH]
+    bk = [bm.verts.new(tuple(P(u, v, DM + 4.0))) for u, v in MOUTH]  # 沿视线往里延伸
+    nm_ = len(fr)
+    bm.faces.new(fr)
+    bm.faces.new(bk[::-1])
+    for k in range(nm_):
+        bm.faces.new((fr[k], bk[k], bk[(k + 1) % nm_], fr[(k + 1) % nm_]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    cut = new_obj("MonkeyCave_Cutter_Mouth_Arch_M1", bm, C, [], parent=root, props=dict(cn="洞口拱形切割体（M1 轮廓，渲染隐藏）", status="observed"))
+    cut.hide_render, cut.display_type = True, "WIRE"
+    cut["helper"] = True
+    for tgt_ in (face, core, base):
+        md = tgt_.modifiers.new("Cut_Mouth_Arch_M1", "BOOLEAN")
+        md.operation, md.solver, md.object = "DIFFERENCE", "EXACT", cut
+    # 洞口上方带石刻的平石（M1 右上方那块浅色图案；图案看不清，用简化线条，不自创符号）
+    bm = bmesh.new()
+    block(bm, 368, 150, 80, 58, 8.3, 1.8, 7, chamfer=0.12)
+    ob = new_obj("MonkeyCave_Rock_Carving_Stone", bm, C, [rock2], parent=root,
+                 props=dict(cn="洞口右上方带石刻的平石", status="observed", note="M1"))
+    cc = P(368, 148, 8.3) - cf * 0.05
+    bm = bmesh.new()
+    s_ = 8.3 / FPX
+    for (du, dv, L, a) in ((0, 0, 30, 0.0), (-10, -4, 18, 0.7), (10, -4, 18, -0.7)):  # 简化：一竖两斜（M1 只看得出几道浅色刻线）
+        p = cc + cr * (du * s_) - cu * (dv * s_)
+        ax = (cu * math.cos(a) + cr * math.sin(a)).normalized()
+        bm_tube(bm, [tuple(p - ax * (L * s_ / 2)), tuple(p + ax * (L * s_ / 2))], [0.025, 0.025], seg=5)
     new_obj("MonkeyCave_Rock_Carving", bm, C, [mat("Carving_Pale", "#d9dccf", rough=0.8)], parent=root,
-            props=dict(cn="洞口上方的石刻图案", status="observed", note="M1：洞口上方石头上刻着浅色图案；图案细节为推测"))
-    # 洞前石板平台（M1：一层层平整石板）和台阶
+            props=dict(cn="洞口上方的石刻（简化线条）", status="observed", note="M1：石头上有浅色刻纹；具体图案看不清，只做了简化线条，不是原作图案"))
+    # 按画面投回的岩块在三维里会伸进通道和洞室：每块岩石都挖掉通道、洞室和洞口拱形，保证洞是空的、灯和镜头不在石头里
+    cutters_ = [bpy.data.objects[n] for n in ("MonkeyCave_Cutter_Chamber", "MonkeyCave_Cutter_Entrance_Tunnel", "MonkeyCave_Cutter_Mouth_Arch_M1")]
+    for ob in [o for o in C.objects if o.name.startswith("MonkeyCave_Rock_") and o.type == "MESH" and o.name != "MonkeyCave_Rock_Carving"]:
+        have = {m.object for m in ob.modifiers if m.type == "BOOLEAN"}
+        for ct in cutters_:
+            if ct not in have:
+                md = ob.modifiers.new(f"Cut_{ct.name[18:]}", "BOOLEAN")
+                md.operation, md.solver, md.object = "DIFFERENCE", "EXACT", ct
+        for m in [m for m in ob.modifiers if m.type == "BEVEL"]:  # 倒角放到最后
+            ob.modifiers.move(list(ob.modifiers).index(m), len(ob.modifiers) - 1)
+    # ---- 洞前石板平台（M1：洞口前一整块大平台，往镜头方向一级级低下去）
+    plat = [  # 名字、画面前缘左端 (u, v)、右端 (u, v)、深度、往后的长度、离地厚度（到地形）
+        ("Main", (150, 330), (560, 318), DM - 1.4, 2.4),
+        ("Step_Left", (95, 398), (330, 380), 5.7, 1.6),
+        ("Front_Left", (35, 450), (250, 445), 4.3, 1.4),
+        ("Right_Lower", (335, 420), (600, 400), 5.3, 2.0),
+    ]
     bm = bmesh.new()
-    for (w, d, h, px, py, pz) in ((5.6, 2.6, 0.55, 0.0, -5.7, 0.27), (7.2, 2.2, 0.45, -0.3, -7.8, 0.02), (2.6, 1.8, 0.6, -3.8, -6.0, 0.6),
-                                  (2.2, 1.6, 0.55, 3.6, -6.2, 0.55), (3.2, 1.4, 0.35, 1.0, -9.4, -0.1)):
-        bm_cube(bm, (w, d, h), loc=(px + rnd.uniform(-0.1, 0.1), py, pz), rot=(rnd.uniform(-0.02, 0.02), rnd.uniform(-0.02, 0.02), rnd.uniform(-0.06, 0.06)))
-    pl = new_obj("MonkeyCave_Stone_Platform", bm, C, [rock2], parent=root, props=dict(cn="洞前石板平台", status="observed", note="M1；尺寸为推测"))
+    for nm, (ua, va), (ub, vb), d, back in plat:
+        a, b_ = P(ua, va, d), P(ub, vb, d)
+        top = (a.z + b_.z) / 2
+        fwd = Vector((cf.x, cf.y, 0)).normalized()
+        base = min(tg(p.x, p.y) for p in (a, b_, a + fwd * back, b_ + fwd * back)) - 0.3
+        q = [a, b_, b_ + fwd * back, a + fwd * back]
+        vs = [bm.verts.new((p.x, p.y, top + rnd.uniform(-0.04, 0.04))) for p in q] + [bm.verts.new((p.x, p.y, base)) for p in q]
+        for f in ((0, 1, 2, 3), (5, 4, 7, 6), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)):
+            bm.faces.new([vs[i] for i in f])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    pl = new_obj("MonkeyCave_Stone_Platform", bm, C, [rock2], parent=root,
+                 props=dict(cn="洞前石板平台（一级级往镜头方向低下去）", status="observed", note="M1：前缘位置按画面投回；往后的长度是推测"))
     md = pl.modifiers.new("Bevel_Soft", "BEVEL")
-    md.width = 0.12
-    md.segments = 2
-    # 两根雕刻木图腾柱（M1 平台前）
+    md.width, md.segments = 0.1, 2
+    # 洞口地面到大平台之间垫平
+    bm = bmesh.new()
+    bm_cube(bm, (2.8, 2.6, 0.6), loc=(mc.x, mc.y - 0.6, m_floor - 0.3))
+    new_obj("MonkeyCave_Mouth_Sill", bm, C, [rock2], parent=root, props=dict(cn="洞口地面", status="inferred"))
+    # ---- 图腾柱：左前方大的一根（u≈285，高约 120 像素）、右边远处小的一根（u≈485，高约 45 像素）
     wood = mat_noise("Wood_Totem", "#7a5a3c", "#8d6a48", scale=8)
     dark = mat("Wood_Totem_Carve", "#3a2a1c", rough=0.8)
-    for side, px in (("Left", -2.6), ("Right", 2.4)):
+    for side, (u, vt, vb, d) in (("Left", (285, 335, 455, 4.6)), ("Right", (485, 255, 300, 8.6))):
+        top, bot = P(u, vt, d), P(u, vb, d)
+        hgt = top.z - bot.z
         bm = bmesh.new()
-        bm_cube(bm, (0.5, 0.36, 1.5), loc=(0, 0, 0.75), mi=0)
-        bm_cube(bm, (0.6, 0.42, 0.12), loc=(0, 0, 1.5), mi=0)
-        for ex in (-0.12, 0.12):
-            bm_cube(bm, (0.1, 0.05, 0.08), loc=(ex, -0.18, 1.15), mi=1)
-        bm_cube(bm, (0.26, 0.05, 0.07), loc=(0, -0.18, 0.85), mi=1)
-        bm_cube(bm, (0.08, 0.06, 0.18), loc=(0, -0.2, 1.0), mi=0)
+        bm_cube(bm, (0.36 * hgt, 0.26 * hgt, hgt), loc=(0, 0, hgt / 2), mi=0)
+        bm_cube(bm, (0.42 * hgt, 0.3 * hgt, 0.08 * hgt), loc=(0, 0, hgt * 0.97), mi=0)
+        for ex in (-0.08, 0.08):
+            bm_cube(bm, (0.07 * hgt, 0.04 * hgt, 0.05 * hgt), loc=(ex * hgt, -0.13 * hgt, 0.75 * hgt), mi=1)
+        bm_cube(bm, (0.18 * hgt, 0.04 * hgt, 0.05 * hgt), loc=(0, -0.13 * hgt, 0.55 * hgt), mi=1)
         ob = new_obj(f"MonkeyCave_Totem_{side}", bm, C, [wood, dark], parent=root,
-                     props=dict(cn="雕刻木图腾柱", status="observed", note="M1：平台前两根带人脸雕刻的木柱；雕刻细节为推测"))
-        ob.location = (px, -8.6, 0.24)
-        ob.rotation_euler = (0, 0, rnd.uniform(-0.2, 0.2))
-    # 洞口周围的灌木和蕨类
-    for k, (px, py) in enumerate(((-4.8, -4.6), (4.6, -4.2), (-5.9, -7.4), (5.7, -8.0), (-7.4, -1.6), (7.2, -1.0))):
-        proto = bpy.data.objects[f"Proto_Bush_{k % 3}"] if f"Proto_Bush_{k % 3}" in bpy.data.objects else None
+                     props=dict(cn="雕刻木图腾柱", status="observed", note="M1：两根带脸的木柱，位置和高度按画面；脸的细节简化"))
+        ob.location = (bot.x, bot.y, bot.z)
+        ob.rotation_euler = (0, 0, math.atan2(-cf.x, cf.y) * -1)
+    # ---- 植被：M1 左边大片绿灌木、左上石头顶上的灌木、右下蕨类
+    for k, (u, v, d, s) in enumerate(((40, 300, 7.0, 0.9), (190, 118, 11.0, 0.9), (560, 350, 7.0, 0.7), (610, 320, 8.0, 0.7))):  # 小一些，不挡洞体
+        p = P(u, v, d)
+        proto = bpy.data.objects.get(f"Proto_Bush_{k % 3}")
         if proto:
-            ob = linked(proto, f"MonkeyCave_Bush_{k}", C, (px, py, 0.1), (0, 0, k), 1.2, props=dict(cn="洞口周围的灌木", status="observed", note="M1"))
+            ob = linked(proto, f"MonkeyCave_Bush_{k}", C, (p.x, p.y, p.z - 0.6 * s), (0, 0, k), s, props=dict(cn="灌木", status="observed", note="M1：位置按画面"))
             ob.parent = root
-    # 洞内（全部推测）。洞内地面抬到洞室范围里最高的地形之上，避免山坡地形从地面冒出来
+    # ---- 洞内（全部临时设计）
     INT = coll("MonkeyCave_Interior", C)
-    cR = Matrix.Rotation(P["rot"], 3, "Z")
-    fz = max(ground(*(Vector((P["x"], P["y"], 0)) + cR @ Vector((dx, 1.8 + dy, 0)))[:2]) - gz
-             for dx in (-3.0, -1.5, 0, 1.5, 3.0) for dy in (-2.8, -1.4, 0, 1.4, 2.8)) + 0.03
-    fz = max(0.0, fz)
 
-    def obj(name, cn, mats, build, loc, rot=(0, 0, 0), floor=True, note="洞内没有原版画面，摆设为推测"):
+    def obj(name, cn, mats, build, loc, rot=(0, 0, 0), floor=True, note="洞内没有原版画面，摆设是临时设计"):
         bm = bmesh.new()
         build(bm)
         ob = new_obj(name, bm, INT, mats, smooth_shade=True, parent=root, props=dict(cn=cn, status="inferred", note=note))
@@ -4160,23 +4444,23 @@ def build_monkey_cave():
             ob["overlap_check"] = True
         return ob
     obj("MonkeyCave_Floor", "洞内地面", [mat_noise("Soil_Cave", "#6d6252", "#7d7262", scale=5)],
-        lambda bm: bm_cyl(bm, 3.3, 3.3, 0.06, loc=(0, 0, -0.03), seg=40), (0, 1.8, 0), floor=False)
-    obj("MonkeyCave_JiJi_Stone_Seat", "吉吉的石座和树叶垫（推测）", [rock2, mat_noise("Leaf_Cushion", "#6a9a3a", "#82b04a", scale=8)],
+        lambda bm: bm_cyl(bm, 3.45, 3.45, 2.0, loc=(0, 0, -1.0), seg=40), (mc.x, ch_y, 0), floor=False)  # 厚地台：填满洞室底部，看不到下面的空腔
+    obj("MonkeyCave_JiJi_Stone_Seat", "吉吉的石座和树叶垫（临时设计）", [rock2, mat_noise("Leaf_Cushion", "#6a9a3a", "#82b04a", scale=8)],
         lambda bm: (bm_ico(bm, 0.6, loc=(0, 0, 0.335), scale=(1.1, 0.9, 0.55), subdiv=2, rough=0.15, mi=0),
-                    bm_ico(bm, 0.45, loc=(0, 0, 0.655), scale=(1.1, 0.9, 0.2), subdiv=2, rough=0.2, mi=1)), (-1.2, 3.2, 0))
-    obj("MonkeyCave_MaoMao_Straw_Nest", "毛毛的草窝（推测）", [mat_noise("Straw_Nest", "#c9a85a", "#b8964a", scale=14)],
-        lambda bm: bm_torus(bm, 0.45, 0.18, loc=(0, 0, 0.12), seg=20, rseg=8, scale=(1.0, 0.8, 0.8)), (1.5, 2.6, 0))
-    obj("MonkeyCave_Banana_Leaf_Pile", "香蕉叶和果子（推测）", [mat("Banana_Leaf", "#4f9a3a", rough=0.6), mat("Fruit_Yellow", "#f0c430")],
+                    bm_ico(bm, 0.45, loc=(0, 0, 0.655), scale=(1.1, 0.9, 0.2), subdiv=2, rough=0.2, mi=1)), (mc.x - 1.2, ch_y + 1.4, 0))
+    obj("MonkeyCave_MaoMao_Straw_Nest", "毛毛的草窝（临时设计）", [mat_noise("Straw_Nest", "#c9a85a", "#b8964a", scale=14)],
+        lambda bm: bm_torus(bm, 0.45, 0.18, loc=(0, 0, 0.12), seg=20, rseg=8, scale=(1.0, 0.8, 0.8)), (mc.x + 1.5, ch_y + 0.8, 0))
+    obj("MonkeyCave_Banana_Leaf_Pile", "香蕉叶和果子（临时设计）", [mat("Banana_Leaf", "#4f9a3a", rough=0.6), mat("Fruit_Yellow", "#f0c430")],
         lambda bm: ([bm_ico(bm, 0.5, loc=(i * 0.2, 0, 0.05 + i * 0.04), scale=(1.4, 0.5, 0.06), subdiv=1, mi=0) for i in range(3)],
                     [bm_sphere(bm, (0.08, 0.08, 0.18), loc=(0.2 + i * 0.12, 0.1, 0.22), rot=(0, 0.6, 0), seg=10, rings=6, mi=1) for i in range(3)]),
-        (0.4, 4.3, 0))
+        (mc.x + 0.4, ch_y + 2.5, 0))
     li = bpy.data.lights.new("MonkeyCave_Light", "POINT")
-    li.energy = 260  # 比例测试 ST06：洞室太暗，看不清座位和睡窝
+    li.energy = 140  # 洞室要看得清座位和睡窝（ST06），但从 M1 机位看洞口里不能太亮（M1 洞口里是暗的）
     li.color = (1.0, 0.86, 0.66)
     lo = bpy.data.objects.new("MonkeyCave_Light", li)
     INT.objects.link(lo)
     lo.parent = root
-    lo.location = (0, 2.0, 2.6 + fz)
+    lo.location = (mc.x, ch_y + 0.2, 2.6 + fz)
 
 
 def build_squirrel_tree():
@@ -5059,6 +5343,9 @@ def build_lake_cameras():
              (cx - nx_ * D, cy - ny_ * D, lv - 1.5), (cx, cy, lv - 1.5), ortho=56, hide="Forest_Trees,Forest_Plants,Characters", res="1600x800", clip=D)
 
 
+REF_SIZES = {"B1": "1248x720", "M1": "640x455", "S1": "1248x720"}
+
+
 def build_still_match_cameras():
     """剧照对位相机：每台相机按一张原作剧照的构图摆放（位置是从画面判断的近似值），用来把模型和剧照并排比较。
     ref_id 对应 evidence/REFERENCE_INDEX.csv；render_still_match.py 渲染并拼对照图。"""
@@ -5079,6 +5366,7 @@ def build_still_match_cameras():
         co["ref_id"] = ref
         co["name_cn"] = cn
         co["match_setup"] = extra
+        co["ref_size"] = REF_SIZES.get(ref, "1280x740")  # 参考图的像素尺寸：对位渲染用同样的画幅
         return co
     cam("SM_R1_Yard_Overview", "R1", "院落全景（院门在画面左侧）", "GQ_House_Root", (16.0, 24.0, 6.5), (-2.0, 2.0, 2.5), 26)["clear_near"] = 14.0
     cam("SM_R2_Front_Closeup", "R2", "木屋正面近景", "GQ_House_Root", (3.6, 9.2, B + 0.9), (-0.8, 3.0, B + 1.7), 22)
@@ -5086,8 +5374,9 @@ def build_still_match_cameras():
     cam("SM_R3_Kitchen", "R3", "厨房：卧室门、冰箱、水槽、圆窗", "GQ_House_Root", (0.25, 0.9, B + 1.25), (0.0, -2.8, B + 1.05), 18)
     cam("SM_R4_Bedroom", "R4", "卧室：窗下土炕、铁炉、绿沙发、电视", "GQ_House_Root", (2.9, -1.95, B + 1.45), (2.9, 2.8, B + 0.85), 15)
     cam("SM_A65_Bedroom_Desk", "A65", "卧室书桌和火枪", "GQ_House_Root", (2.65, 0.95, B + 1.25), (1.45, -0.2, B + 0.95), 24)
-    cam("SM_B1_TreeHome_Interior", "B1", "熊洞室内：后壁圆洞、石板床", "Bears_TreeHome_Root", (-0.3, -1.9, 1.05), (0.3, 3.0, 1.5), 18)
-    cam("SM_M1_MonkeyCave_Front", "M1", "猴洞洞口和石板平台", "MonkeyCave_Root", (2.6, -16.5, 3.4), (0.0, -4.5, 3.4), 26)
+    cam("SM_B1_TreeHome_Interior", "B1", "熊洞室内：后壁圆洞、石板床", "Bears_TreeHome_Root", B1_CAM["loc"], B1_CAM["tgt"], B1_CAM["lens"])
+    m1 = bpy.data.objects["MonkeyCave_Root"]["m1_cam"]
+    cam("SM_M1_MonkeyCave_Front", "M1", "猴洞洞口和石板平台", "MonkeyCave_Root", tuple(m1[0:3]), tuple(m1[3:6]), m1[6])["clear_near"] = 9.0  # 机位附近地图上的树会挡住画面（M1 里镜头前面没有树）
     cam("SM_S1_Squirrel_Branch", "S1", "蹦蹦站的粗树枝和枝干相接处", "SquirrelNest_Tree_Root", (1.9, -3.6, 4.95), (1.3, 0.0, 4.75), 32)
 
 

@@ -2,20 +2,20 @@
  "HOUSE_and_WAREHOUSE": {
   "file": "HOUSE_and_WAREHOUSE.glb",
   "objects": 204,
-  "mb": 6.01,
+  "mb": 6.02,
   "triangles": 133036
  },
  "BEAR_HOME": {
   "file": "BEAR_HOME.glb",
-  "objects": 12,
-  "mb": 0.62,
-  "triangles": 26012
+  "objects": 19,
+  "mb": 0.65,
+  "triangles": 26516
  },
  "MONKEY_CAVE": {
   "file": "MONKEY_CAVE.glb",
-  "objects": 17,
-  "mb": 0.3,
-  "triangles": 8094
+  "objects": 30,
+  "mb": 0.46,
+  "triangles": 7726
  },
  "SQUIRREL_NEST": {
   "file": "SQUIRREL_NEST.glb",
@@ -44,7 +44,7 @@
  "CHARACTERS": {
   "file": "CHARACTERS.glb",
   "objects": 138,
-  "mb": 3.77,
+  "mb": 3.78,
   "triangles": 236084
  }
 }
