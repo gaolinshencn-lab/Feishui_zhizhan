@@ -11,6 +11,11 @@ TL = json.load(open(f'{HERE}/doc_timeline.json'))
 VOICE = os.environ.get('VOICE_DIR', f'{HERE}/voice_doc_t')
 MAXLEN = 20
 PUNCT = '，。；：、！？'
+STRONG = '。；！？'
+BREAK_COST = {'。': 0.0, '！': 0.0, '？': 0.0, '；': 0.1, '：': 0.35, '，': 0.45, '、': 1.2}
+OPENERS = '曾在于从向把被将对与和及并而却也都又才就便由以为'
+NUMERALS = '0123456789一二三四五六七八九十百千万两几'
+MEASURES = '位个名人里年月日天次户艘匹骑员'
 GOLD = '&H0078C4E8'
 PAPER = '&H00E6EEF4'
 
@@ -41,36 +46,53 @@ def spoken_len(text):
     return n
 
 
+def split_clause(s):
+    """Cuts a clause too long for one subtitle near its middle, before a word that usually opens a phrase,
+    never between a numeral and its measure word or inside a 《book title》 or a quotation."""
+    if len(s) <= MAXLEN:
+        return [s]
+    best, cut = None, None
+    for j in range(max(2, int(len(s) * 0.3)), min(len(s) - 1, int(len(s) * 0.7) + 1)):
+        score = abs(j - len(s) / 2)
+        if s[j] in OPENERS:
+            score -= 3
+        if s[j - 1] == '的':
+            score -= 1.5
+        if s[j - 1] in NUMERALS or s[j] in NUMERALS + MEASURES:
+            score += 10
+        if s.count('《', 0, j) > s.count('》', 0, j) or s.count('“', 0, j) > s.count('”', 0, j):
+            score += 100
+        if best is None or score < best:
+            best, cut = score, j
+    return split_clause(s[:cut]) + split_clause(s[cut:])
+
+
 def chunks(text):
-    """Split at punctuation into pieces of at most MAXLEN shown characters."""
+    """Groups the clauses of a line into subtitles of at most MAXLEN shown characters: as few as possible,
+    broken at the strongest punctuation available, sentences kept apart unless that leaves a fragment."""
     parts = re.findall(r'[^，。；：、！？]+[，。；：、！？]?', text)
-    out, cur = [], ''
-    for p in parts:
-        if cur and len((cur + p).rstrip(PUNCT)) > MAXLEN:
-            out.append(cur)
-            cur = p
-        else:
-            cur += p
-    if cur:
-        out.append(cur)
+    n = len(parts)
+    best = [0.0] + [float('inf')] * n
+    back = [0] * (n + 1)
+    for i in range(1, n + 1):
+        for j in range(i - 1, -1, -1):
+            L = len(''.join(parts[j:i]).rstrip(PUNCT))
+            if L > MAXLEN and i - j > 1:
+                break
+            cost = 1.0 + (0.6 if L <= 3 else 0.25 if L <= 6 else 0.0) + 0.001 * L * L  # the last term evens out lengths
+            cost += 1.3 * sum(1 for p in parts[j:i - 1] if p[-1] in STRONG)
+            if i < n:
+                cost += BREAK_COST.get(parts[i - 1][-1], 0.6)
+            if best[j] + cost < best[i]:
+                best[i], back[i] = best[j] + cost, j
+    out, i = [], n
+    while i > 0:
+        out.append(''.join(parts[back[i]:i]))
+        i = back[i]
     final = []
-    for c in out:
+    for c in reversed(out):
         s = c.rstrip(PUNCT)
-        if len(s) > MAXLEN:
-            # a long clause: split evenly, never inside a 《book title》
-            k = -(-len(s) // MAXLEN)
-            step = -(-len(s) // k)
-            cuts, i = [], 0
-            while i + step < len(s):
-                j = i + step
-                while 0 < j < len(s) and (s.count('《', 0, j) > s.count('》', 0, j)):
-                    j += 1
-                cuts.append(s[i:j])
-                i = j
-            cuts.append(s[i:])
-            final += [x for x in cuts if x]
-        else:
-            final.append(c)
+        final += split_clause(s) if len(s) > MAXLEN else [c]
     return final
 
 
@@ -116,9 +138,13 @@ def subtitle_events():
         for p, a, b in zip(parts, bounds, bounds[1:]):
             events.append((l['start'] + a - 0.05, l['start'] + b + 0.15, p.rstrip('，。；：、')))
     events.sort()
-    for i in range(len(events) - 1):
+    # hold each subtitle a little into the pause after it (to the next one when the gap is short),
+    # and on screen for at least 1.2 s
+    for i in range(len(events)):
         a, b, t = events[i]
-        events[i] = (a, min(b, events[i + 1][0] - 0.04), t)
+        nxt = events[i + 1][0] if i + 1 < len(events) else b + 2.0
+        b = nxt if nxt - b < 0.6 else max(b + 0.3, a + 1.2)
+        events[i] = (a, min(b, nxt - 0.04), t)
     return events
 
 

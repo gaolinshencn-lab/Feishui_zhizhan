@@ -19,7 +19,8 @@
 | `doc_music.py` · `doc_mix.py` | 配乐（低音铺底 + 《前秦风雨》）与混音：音效、音乐在解说下自动避让 |
 | `doc_subs.py` | 片名、章节卡、节点卡、引文卡、AI 合成语音标识、片尾（ASS，烧录）；解说字幕（SRT，作 CC 软字幕） |
 | `doc_assemble.py` | 拼接、交叉淡化、烧录图文、响度归一（-15 LUFS），输出 H.264/AAC MP4，内嵌 CC 字幕轨 |
-| `doc_notes.py` · `doc_cover.py` | B 站投稿信息（标题、简介、分段章节、标签、AI 声明）与封面 |
+| `doc_notes.py` | B 站投稿信息（标题、简介、分段章节、标签、AI 声明） |
+| `cover_still.mjs` · `doc_cover.py` | 封面：以 4K 渲染决战时刻（镜头偏离脚本位置，把左上角留给标题），再排上片名 |
 
 ## 运行顺序
 
@@ -35,7 +36,9 @@ PIXEL_RATIO=0.8 node capture_doc.mjs doc_timeline.json chunks A,geo,B,C 1 2
 node doc-sound.mjs B fx_B.wav
 python doc_music.py && python doc_mix.py && python doc_subs.py
 python doc_assemble.py feishui-documentary.mp4            # 加 --hardsub 则同时烧录解说字幕
-python doc_notes.py && python doc_cover.py <某一帧.png>
+python doc_notes.py
+node cover_still.mjs 9.27 2 '[{"name":"cover4k","fx":0.13,"fy":0.11,"dist":0.95,"pitch":-8}]' covers
+python doc_cover.py covers/cover4k.png
 ```
 
 渲染在无 GPU 的机器上用 SwiftShader 完成：1080p 每张约 1.2 秒，自适应抽帧后整片约 4–5 小时（4 核）。
