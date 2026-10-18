@@ -8,11 +8,20 @@ Blender：根物体 `WAREHOUSE_Root`，集合 `GuangtouQiang_Warehouse`。和木
 |---|---|---|---|
 | 第一轮 | 木屋局部 +X 一侧（院子里） | 无 | 已改 |
 | P1（2026-10） | 木屋背后 15 m | R1 院门一侧看不到第二栋房子 → 推断在屋后 | **已撤销**：R1 没拍到，不等于在屋后。这是推断错误 |
-| 本轮 | **湖边候选**：湖东北岸、湖边小路旁；大门朝湖边小路岔口 | **用户提供：“仓库位于湖边”**（待画面验证） | 当前默认。离湖岸多远、门朝哪边、和木屋的距离都是推测 |
+| 本轮 | **湖边候选**：湖东岸偏北、湖边小路旁；大门朝湖边小路岔口 | **用户提供：“仓库位于湖边”**（待画面验证） | 当前默认。离湖岸多远、门朝哪边、和木屋的距离都是推测 |
 
 构建参数：`--warehouse-site lakeside`（默认）或 `behind_house`（旧候选，只作对照）。
 
-审核图：`../../blender/layout_review/Review_G_Lake_Warehouse_House_labeled.jpg`。
+审核图：`../../blender/layout_review/Site_Top_Lake_Warehouse_House_annotated.jpg`（俯视）、`Site_Oblique_Lake_Warehouse_House_annotated.jpg`（斜俯视）、`Review_G_Lake_Warehouse_House_labeled.jpg`。由 `../../blender/site_review.py` 生成。
+
+模型里量出来的数（**全部是推测，不是原作数据**）：
+
+| 项目 | 数值 |
+|---|---|
+| 木屋—仓库直线距离 | 54.8 m |
+| 仓库中心—最近湖岸 | 9.2 m |
+| 仓库在湖心的方位 | 约 76°（东偏北；+Y 约定为北） |
+| 仓库大门朝向 | 约 174°（南偏东，朝湖边小路岔口） |
 
 ## 证据（逐条追加）
 

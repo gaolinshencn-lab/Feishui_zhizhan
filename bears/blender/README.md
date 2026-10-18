@@ -42,6 +42,7 @@
 | `evidence/P3_LAKE_FOREST.md`、`lake_checks/` | 湖、瀑布、森林：已确认 / 推测 / 本轮修改；审核图（`Lake_13`–`16`、`Forest_01`–`03` 为本轮新增） |
 | `map_diagrams.py`、`maps/`、`evidence/MAPS.md` | Evidence Map（只画剧照证明的关系）和 Playable Map（模型实际布局，推测都标出） |
 | `export_glb.py`、`glb/` | 按区域导出的 .glb（修改器和布尔开洞已应用；`name_cn`、`ref_status` 等属性在 glTF extras 里） |
+| `site_review.py` | 湖—仓库—木屋同框审核图（俯视、斜俯视），推测的距离和朝向直接标在图上 |
 | `render_episode.py`、`episode_renders/` | 渲染单集资产（`EPISODE_OVERRIDES/EP_…`，平时隐藏） |
 | `../episode_studies/` | 逐集学习：208 集队列和状态、每集五个记录文件、跨集资产档案（`assets/`） |
 | `../frame_collection/` | 1000+ 剧照采集的目录、索引格式和脚本（独立任务，目前 0 张，等用户提供视频或截图） |

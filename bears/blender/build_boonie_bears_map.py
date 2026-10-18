@@ -809,7 +809,7 @@ _CREEK = None
 
 WAREHOUSE_SITE = _arg("--warehouse-site") or "lakeside"
 # 仓库位置的候选（都没有原作画面）：
-#   lakeside     —— 默认。用户提供的信息：“仓库位于湖边”（待画面验证）。放在湖东北岸、湖边小路旁；离湖岸多远、门朝哪边都是推测。
+#   lakeside     —— 默认。用户提供的信息：“仓库位于湖边”（待画面验证）。放在湖东岸偏北、湖边小路旁；离湖岸多远、门朝哪边都是推测。
 #   behind_house —— 上一轮的做法（R1 院门一侧看不到仓库 → 放到屋后）。用户指出这个推断不成立，只作为对照保留。
 WAREHOUSE_LAKE_JUNCTION = (-18.0, -24.0)  # 湖边小路（Path_Meadow_LakeBeach）上的岔口
 
@@ -4277,13 +4277,18 @@ def build_episode_overrides():
         bm_tube(bm, [(0, 0, 0.45), (math.cos(a) * 1.3, math.sin(a) * 1.3, 0.12), (math.cos(a) * 2.0, math.sin(a) * 2.0, -0.15)], [0.55, 0.35, 0.2], seg=8)
     new_obj("EP_S1E01_Blossom_Tree_Trunk", bm, C, [bark], smooth_shade=True, parent=root,
             props=dict(cn="大树树干（很粗、很直，灰绿带苔藓）和细长主枝", status="inferred", note="缩略图 1：粗直的树干、细长的深色枝条"))
-    pinks = [mat_noise("Blossom_Magenta", "#c9578f", "#dd77a8", scale=3, bump=0.2), mat_noise("Blossom_Pink_Light", "#e793bd", "#f2b3d1", scale=3, bump=0.2)]
+    pinks = [mat_noise("Blossom_Magenta", "#c2457f", "#d9659c", scale=3, bump=0.2), mat_noise("Blossom_Pink_Light", "#e793bd", "#f2b3d1", scale=3, bump=0.2)]
     bm = bmesh.new()
-    for p in sprays:  # 沿枝条的稀疏花簇，向下垂
-        for j in range(rnd.randint(5, 9)):
-            r = rnd.uniform(0.18, 0.42)
-            bm_ico(bm, r, loc=(p.x + rnd.uniform(-0.8, 0.8), p.y + rnd.uniform(-0.8, 0.8), p.z - rnd.uniform(0.0, 0.9)), scale=(1, 1, 1.3),
-                   subdiv=2, rough=0.3, seed=p.x + j, mi=0 if rnd.random() < 0.65 else 1)
+    for p in sprays:  # 沿枝条的花串：每处几条向外、向下垂的细串，由很多小花团组成（第二版：用户指出第一版仍偏圆团）
+        for j in range(rnd.randint(9, 14)):
+            a = rnd.uniform(0, 6.283)
+            L = rnd.uniform(0.9, 2.2)
+            mi = 0 if rnd.random() < 0.75 else 1
+            for k in range(rnd.randint(10, 15)):
+                t = k / 14
+                q = p + Vector((math.cos(a) * L * t + rnd.uniform(-0.12, 0.12), math.sin(a) * L * t + rnd.uniform(-0.12, 0.12),
+                                -L * 0.8 * t * t + rnd.uniform(-0.12, 0.12)))
+                bm_ico(bm, rnd.uniform(0.08, 0.17) * (1.2 - 0.5 * t), loc=tuple(q), subdiv=1, rough=0.35, seed=q.x + k, mi=mi)
     new_obj("EP_S1E01_Blossom_Canopy", bm, C, pinks, smooth_shade=True, parent=root,
             props=dict(cn="紫红色花簇（沿枝条、稀疏）", status="inferred", note="缩略图 1：紫红色花枝从画面上方垂下；花簇大小和密度是推测"))
     bm = bmesh.new()  # 地上的落花
@@ -4301,6 +4306,12 @@ def build_episode_overrides():
     C.objects.link(co)
     co.location = (x + 2.5, y - 9.0, gz + 1.6)  # 大致按缩略图 1：低机位，树干在画面右侧，枝条从画面上方伸进来
     look_at(co, (x - 1.8, y, gz + 3.2))
+    cd = bpy.data.cameras.new("EP_S1E01_Review_Cam_T2")  # 大致按缩略图 T2：贴近树干往上仰拍
+    cd.lens = 18
+    co = bpy.data.objects.new("EP_S1E01_Review_Cam_T2", cd)
+    C.objects.link(co)
+    co.location = (x + 0.6, y - 3.4, gz + 1.3)
+    look_at(co, (x - 0.2, y + 0.5, gz + 7.5))
     COLL["EPISODE_OVERRIDES"].hide_viewport = True  # 默认隐藏；需要时在大纲里打开
     COLL["EPISODE_OVERRIDES"].hide_render = True
 
