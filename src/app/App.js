@@ -325,12 +325,29 @@ export class App {
   }
 
   loop() {
+    if (this.capturing) return; // a video capture drives the frames itself (captureFrame)
     const now = performance.now();
     const rawDt = (now - this.lastFrame) / 1000;
-    const dt = Math.min(rawDt, 0.1);
     this.lastFrame = now;
-    this.elapsed += dt;
     this.watchPerformance(rawDt);
+    this.tick(Math.min(rawDt, 0.1));
+    requestAnimationFrame(() => this.loop());
+  }
+
+  /**
+   * Offline video capture: stops the realtime loop and advances exactly one frame of `dt` seconds
+   * with the timeline at T, so every frame is reproducible however slowly it renders. With
+   * `draw: false` the frame is simulated but not drawn (to fast-forward to a resume point).
+   */
+  captureFrame(T, dt, { draw = true } = {}) {
+    this.capturing = true;
+    this.playing = false;
+    this.setTime(T);
+    this.tick(dt, draw);
+  }
+
+  tick(dt, draw = true) {
+    this.elapsed += dt;
     const prevT = this.T;
     if (this.playing) {
       const ep = this.episode;
@@ -380,7 +397,11 @@ export class App {
       if (this.table === this.tables.strategic) near *= 0.6;
       this.sound.update(dt, levelsAt(this.T, this.playing), near);
     }
-    st.render(this.elapsed);
-    requestAnimationFrame(() => this.loop());
+    if (draw) st.render(this.elapsed);
+    else {
+      // what drawing would have updated, so the next frames place labels exactly as in a full run
+      st.scene.updateMatrixWorld();
+      st.camera.updateMatrixWorld();
+    }
   }
 }
