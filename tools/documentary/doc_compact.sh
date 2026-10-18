@@ -9,7 +9,7 @@ OUT=${2:-feishui-documentary-1080p.mp4}
 LOG=x264pass-$$  # named per run, so two runs never share their statistics
 ffmpeg -v error -stats -y -i "$IN" -map 0:v -c:v libx264 -preset slow -b:v 1400k -pass 1 -passlogfile $LOG -an -f null /dev/null
 ffmpeg -v error -stats -y -i "$IN" -map 0:v -map 0:a -map 0:s -c:v libx264 -preset slow -b:v 1400k -pass 2 -passlogfile $LOG \
-  -profile:v high -level 4.1 -pix_fmt yuv420p -g 48 \
+  -profile:v high -level 4.1 -pix_fmt yuv420p \
   -c:a aac -b:a 128k -c:s mov_text -metadata:s:v:0 language=chi -metadata:s:a:0 language=chi -metadata:s:s:0 language=chi -disposition:s:0 default \
   -metadata "title=淝水之战 · 三维沙盘纪录片" -metadata "comment=解说为AI合成语音" -movflags +faststart ".$OUT"
 mv ".$OUT" "$OUT"
