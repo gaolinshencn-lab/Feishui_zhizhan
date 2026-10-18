@@ -109,7 +109,7 @@ SCENES = [
          camera=((2.4, -15.0, 2.0), (0.77, -5.8, 1.4), 30)),
     dict(name="ST06_MonkeyCave_Chamber", anchor="MONKEY_CAVE_Root",
          actors=[("Proxy_JiJi", 0.4, 1.1, 2.4, math.pi, "stand"), ("Proxy_MaoMao", 1.3, 0.6, 2.4, math.pi, "stand")],
-         camera=((0.77, -4.6, 1.6), (0.77, 1.2, 1.0), 16)),
+         camera=((2.4, -1.6, 1.7), (-0.2, 1.4, 0.9), 16)),  # 从挡石右边的通道里看洞室（洞口正对的是挡石）
     dict(name="ST07_House_Front_Door_GTQ", anchor="HOUSE_Root", opening="正门",
          actors=[("GuangtouQiang_Root", None, None, None, math.pi, "door_out")], camera="door_front"),
     dict(name="ST08_Warehouse_Door_GTQ", anchor="WAREHOUSE_Root", opening="仓库大门",

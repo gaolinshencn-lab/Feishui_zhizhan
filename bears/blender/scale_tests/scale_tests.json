@@ -37,7 +37,7 @@
    "actors": [
     {
      "actor": "XiongDa_Root",
-     "foot_z": 2.533,
+     "foot_z": 2.502,
      "height": 1.23,
      "width": null,
      "length_lying": 2.256
@@ -115,8 +115,8 @@
    "opening": "猴洞洞口",
    "clearance": {
     "floor_local_z": 0.131,
-    "clear_height": 3.13,
-    "clear_width_at_mid": 3.001
+    "clear_height": 2.679,
+    "clear_width_at_mid": 3.007
    },
    "upright_fit": {
     "Proxy_JiJi": true,
