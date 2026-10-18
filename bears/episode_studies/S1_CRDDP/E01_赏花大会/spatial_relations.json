@@ -1,0 +1,8 @@
+{
+  "confirmed": [],
+  "candidates": [],
+  "text_only": [
+    {"relation": "熊大熊二发现一棵开满鲜花的大树", "source": "央视网、百度百科分集剧情", "note": "没说树在哪里，不能放进 Evidence Map"}
+  ],
+  "rules": "confirmed 只放同一画面里能直接看到的关系；剪辑前后的两个镜头不能当成相邻"
+}

@@ -1,0 +1,192 @@
+{
+ "note": "吉吉 1.3 m、毛毛 0.7 m 是推测身高（D 级），只用于检查洞口是否合理",
+ "scenes": [
+  {
+   "scene": "ST01_TreeHome_Door_Bears",
+   "anchor": "BEAR_HOME_Root",
+   "actors": [
+    {
+     "actor": "XiongDa_Root",
+     "foot_z": 1.504,
+     "height": 2.09,
+     "width": 1.692,
+     "length_lying": null
+    },
+    {
+     "actor": "XiongEr_Root",
+     "foot_z": 1.485,
+     "height": 2.09,
+     "width": 1.917,
+     "length_lying": null
+    }
+   ],
+   "opening": "熊洞洞口",
+   "clearance": {
+    "floor_local_z": -0.015,
+    "clear_height": 2.582,
+    "clear_width_at_mid": 2.186
+   },
+   "upright_fit": {
+    "XiongDa_Root": true,
+    "XiongEr_Root": true
+   }
+  },
+  {
+   "scene": "ST02_TreeHome_Bed_XiongDa",
+   "anchor": "BEAR_HOME_Root",
+   "actors": [
+    {
+     "actor": "XiongDa_Root",
+     "foot_z": 2.502,
+     "height": 1.23,
+     "width": null,
+     "length_lying": 2.256
+    }
+   ]
+  },
+  {
+   "scene": "ST03_Squirrel_Slot_BengBeng",
+   "anchor": "SquirrelNest_Tree_Root",
+   "actors": [
+    {
+     "actor": "BengBeng_Root",
+     "foot_z": 5.689,
+     "height": 0.688,
+     "width": 0.576,
+     "length_lying": null
+    }
+   ],
+   "opening": "松鼠窝洞口 A",
+   "clearance": {
+    "clear_width_at_mid": 0.2,
+    "clear_height": 0.44,
+    "source": "Entrance_A_Slot 切割体尺寸（这个洞口太小，射线测量不准）"
+   },
+   "upright_fit": {
+    "BengBeng_Root": false
+   }
+  },
+  {
+   "scene": "ST04_Squirrel_From_Ground",
+   "anchor": "SquirrelNest_Tree_Root",
+   "actors": [
+    {
+     "actor": "BengBeng_Root",
+     "foot_z": 5.689,
+     "height": 0.688,
+     "width": 0.576,
+     "length_lying": null
+    },
+    {
+     "actor": "XiongEr_Root",
+     "foot_z": 0.974,
+     "height": 2.09,
+     "width": 1.904,
+     "length_lying": null
+    }
+   ]
+  },
+  {
+   "scene": "ST05_MonkeyCave_Door_JiJi_MaoMao",
+   "anchor": "MONKEY_CAVE_Root",
+   "actors": [
+    {
+     "actor": "Proxy_JiJi",
+     "foot_z": 4.294,
+     "height": 1.3,
+     "width": 0.642,
+     "length_lying": null
+    },
+    {
+     "actor": "Proxy_MaoMao",
+     "foot_z": 4.294,
+     "height": 0.7,
+     "width": 0.346,
+     "length_lying": null
+    },
+    {
+     "actor": "XiongDa_Root",
+     "foot_z": 3.214,
+     "height": 2.09,
+     "width": 1.915,
+     "length_lying": null
+    }
+   ],
+   "opening": "猴洞洞口",
+   "clearance": {
+    "floor_local_z": 0.131,
+    "clear_height": 2.679,
+    "clear_width_at_mid": 3.007
+   },
+   "upright_fit": {
+    "Proxy_JiJi": true,
+    "Proxy_MaoMao": true,
+    "XiongDa_Root": true
+   }
+  },
+  {
+   "scene": "ST06_MonkeyCave_Chamber",
+   "anchor": "MONKEY_CAVE_Root",
+   "actors": [
+    {
+     "actor": "Proxy_JiJi",
+     "foot_z": 4.092,
+     "height": 1.3,
+     "width": 0.642,
+     "length_lying": null
+    },
+    {
+     "actor": "Proxy_MaoMao",
+     "foot_z": 4.092,
+     "height": 0.7,
+     "width": 0.346,
+     "length_lying": null
+    }
+   ]
+  },
+  {
+   "scene": "ST07_House_Front_Door_GTQ",
+   "anchor": "GQ_House_Root",
+   "actors": [
+    {
+     "actor": "GuangtouQiang_Root",
+     "foot_z": 1.857,
+     "height": 1.74,
+     "width": 1.065,
+     "length_lying": null
+    }
+   ],
+   "opening": "正门",
+   "clearance": {
+    "floor_local_z": 0.96,
+    "clear_height": 2.14,
+    "clear_width_at_mid": 1.4
+   },
+   "upright_fit": {
+    "GuangtouQiang_Root": true
+   }
+  },
+  {
+   "scene": "ST08_Warehouse_Door_GTQ",
+   "anchor": "Warehouse_Root",
+   "actors": [
+    {
+     "actor": "GuangtouQiang_Root",
+     "foot_z": 1.224,
+     "height": 1.74,
+     "width": 1.065,
+     "length_lying": null
+    }
+   ],
+   "opening": "仓库大门",
+   "clearance": {
+    "floor_local_z": 0.41,
+    "clear_height": 2.74,
+    "clear_width_at_mid": 2.6
+   },
+   "upright_fit": {
+    "GuangtouQiang_Root": true
+   }
+  }
+ ]
+}
