@@ -16,6 +16,8 @@ BREAK_COST = {'。': 0.0, '！': 0.0, '？': 0.0, '；': 0.1, '：': 0.35, '，'
 OPENERS = '曾在于从向把被将对与和及并而却也都又才就便由以为'
 NUMERALS = '0123456789一二三四五六七八九十百千万两几'
 MEASURES = '位个名人里年月日天次户艘匹骑员'
+OPEN_MARKS = '“‘《「『（'
+CLOSE_MARKS = '，。；：、！？”’》」』）⋯'
 GOLD = '&H0078C4E8'
 PAPER = '&H00E6EEF4'
 
@@ -180,7 +182,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 CREDITS = [
     '史料　《资治通鉴》卷一〇〇—一〇六　《晋书》帝纪、载记、谢安传、谢玄传、刘牢之传　《水经注》',
-    '原文据维基文库所录文本核对；今人校勘意见见中华书局点校本《晋书》校勘记',
+    '原文据维基文库所录文本核对；今人校勘意见参见中华书局点校本《晋书》校勘记',
     '地形　AWS Terrain Tiles（Mapzen）　水系　© OpenStreetMap contributors　Natural Earth',
     '三维沙盘、战场音效与配乐《前秦风雨》　均为本片原创，在浏览器中实时生成',
     '解说　AI 合成语音（CosyVoice 2），非真人配音，亦未模仿任何真实人物的声音',
@@ -190,19 +192,38 @@ CREDITS = [
 
 
 def wrap_quote(q, soft=10, hard=17):
-    """Break a quote into lines: after punctuation once a line is long enough, never beyond `hard` characters."""
-    lines, cur = [], ''
-    for ch in q.replace('……', '⋯'):  # keep the ellipsis in one piece
-        cur += ch
-        if (len(cur) >= soft and ch in '，。；：、！？⋯”') or len(cur) >= hard:
-            lines.append(cur)
-            cur = ''
-    if cur:
-        if lines and len(cur) <= 3 and len(lines[-1]) + len(cur) <= hard + 3:
-            lines[-1] += cur
+    """Breaks a quote into lines of at most `hard` characters (a closing mark may hang one over), evenly and
+    preferably after a full stop, then after a comma. No line starts with a closing mark or ends with an
+    opening one, and the ellipsis stays whole."""
+    units = []
+    for ch in q.replace('……', '⋯'):
+        if units and (ch in CLOSE_MARKS or units[-1][-1] in OPEN_MARKS):
+            units[-1] += ch
         else:
-            lines.append(cur)
-    return [l.replace('⋯', '……') for l in lines]
+            units.append(ch)
+    n = len(units)
+    best = [0.0] + [float('inf')] * n
+    back = [0] * (n + 1)
+    for i in range(1, n + 1):
+        for j in range(i - 1, -1, -1):
+            line = ''.join(units[j:i])
+            L = len(line) + line.count('⋯')
+            if L > hard + 1 and i - j > 1:
+                break
+            cost = 1.0 + 0.004 * L * L
+            if i < n:
+                end = line.rstrip('”’》」』）') or line
+                cost += 0.0 if end[-1] in '。！？；⋯' else 0.35 if end[-1] in '，：' else 1.8 if end[-1] == '、' else 2.4
+                cost += 0.6 if L < soft else 0.0
+            elif L <= 3 and j > 0:
+                cost += 1.0
+            if best[j] + cost < best[i]:
+                best[i], back[i] = best[j] + cost, j
+    lines, i = [], n
+    while i > 0:
+        lines.append(''.join(units[back[i]:i]).replace('⋯', '……'))
+        i = back[i]
+    return lines[::-1]
 
 
 def box(x0, y0, x1, y1, alpha='70', r=14):
@@ -261,7 +282,7 @@ def graphics():
         add(3, a, b, 'QuoteSrc', fade + rf'{{\pos({x1 - pad},{y_src})}}' + '——' + l['src'])
     # credits
     c0, end = TL['credits_start'], TL['duration']
-    add(6, c0, end, 'Box', r'{\fad(900,0)}' + box(0, 0, 1920, 1080, alpha='38', r=0))
+    add(6, c0, end, 'Box', r'{\fad(900,0)}' + box(0, 0, 1920, 1080, alpha='1C', r=0))  # the table's labels stay out of the way
     add(7, c0 + 0.4, end, 'CreditHead', r'{\fad(800,0)\pos(960,250)}淝水之战　·　三维沙盘纪录片')
     for i, line in enumerate(CREDITS):
         add(7, c0 + 0.8 + 0.2 * i, end, 'Credit', rf'{{\fad(700,0)\pos(960,{392 + 70 * i})}}' + line)

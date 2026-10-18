@@ -79,7 +79,7 @@ def main():
     cmd += ['-i', f'{HERE}/doc_mix.wav', '-i', f'{HERE}/narration.srt', '-filter_complex', ';'.join(chain),
             '-map', '[v]', '-map', '[a]', '-map', f'{na + 1}:s',
             '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-profile:v', 'high', '-level', '4.1', '-r', str(FPS),
-            '-g', str(FPS * 2), '-bf', '3', '-c:a', 'aac', '-b:a', '256k', '-ar', '48000',
+            '-g', str(FPS * 2), '-bf', '3', '-c:a', 'aac', '-b:a', '256k', '-ar', '48000', '-metadata:s:a:0', 'language=chi',
             '-c:s', 'mov_text', '-metadata:s:s:0', 'language=chi', '-metadata:s:s:0', 'title=解说字幕（CC）', '-disposition:s:0', 'default',
             '-movflags', '+faststart', '-metadata', 'title=淝水之战 · 三维沙盘纪录片', '-metadata', 'comment=解说为AI合成语音',
             '-t', f"{TL['duration']:.3f}", OUT]
