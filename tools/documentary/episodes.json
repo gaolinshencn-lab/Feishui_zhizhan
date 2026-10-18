@@ -1,0 +1,132 @@
+[
+ {
+  "id": "prologue",
+  "map": "strategic",
+  "no": "一",
+  "title": "投鞭断流",
+  "subtitle": "苻坚决意南征",
+  "date": "太元七年冬 — 八年七月",
+  "western": "公元382年冬 — 383年8月",
+  "duration": 15
+ },
+ {
+  "id": "march",
+  "map": "strategic",
+  "no": "二",
+  "title": "大举南征",
+  "subtitle": "前后千里，旗鼓相望",
+  "date": "太元八年八月 戊午、甲子",
+  "western": "公元383年9月14日、9月20日",
+  "duration": 15
+ },
+ {
+  "id": "converge",
+  "map": "strategic",
+  "no": "三",
+  "title": "水陆齐进",
+  "subtitle": "东西万里 · 晋廷定策",
+  "date": "太元八年九月",
+  "western": "公元383年10月13日 — 11月10日",
+  "duration": 17
+ },
+ {
+  "id": "shouyang",
+  "map": "tactical",
+  "no": "四",
+  "title": "寿阳失守",
+  "subtitle": "苻融渡淮 · 胡彬退保硖石",
+  "date": "太元八年十月 癸酉",
+  "western": "公元383年11月28日",
+  "duration": 15
+ },
+ {
+  "id": "blockade",
+  "map": "tactical",
+  "no": "五",
+  "title": "栅淮遏东",
+  "subtitle": "梁成屯洛涧 · 晋军不敢进",
+  "date": "太元八年十月下旬",
+  "western": "约公元383年12月初",
+  "duration": 14
+ },
+ {
+  "id": "envoy",
+  "map": "tactical",
+  "no": "六",
+  "title": "轻骑兼道",
+  "subtitle": "苻坚亲至寿阳 · 朱序献策",
+  "date": "太元八年十月下旬 — 十一月初",
+  "western": "约公元383年12月上旬",
+  "duration": 17
+ },
+ {
+  "id": "raid",
+  "map": "tactical",
+  "no": "七",
+  "title": "洛涧夜袭",
+  "subtitle": "刘牢之五千破梁成五万",
+  "date": "太元八年十一月",
+  "western": "公元383年12月",
+  "duration": 17
+ },
+ {
+  "id": "advance",
+  "map": "tactical",
+  "no": "八",
+  "title": "草木皆兵",
+  "subtitle": "晋军水陆继进 · 苻坚登城北望",
+  "date": "太元八年十一月",
+  "western": "公元383年12月",
+  "duration": 18
+ },
+ {
+  "id": "standoff",
+  "map": "tactical",
+  "no": "九",
+  "title": "临淝对峙",
+  "subtitle": "谢玄请战 · 苻坚欲“半渡而击”",
+  "date": "太元八年十一月",
+  "western": "公元383年12月",
+  "duration": 16
+ },
+ {
+  "id": "battle",
+  "map": "tactical",
+  "no": "十",
+  "title": "淝水决战",
+  "subtitle": "秦兵遂退，不可复止",
+  "date": "太元八年十一月",
+  "western": "公元383年12月（一说11月30日）",
+  "duration": 20
+ },
+ {
+  "id": "rout",
+  "map": "tactical",
+  "no": "十一",
+  "title": "风声鹤唳",
+  "subtitle": "追至青冈 · 收复寿阳",
+  "date": "决战当日及其后数日",
+  "western": "公元383年冬",
+  "duration": 18
+ },
+ {
+  "id": "news",
+  "map": "strategic",
+  "no": "十二",
+  "title": "小儿破贼",
+  "subtitle": "谢安围棋 · 苻坚北还",
+  "date": "太元八年十一月 — 十二月",
+  "western": "公元383年12月 — 384年1月",
+  "duration": 15
+ },
+ {
+  "id": "epilogue",
+  "map": "strategic",
+  "no": "十三",
+  "title": "南北再分",
+  "subtitle": "前秦瓦解 · 东晋北伐",
+  "date": "太元九年 — 十年",
+  "western": "公元384 — 385年",
+  "duration": 18
+ }
+]

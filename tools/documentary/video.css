@@ -1,0 +1,12 @@
+*{animation:none!important;transition:none!important}
+.masthead,.toolbar,#episode,#legend,#timeline,.hud,#caption,#loader,.layers-pop,.places-pop{display:none!important}
+.place__name{font-size:23px!important}.place--capital .place__name{font-size:28px!important}
+.place.rank-2 .place__name{font-size:20px!important}.place.rank-3 .place__name{font-size:17px!important}
+.place__modern{font-size:13px!important}.place--mountain .place__name{font-size:22px!important}
+.place--region .place__name{font-size:18px!important}.place--polity .place__name{font-size:66px!important}
+.river-label{font-size:16px!important}.river--major{font-size:18px!important}.river--minor{font-size:14px!important}
+.ul-name{font-size:14.5px!important}.ul-str{font-size:12.5px!important}.arrow-label{font-size:19px!important}
+.card__title{font-size:21px!important}.card__text{font-size:14.5px!important}
+.bubble__who{font-size:13.5px!important}.bubble__say{font-size:23px!important}
+.seal span{font-size:36px!important}.seal__note{font-size:15px!important}
+.tooltip,.tooltip.below{display:none!important}
